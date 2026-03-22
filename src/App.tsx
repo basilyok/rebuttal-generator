@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react'
-import Anthropic from '@anthropic-ai/sdk'
 import './App.css'
 
 interface Rebuttal {
@@ -112,35 +111,59 @@ export default function App() {
     setIsExpanded(false)
 
     try {
-      const client = new Anthropic({ apiKey })
-
       // Generate brief rebuttal
-      const briefResponse = await client.messages.create({
-        model: 'claude-haiku-4-5',
-        max_tokens: 150,
-        messages: [
-          {
-            role: 'user',
-            content: `Generate a very brief, concise rebuttal to this argument in 1-2 sentences: "${transcript}"`,
-          },
-        ],
+      const briefResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 150,
+          messages: [
+            {
+              role: 'user',
+              content: `Generate a very brief, concise rebuttal to this argument in 1-2 sentences: "${transcript}"`,
+            },
+          ],
+        }),
       })
 
-      const briefRebuttal = briefResponse.content[0].type === 'text' ? briefResponse.content[0].text : ''
+      if (!briefResponse.ok) {
+        throw new Error(`API error: ${briefResponse.statusText}`)
+      }
+
+      const briefData = await briefResponse.json()
+      const briefRebuttal = briefData.content[0].text
 
       // Generate detailed rebuttal
-      const detailedResponse = await client.messages.create({
-        model: 'claude-haiku-4-5',
-        max_tokens: 500,
-        messages: [
-          {
-            role: 'user',
-            content: `Generate a detailed, well-reasoned rebuttal to this argument. Include counterpoints, evidence-based reasoning, and a strong conclusion: "${transcript}"`,
-          },
-        ],
+      const detailedResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 500,
+          messages: [
+            {
+              role: 'user',
+              content: `Generate a detailed, well-reasoned rebuttal to this argument. Include counterpoints, evidence-based reasoning, and a strong conclusion: "${transcript}"`,
+            },
+          ],
+        }),
       })
 
-      const detailedRebuttal = detailedResponse.content[0].type === 'text' ? detailedResponse.content[0].text : ''
+      if (!detailedResponse.ok) {
+        throw new Error(`API error: ${detailedResponse.statusText}`)
+      }
+
+      const detailedData = await detailedResponse.json()
+      const detailedRebuttal = detailedData.content[0].text
 
       setRebuttal({
         brief: briefRebuttal,
