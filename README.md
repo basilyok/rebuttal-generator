@@ -2,16 +2,16 @@
 
 A modern, installable web app that uses Claude Haiku 4.5 to generate intelligent rebuttals to arguments. Simply speak your argument into the microphone, and the app will instantly generate a brief rebuttal with the option to expand and view a more detailed analysis.
 
-**⚡ [Deploy in 2 minutes with Netlify or Vercel](DEPLOYMENT_GUIDE.md)** • **📱 Fully PWA-enabled** • **🚀 Works offline**
+**🌍 Live at [rebuttal.m36x.com](https://rebuttal.m36x.com/) on Cloudflare Pages** • **📱 Fully PWA-enabled** • **⚡ [Deployment guide](DEPLOYMENT_GUIDE.md)**
 
 ## Features
 
 - 🎤 **Voice Input**: Capture arguments via browser microphone using the Web Speech API
-- ⚡ **Instant Rebuttals**: Generate brief, punchy rebuttals in seconds
+- ⚡ **Instant Rebuttals**: Brief and detailed rebuttals generated in parallel
 - 📖 **Expandable Details**: Click to view comprehensive, well-reasoned detailed rebuttals
 - 🎨 **Beautiful UI**: Modern, responsive design that works on desktop and mobile
 - 🔒 **Secure**: Your API key is stored locally in browser storage and never sent to any server except Anthropic
-- 📱 **PWA (Progressive Web App)**: Install on phone/desktop, works offline, auto-updates
+- 📱 **PWA (Progressive Web App)**: Install on phone/desktop; the app shell loads offline after your first visit (generating rebuttals requires internet)
 - ⚡ **Lightning Fast**: Vite builds + service worker caching = instant loads
 
 ## Tech Stack
@@ -25,7 +25,7 @@ A modern, installable web app that uses Claude Haiku 4.5 to generate intelligent
 
 ### Prerequisites
 
-- Node.js 16+ and npm
+- Node.js 18+ and npm (required by Vite 5)
 - An Anthropic API key (get one at [console.anthropic.com](https://console.anthropic.com))
 - A modern browser with microphone access (Chrome, Edge, Safari, Firefox)
 
@@ -80,7 +80,7 @@ Provides a comprehensive response with:
 - ✅ Chrome/Chromium (full support)
 - ✅ Edge (full support)
 - ✅ Safari (full support)
-- ✅ Firefox (full support with SpeechRecognition)
+- ⚠️ Firefox (no voice input — Firefox does not implement SpeechRecognition)
 - ❌ IE 11 (not supported)
 
 ## Privacy & Security
@@ -93,7 +93,7 @@ Provides a comprehensive response with:
 ## Troubleshooting
 
 ### "Speech recognition not supported"
-- Make sure you're using a modern browser (Chrome, Edge, Safari, or Firefox)
+- Make sure you're using Chrome, Edge, or Safari (Firefox lacks SpeechRecognition)
 - Check that microphone permissions are granted
 - Try refreshing the page
 
@@ -109,11 +109,11 @@ Provides a comprehensive response with:
 
 ## API Costs
 
-This app uses Claude Haiku 4.5, which is the most cost-effective Claude model:
-- Input: ~$0.80 per million tokens
-- Output: ~$4.00 per million tokens
+This app uses Claude Haiku 4.5, the most cost-effective Claude model:
+- Input: $1.00 per million tokens
+- Output: $5.00 per million tokens
 
-A typical argument/rebuttal pair uses ~200-400 tokens total, so costs are minimal.
+A typical argument/rebuttal pair costs well under a cent.
 
 ## Progressive Web App (PWA)
 
@@ -129,88 +129,29 @@ This app is fully PWA-enabled! You can:
 - **Android**: Chrome menu → Install app
 
 Once installed, the app:
-- ✅ Works completely offline
+- ✅ Loads its UI offline (after the first full online visit caches the assets)
 - ✅ Uses cached assets for instant loading
-- ✅ Gets automatic updates
+- ✅ Shows an update banner in open tabs when a new version deploys
 - ✅ Takes less space than a native app
 - ✅ Works just like a native mobile app
 
-**Note**: API calls to Claude require internet, but the UI and offline features work without it.
+**Note**: Generating rebuttals calls the Anthropic API and requires internet.
+Generated rebuttals live only in the current page session — they are not
+persisted across reloads.
 
 ## Deployment
 
-### Option 1: Netlify (Recommended - Free)
+The app is deployed on **Cloudflare Pages** (project `m36x-rebuttal`) and lives
+at **https://rebuttal.m36x.com/**. To ship an update:
 
-1. Push your code to GitHub:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/yourusername/rebuttal-generator.git
-   git push -u origin main
-   ```
-
-2. Go to [netlify.com](https://netlify.com) and sign up with GitHub
-
-3. Click "New site from Git" and select your repository
-
-4. Netlify will auto-detect the build settings and deploy!
-
-5. Your app is live at `yoursite.netlify.app`
-
-### Option 2: Vercel (Free)
-
-1. Push your code to GitHub (see Netlify steps above)
-
-2. Go to [vercel.com](https://vercel.com) and sign up with GitHub
-
-3. Click "New Project" and import your repository
-
-4. Vercel will auto-detect settings and deploy!
-
-5. Your app is live at `yoursite.vercel.app`
-
-### Option 3: Docker (Self-hosted)
-
-Create a `Dockerfile`:
-
-```dockerfile
-FROM node:18-alpine AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-
-FROM node:18-alpine
-RUN npm install -g serve
-WORKDIR /app
-COPY --from=build /app/dist ./dist
-EXPOSE 3000
-CMD ["serve", "-s", "dist", "-l", "3000"]
-```
-
-Build and run:
 ```bash
-docker build -t rebuttal-generator .
-docker run -p 3000:3000 rebuttal-generator
+npm run build
+npx wrangler pages deploy dist --project-name=m36x-rebuttal
 ```
 
-### Option 4: Manual Deploy
-
-1. Build the app:
-   ```bash
-   npm run build
-   ```
-
-2. Upload the `dist/` folder to any web hosting:
-   - AWS S3 + CloudFront
-   - Google Cloud Storage
-   - Azure Static Web Apps
-   - DigitalOcean App Platform
-   - Any traditional web host
-
-Make sure to configure the host to redirect all routes to `index.html` (for client-side routing).
+See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for details, caching rules
+(`public/_headers`), and troubleshooting. The `dist/` output is fully static,
+so any static host (Netlify, Vercel, S3+CloudFront, GitHub Pages…) also works.
 
 ## Environment Variables
 

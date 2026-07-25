@@ -17,17 +17,16 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 - Uses Claude Haiku 4.5 (fast & affordable)
 
 ✅ **PWA (Progressive Web App)**
-- Install on desktop (Chrome, Edge, Safari, Firefox)
+- Install on desktop (Chrome, Edge, Safari)
 - Install on mobile (iOS/Android)
-- Works completely offline (UI layer)
-- Auto-updates when you deploy changes
+- App shell loads offline after the first online visit
+- Update banner in open tabs when a new version deploys
 - Service worker for caching & performance
 
-✅ **Deployment Ready**
-- Netlify configuration (`netlify.toml`) - deploy in 1 click
-- Vercel configuration (`vercel.json`) - deploy in 1 click
-- Docker support for self-hosting
-- Manual deployment instructions
+✅ **Deployed on Cloudflare Pages**
+- Live at https://rebuttal.m36x.com/ (project `m36x-rebuttal`)
+- `public/_headers` carries the cache/security header rules
+- Redeploy with `npm run build && npx wrangler pages deploy dist --project-name=m36x-rebuttal`
 
 ✅ **Security & Privacy**
 - API key stored only in browser local storage
@@ -44,7 +43,10 @@ rebuttal-generator/
 ├── public/
 │   ├── manifest.json          # PWA metadata
 │   ├── sw.js                  # Service worker (offline support)
-│   └── ICONS.md               # Guide for adding app icons
+│   ├── _headers               # Cloudflare Pages cache/security headers
+│   ├── favicon.svg            # Browser-tab icon
+│   ├── icon-*.png             # PWA icons (regular + maskable)
+│   └── ICONS.md               # Icon documentation
 ├── src/
 │   ├── App.tsx                # Main React component
 │   ├── App.css                # App styles
@@ -53,11 +55,9 @@ rebuttal-generator/
 ├── index.html                 # HTML entry point (PWA meta tags added)
 ├── vite.config.ts             # Build configuration
 ├── tsconfig.json              # TypeScript configuration
-├── netlify.toml               # Netlify deployment config
-├── vercel.json                # Vercel deployment config
 ├── package.json               # Dependencies
 ├── README.md                  # Full documentation
-├── DEPLOYMENT_GUIDE.md        # Quick deployment instructions
+├── DEPLOYMENT_GUIDE.md        # Cloudflare deployment instructions
 └── PROJECT_SUMMARY.md         # This file
 ```
 
@@ -81,21 +81,13 @@ App opens at `http://localhost:5173`
 npm run build
 ```
 
-### 4. Deploy (Choose One)
+### 4. Deploy
 
-**Netlify (Easiest - 2 minutes):**
-1. Push to GitHub
-2. Go to netlify.com → "New site from Git"
-3. Select your repo
-4. ✅ Live in 2 minutes!
+```bash
+npx wrangler pages deploy dist --project-name=m36x-rebuttal
+```
 
-**Vercel (2 minutes):**
-1. Push to GitHub
-2. Go to vercel.com → "New Project"
-3. Import your repo
-4. ✅ Live in 2 minutes!
-
-See `DEPLOYMENT_GUIDE.md` for detailed instructions.
+Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 
 ---
 
@@ -103,10 +95,9 @@ See `DEPLOYMENT_GUIDE.md` for detailed instructions.
 
 1. **User speaks** → Web Speech API captures audio and converts to text
 2. **User clicks generate** → Rebuttal component renders loading state
-3. **API call 1** → Claude Haiku generates brief rebuttal (150 tokens max)
-4. **API call 2** → Claude Haiku generates detailed rebuttal (500 tokens max)
-5. **Results display** → Brief shown first, detailed expandable below
-6. **PWA magic** → Service worker caches everything for instant reopens
+3. **Two parallel API calls** → Claude Haiku generates the brief (300 tokens max) and detailed (2000 tokens max) rebuttals concurrently
+4. **Results display** → Brief shown first, detailed expandable below
+5. **PWA magic** → Service worker caches assets for instant reopens
 
 ---
 
@@ -115,8 +106,8 @@ See `DEPLOYMENT_GUIDE.md` for detailed instructions.
 ### After Installation, Users Get:
 - ✅ App icon on home screen / desktop
 - ✅ Full-screen app experience (no browser chrome)
-- ✅ Offline UI (can view previous rebuttals without internet)
-- ✅ Auto-updates (new features deploy automatically)
+- ✅ Offline UI shell (generating rebuttals still requires internet; results are not persisted across reloads)
+- ✅ Update banner when a new version deploys
 - ✅ Native-app-like experience
 - ✅ Smaller footprint than native apps
 
@@ -131,9 +122,8 @@ See `DEPLOYMENT_GUIDE.md` for detailed instructions.
 ## 💰 Cost & Performance
 
 ### Pricing
-- Uses Claude Haiku 4.5 (cheapest Claude model)
-- Typical usage: ~200-400 tokens per rebuttal
-- Cost per rebuttal: ~0.5-2 cents
+- Uses Claude Haiku 4.5 (cheapest Claude model: $1/MTok input, $5/MTok output)
+- Cost per rebuttal pair: well under a cent
 - Completely free until you use it!
 
 ### Performance
@@ -187,24 +177,17 @@ Edit `src/App.tsx` - look for the `generateRebuttal()` function
 
 ---
 
-## 📋 Required Icons (Optional)
+## 📋 Icons
 
-For perfect PWA installation, add these to `public/`:
-- `icon-192.png` - 192x192px
-- `icon-512.png` - 512x512px
-- `icon-192-maskable.png` - 192x192px (maskable)
-- `icon-512-maskable.png` - 512x512px (maskable)
-
-App works fine without them, but installation looks better with them.
-
-See `public/ICONS.md` for tools to generate them.
+All PWA icons (regular + maskable, 192px and 512px) plus `favicon.svg` are
+included in `public/`. See `public/ICONS.md` to regenerate them.
 
 ---
 
 ## 🆘 Troubleshooting
 
 ### "Speech recognition not supported"
-→ Use Chrome, Edge, Safari, or Firefox (not IE)
+→ Use Chrome, Edge, or Safari (Firefox does not support SpeechRecognition)
 
 ### "Failed to generate rebuttal"
 → Check API key is correct and you have API credits
@@ -223,13 +206,13 @@ See `public/ICONS.md` for tools to generate them.
 
 ## 📊 Browser Support
 
-| Browser | Desktop | Mobile | PWA Install |
-|---------|---------|--------|-------------|
-| Chrome  | ✅      | ✅     | ✅          |
-| Edge    | ✅      | ✅     | ✅          |
-| Safari  | ✅      | ✅     | ✅          |
-| Firefox | ✅      | ✅     | ⚠️ Limited  |
-| IE 11   | ❌      | ❌     | ❌          |
+| Browser | Desktop | Mobile | PWA Install | Voice Input |
+|---------|---------|--------|-------------|-------------|
+| Chrome  | ✅      | ✅     | ✅          | ✅          |
+| Edge    | ✅      | ✅     | ✅          | ✅          |
+| Safari  | ✅      | ✅     | ✅          | ✅          |
+| Firefox | ✅      | ✅     | ⚠️ Limited  | ❌          |
+| IE 11   | ❌      | ❌     | ❌          | ❌          |
 
 ---
 

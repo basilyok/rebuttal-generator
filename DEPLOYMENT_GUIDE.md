@@ -1,175 +1,62 @@
-# Quick Deployment Guide
+# Deployment Guide
 
-Get your Rebuttal Generator live in minutes!
+This app is deployed on **Cloudflare Pages** as project `m36x-rebuttal`, live at
+**https://rebuttal.m36x.com/** (also `m36x-rebuttal.pages.dev`).
 
-## 🚀 Fastest Way: Netlify (Recommended)
+## Deploying an Update
 
-### Step 1: Push to GitHub
 ```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/rebuttal-generator.git
-git push -u origin main
+npm run build
+npx wrangler pages deploy dist --project-name=m36x-rebuttal
 ```
 
-### Step 2: Deploy on Netlify
-1. Go to [netlify.com](https://netlify.com)
-2. Click "Sign up" → choose "GitHub"
-3. Click "New site from Git"
-4. Select your GitHub repository
-5. Netlify auto-detects the build settings
-6. Click "Deploy site"
-7. ✅ Your app is live in ~2 minutes!
+That's it. `wrangler` must be logged in (`npx wrangler login` once per machine;
+check with `npx wrangler whoami`).
 
-**Your URL:** `https://your-site-name.netlify.app`
+Notes:
 
----
+- `npm run build` type-checks (`tsc`) and then produces the `dist/` folder.
+- `public/_headers` ships the Cloudflare Pages cache rules: `sw.js`, `index.html`
+  and `manifest.json` are always revalidated; hashed `/assets/*` files are
+  cached immutably for a year.
+- The service worker's update banner shows in already-open tabs after a deploy;
+  clicking **Reload** activates the new version.
 
-## 🎯 Alternative: Vercel
+## First-Time Setup (already done)
 
-### Step 1: Same GitHub setup as above
+For reference, the project was created with:
 
-### Step 2: Deploy on Vercel
-1. Go to [vercel.com](https://vercel.com)
-2. Click "Add New..." → "Project"
-3. Import your GitHub repository
-4. Vercel auto-detects everything
-5. Click "Deploy"
-6. ✅ Your app is live!
-
-**Your URL:** `https://your-site-name.vercel.app`
-
----
-
-## 📱 Enable PWA Installation
-
-After deploying, users can install your app:
-
-### On Desktop
-- Chrome/Edge: Click install button in address bar
-- Safari: Share → Add to Home Screen
-
-### On Mobile
-- iOS/iPad: Safari → Share → Add to Home Screen
-- Android: Chrome menu → Install app
-
----
-
-## 🔐 Security Best Practices
-
-### Environment Variables (Optional)
-If you want to add server-side features later, create a `.env.local` file:
-```
-VITE_API_URL=https://api.example.com
+```bash
+npx wrangler pages project create m36x-rebuttal
+npx wrangler pages deploy dist --project-name=m36x-rebuttal
 ```
 
-**Current Setup:**
-- Your API key is stored only in browser local storage
-- Never sent to any server except Anthropic
-- Users can change it anytime
+The custom domain `rebuttal.m36x.com` is attached in the Cloudflare dashboard
+under **Workers & Pages → m36x-rebuttal → Custom domains**.
 
-### CORS & API
-- The app makes direct API calls from the browser
-- No backend server needed
-- API key stays private on user's device
+## Other Hosts
 
----
+The build output in `dist/` is a fully static site — any static host works
+(Netlify, Vercel, S3+CloudFront, GitHub Pages…). If you move hosts, replicate
+the caching rules from `public/_headers` in that host's config format.
 
-## 🎨 Customization Before Deploy
-
-### Update App Info
-Edit `public/manifest.json`:
-```json
-{
-  "name": "Your Custom Name",
-  "short_name": "Custom",
-  "description": "Your description",
-  "theme_color": "#667eea"
-}
-```
-
-### Add Icons
-See `public/ICONS.md` for creating app icons
-
-### Update README
-Edit `README.md` with your deployment URL
-
----
-
-## 📊 Monitoring & Updates
-
-### Netlify Dashboard
-- View analytics and deployments at [netlify.com](https://netlify.com)
-- Auto-redeploy when you push to GitHub
-- Manage custom domain
-
-### Vercel Dashboard
-- View analytics and deployments at [vercel.com](https://vercel.com)
-- Auto-redeploy when you push to GitHub
-- Manage custom domain
-
----
-
-## 🌍 Custom Domain
-
-### Netlify
-1. Go to Site settings → Domain management
-2. Click "Add custom domain"
-3. Follow DNS setup instructions
-
-### Vercel
-1. Go to Settings → Domains
-2. Click "Add"
-3. Follow DNS setup instructions
-
----
-
-## 🆘 Troubleshooting
+## Troubleshooting
 
 ### "Build failed"
-- Check Node version: `node --version` (should be 16+)
+- Check Node version: `node --version` (Vite 5 requires Node 18+)
 - Run `npm install` locally first
-- Check for errors in build logs
+- `npm run build` surfaces TypeScript errors — fix them before deploying
 
 ### "App shows blank page"
 - Check browser console (F12) for errors
-- Verify service worker is running (DevTools → Application → Service Workers)
-- Clear browser cache and reload
+- Verify the service worker (DevTools → Application → Service Workers)
+- Hard refresh (Ctrl+Shift+R) to bypass caches
 
 ### "Microphone not working"
-- Check browser permissions
-- Use HTTPS (all deployed sites use HTTPS automatically)
-- Try a different browser
+- Check browser permissions; microphone requires HTTPS (or localhost)
+- Voice input needs Chrome, Edge, or Safari — Firefox does not support the
+  Web Speech API's SpeechRecognition
 
 ### "API calls failing"
-- Verify API key is correct
-- Check internet connection
+- Verify the API key is correct and has credits
 - Check [Anthropic status page](https://status.anthropic.com)
-
----
-
-## 📈 Performance Tips
-
-### For PWA Users
-- Service worker caches assets for instant loading
-- App works offline (UI only, API calls need internet)
-- Automatic updates when you deploy changes
-
-### For All Users
-- Vite builds highly optimized code
-- Assets are minified and cached
-- First load: ~2-3 seconds
-- Subsequent loads: ~500ms
-
----
-
-## 🎉 You're Done!
-
-Share your app:
-- Twitter/X: "Check out my Rebuttal Generator PWA!"
-- LinkedIn: Professional AI-powered tool
-- Friends: Get quick rebuttals with AI!
-
-**Keep building!** 🚀

@@ -1,27 +1,25 @@
 // Service Worker for Rebuttal Generator PWA
-const CACHE_NAME = 'rebuttal-generator-v1'
-const RUNTIME_CACHE = 'rebuttal-runtime-v1'
+const VERSION = 'v2'
+const PRECACHE = `rebuttal-precache-${VERSION}`
+const RUNTIME_CACHE = `rebuttal-runtime-${VERSION}`
 
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/favicon.svg',
   '/icon-192.png',
   '/icon-512.png',
 ]
 
-// Install event - cache static assets
+// Install event - precache the app shell. Assets are cached individually so one
+// failure doesn't void the whole precache. The worker then WAITS (no skipWaiting
+// here) so the in-app update banner controls when it takes over.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
-      .open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(STATIC_ASSETS).catch(() => {
-          // If some assets fail to cache, continue anyway
-          console.log('Some static assets failed to cache')
-        })
-      })
-      .then(() => self.skipWaiting())
+      .open(PRECACHE)
+      .then((cache) => Promise.allSettled(STATIC_ASSETS.map((url) => cache.add(url))))
   )
 })
 
@@ -30,53 +28,56 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((cacheNames) => {
-        return Promise.all(
+      .then((cacheNames) =>
+        Promise.all(
           cacheNames
-            .filter((cacheName) => cacheName !== CACHE_NAME && cacheName !== RUNTIME_CACHE)
+            .filter((cacheName) => cacheName !== PRECACHE && cacheName !== RUNTIME_CACHE)
             .map((cacheName) => caches.delete(cacheName))
         )
-      })
+      )
       .then(() => self.clients.claim())
   )
 })
 
-// Fetch event - network first, fall back to cache
+// Fetch event - network first, fall back to cache, then to the app shell for
+// navigations. Cross-origin requests (including Anthropic API calls) are never
+// intercepted.
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests and API calls to external services
-  if (event.request.method !== 'GET' || event.request.url.includes('anthropic')) {
-    return
-  }
+  if (event.request.method !== 'GET') return
+  if (new URL(event.request.url).origin !== self.location.origin) return
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Cache successful responses
         if (response.ok) {
-          const cache = caches.open(RUNTIME_CACHE)
-          cache.then((c) => c.put(event.request, response.clone()))
+          // Clone synchronously, before the page starts consuming the body
+          const copy = response.clone()
+          event.waitUntil(
+            caches
+              .open(RUNTIME_CACHE)
+              .then((cache) => cache.put(event.request, copy))
+              .catch(() => {})
+          )
         }
         return response
       })
-      .catch(() => {
-        // Fall back to cache
-        return caches.match(event.request).then((cachedResponse) => {
-          return (
-            cachedResponse ||
-            new Response('Offline - resource not available', {
-              status: 503,
-              statusText: 'Service Unavailable',
-              headers: new Headers({
-                'Content-Type': 'text/plain',
-              }),
-            })
-          )
+      .catch(async () => {
+        const cached = await caches.match(event.request)
+        if (cached) return cached
+        if (event.request.mode === 'navigate') {
+          const shell = (await caches.match('/index.html')) || (await caches.match('/'))
+          if (shell) return shell
+        }
+        return new Response('Offline - resource not available', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: new Headers({ 'Content-Type': 'text/plain' }),
         })
       })
   )
 })
 
-// Handle messages from clients
+// The update banner posts SKIP_WAITING when the user opts in to the new version
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting()
