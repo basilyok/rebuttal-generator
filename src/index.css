@@ -172,6 +172,44 @@ h1 {
   margin-top: 8px;
 }
 
+.provider-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.select {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: white;
+  color: #333;
+  cursor: pointer;
+}
+
+.select:focus {
+  outline: 2px solid #4c5fd7;
+  outline-offset: 1px;
+  border-color: #4c5fd7;
+}
+
+.select:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.provider-status {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #4c5fd7;
+  font-weight: 600;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .change-key-button {
   margin-bottom: 20px;
   font-size: 12px;
@@ -382,5 +420,9 @@ h1 {
 
   .controls .text-input {
     width: 100%;
+  }
+
+  .provider-grid {
+    grid-template-columns: 1fr;
   }
 }

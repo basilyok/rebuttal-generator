@@ -14,7 +14,9 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 ✅ **AI Rebuttals**
 - Brief rebuttals (1-2 sentences) for quick comebacks
 - Detailed rebuttals (comprehensive analysis) - expandable
-- Uses Claude Haiku 4.5 (fast & affordable)
+- 10 selectable AI providers with sub-models: Claude, Gemini, Groq, OpenRouter,
+  Mistral, DeepSeek, Grok, Cohere, Together AI, and a free no-key local
+  in-browser option (WebLLM/WebGPU)
 
 ✅ **PWA (Progressive Web App)**
 - Install on desktop (Chrome, Edge, Safari)
@@ -94,8 +96,8 @@ Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 ## 🎯 How It Works
 
 1. **User speaks** → Web Speech API captures audio and converts to text
-2. **User clicks generate** → Rebuttal component renders loading state
-3. **Two parallel API calls** → Claude Haiku generates the brief (300 tokens max) and detailed (2000 tokens max) rebuttals concurrently
+2. **User picks an AI** → provider + model dropdowns (`src/providers.ts` holds the registry and call adapters)
+3. **User clicks generate** → two parallel calls produce the brief (300 tokens max) and detailed (2000 tokens max) rebuttals (sequential for local models)
 4. **Results display** → Brief shown first, detailed expandable below
 5. **PWA magic** → Service worker caches assets for instant reopens
 

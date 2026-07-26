@@ -1,12 +1,13 @@
 # Rebuttal Generator
 
-A modern, installable web app that uses Claude Haiku 4.5 to generate intelligent rebuttals to arguments. Simply speak your argument into the microphone, and the app will instantly generate a brief rebuttal with the option to expand and view a more detailed analysis.
+A modern, installable web app that uses AI to generate intelligent rebuttals to arguments. Simply speak your argument into the microphone, and the app will instantly generate a brief rebuttal with the option to expand and view a more detailed analysis. Choose from 10 AI providers — including a completely free option that runs the model locally in your browser with no API key.
 
 **🌍 Live at [rebuttal.m36x.com](https://rebuttal.m36x.com/) on Cloudflare Pages** • **📱 Fully PWA-enabled** • **⚡ [Deployment guide](DEPLOYMENT_GUIDE.md)**
 
 ## Features
 
 - 🎤 **Voice Input**: Capture arguments via browser microphone using the Web Speech API
+- 🤖 **10 AI Providers**: Anthropic Claude, Google Gemini, Groq, OpenRouter, Mistral, DeepSeek, xAI Grok, Cohere, Together AI — or run a model locally in your browser for free with no API key (WebLLM/WebGPU)
 - ⚡ **Instant Rebuttals**: Brief and detailed rebuttals generated in parallel
 - 📖 **Expandable Details**: Click to view comprehensive, well-reasoned detailed rebuttals
 - 🎨 **Beautiful UI**: Modern, responsive design that works on desktop and mobile
@@ -18,8 +19,28 @@ A modern, installable web app that uses Claude Haiku 4.5 to generate intelligent
 
 - **Frontend**: React 18 + TypeScript
 - **Build Tool**: Vite
-- **AI**: Claude Haiku 4.5 via Anthropic API
+- **AI**: 10 providers via direct browser API calls (see below), plus in-browser inference via [WebLLM](https://webllm.mlc.ai/) (WebGPU)
 - **Speech Recognition**: Web Speech API (native browser)
+
+## Choosing an AI
+
+| Provider | Cost | API key? | Notes |
+|----------|------|----------|-------|
+| Local in-browser (WebLLM) | **Free** | **No** | Llama/Phi/Gemma/Qwen run on your GPU via WebGPU; one-time model download (0.9–4.5 GB), fully private |
+| Google Gemini | Free tier + paid | Yes (free) | Generous free daily limits with an AI Studio key |
+| Groq | Free tier | Yes (free) | Extremely fast Llama/Qwen/Kimi/GPT-OSS inference |
+| OpenRouter | Free models + paid | Yes (free) | Genuinely free models, plus paid GPT-5.1, Claude, Gemini and 300+ others |
+| Mistral | Free tier + paid | Yes (free) | Free experimentation tier |
+| Cohere | Free trial + paid | Yes (free) | Rate-limited trial keys |
+| Anthropic Claude | Paid | Yes | Claude Haiku 4.5 / Sonnet 5 / Opus 5 / Fable 5 |
+| DeepSeek | Paid (very cheap) | Yes | DeepSeek V3 chat + R1 reasoner |
+| xAI Grok | Paid | Yes | Grok 4 family |
+| Together AI | Paid | Yes | Open models (Llama, DeepSeek, Qwen) |
+
+Every provider here was verified to support direct browser (CORS) calls — this
+app has no backend. OpenAI's own API blocks browser calls, which is why GPT
+models are offered through OpenRouter instead. API keys are stored per-provider
+in your browser's local storage and sent only to that provider.
 
 ## Quick Start
 
@@ -57,8 +78,8 @@ npm run preview
 
 ## How to Use
 
-1. **Get Your API Key**: Visit [console.anthropic.com](https://console.anthropic.com) and create an API key
-2. **Enter API Key**: When you first open the app, you'll see a prompt to enter your API key
+1. **Pick an AI**: Choose a provider and model from the dropdowns. For zero-cost, zero-signup use, pick **Local in-browser (FREE, no key)** — the model downloads once and runs on your GPU
+2. **Enter API Key** (cloud providers only): the app links to each provider's key page; free-tier keys exist for Gemini, Groq, OpenRouter, Mistral, and Cohere
 3. **Record Your Argument**: Click "Start Recording" and speak your argument clearly
 4. **Generate Rebuttal**: Click "Generate Rebuttal" to create a response
 5. **View Details**: Click "View Detailed Rebuttal" to expand and see the comprehensive analysis
@@ -109,11 +130,11 @@ Provides a comprehensive response with:
 
 ## API Costs
 
-This app uses Claude Haiku 4.5, the most cost-effective Claude model:
-- Input: $1.00 per million tokens
-- Output: $5.00 per million tokens
-
-A typical argument/rebuttal pair costs well under a cent.
+Costs depend on the provider you pick. The local in-browser option is entirely
+free. Free tiers (Gemini, Groq, OpenRouter free models, Mistral, Cohere trial)
+cost nothing within their limits. On paid providers a typical argument/rebuttal
+pair is well under a cent — e.g. Claude Haiku 4.5 at $1.00/$5.00 per million
+input/output tokens.
 
 ## Progressive Web App (PWA)
 
