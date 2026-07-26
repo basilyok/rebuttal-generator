@@ -6,7 +6,7 @@ A modern, installable web app that uses AI to generate intelligent rebuttals to 
 
 ## Features
 
-- 🎤 **Voice Input**: Capture arguments via browser microphone using the Web Speech API
+- 🎤 **Voice or Text Input**: Dictate the argument via the browser microphone (Web Speech API) or just type/edit it in the text box
 - 🤖 **10 AI Providers**: Anthropic Claude, Google Gemini, Groq, OpenRouter, Mistral, DeepSeek, xAI Grok, Cohere, Together AI — or run a model locally in your browser for free with no API key (WebLLM/WebGPU)
 - ⚡ **Instant Rebuttals**: Brief and detailed rebuttals generated in parallel
 - 📖 **Expandable Details**: Click to view comprehensive, well-reasoned detailed rebuttals
@@ -80,7 +80,7 @@ npm run preview
 
 1. **Pick an AI**: Choose a provider and model from the dropdowns. For zero-cost, zero-signup use, pick **Local in-browser (FREE, no key)** — the model downloads once and runs on your GPU
 2. **Enter API Key** (cloud providers only): the app links to each provider's key page; free-tier keys exist for Gemini, Groq, OpenRouter, Mistral, and Cohere
-3. **Record Your Argument**: Click "Start Recording" and speak your argument clearly
+3. **Enter Your Argument**: Type it directly, or click "Start Recording" and speak it — dictated text stays editable afterwards
 4. **Generate Rebuttal**: Click "Generate Rebuttal" to create a response
 5. **View Details**: Click "View Detailed Rebuttal" to expand and see the comprehensive analysis
 

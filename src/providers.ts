@@ -18,6 +18,8 @@ export interface Provider {
   label: string
   kind: ProviderKind
   requiresKey: boolean
+  /** The provider's API key is free to create (no payment method needed) */
+  keyIsFree?: boolean
   keyUrl?: string
   keyPlaceholder?: string
   baseUrl?: string
@@ -47,6 +49,7 @@ export const PROVIDERS: Provider[] = [
     label: 'Google Gemini (free tier + paid)',
     kind: 'gemini',
     requiresKey: true,
+    keyIsFree: true,
     keyUrl: 'https://aistudio.google.com/apikey',
     keyPlaceholder: 'AIza…',
     models: [
@@ -63,6 +66,7 @@ export const PROVIDERS: Provider[] = [
     label: 'Groq (free tier, very fast)',
     kind: 'openai',
     requiresKey: true,
+    keyIsFree: true,
     keyUrl: 'https://console.groq.com/keys',
     keyPlaceholder: 'gsk_…',
     baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
@@ -82,6 +86,7 @@ export const PROVIDERS: Provider[] = [
     label: 'OpenRouter (free models + paid, incl. GPT)',
     kind: 'openai',
     requiresKey: true,
+    keyIsFree: true,
     keyUrl: 'https://openrouter.ai/keys',
     keyPlaceholder: 'sk-or-v1-…',
     baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
@@ -104,6 +109,7 @@ export const PROVIDERS: Provider[] = [
     label: 'Mistral (free tier + paid)',
     kind: 'openai',
     requiresKey: true,
+    keyIsFree: true,
     keyUrl: 'https://console.mistral.ai/api-keys',
     baseUrl: 'https://api.mistral.ai/v1/chat/completions',
     models: [
@@ -149,6 +155,7 @@ export const PROVIDERS: Provider[] = [
     label: 'Cohere (free trial + paid)',
     kind: 'cohere',
     requiresKey: true,
+    keyIsFree: true,
     keyUrl: 'https://dashboard.cohere.com/api-keys',
     baseUrl: 'https://api.cohere.com/v2/chat',
     models: [

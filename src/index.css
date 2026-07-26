@@ -146,9 +146,27 @@ h1 {
   font-size: 14px;
   color: #333;
   line-height: 1.6;
-  max-height: 200px;
-  overflow-y: auto;
   white-space: pre-wrap;
+  width: 100%;
+  font-family: inherit;
+  resize: vertical;
+  display: block;
+}
+
+.transcript-area:focus {
+  outline: 2px solid #4c5fd7;
+  outline-offset: 1px;
+  border-color: #4c5fd7;
+}
+
+.transcript-area:read-only:not(:disabled) {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.transcript-area:disabled {
+  background: #f3f4f6;
+  color: #6b7280;
 }
 
 .text-input {

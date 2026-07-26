@@ -386,15 +386,20 @@ export default function App() {
             )}
           </div>
           <p className="key-help">
-            Your key is stored only in this browser and sent only to this provider.{' '}
+            {provider.keyIsFree
+              ? 'This provider needs an API key even for its free models, but creating one is free — no payment details required. '
+              : 'Your key is stored only in this browser and sent only to this provider. '}
             {provider.keyUrl && (
               <>
                 Get one from{' '}
                 <a href={provider.keyUrl} target="_blank" rel="noopener noreferrer">
                   {provider.keyUrl.replace(/^https:\/\//, '')}
                 </a>
+                .{' '}
               </>
             )}
+            Prefer no key at all? Pick <strong>Local in-browser (FREE, no key)</strong> in the AI Provider
+            dropdown.
           </p>
         </div>
       )}
@@ -406,8 +411,8 @@ export default function App() {
       )}
 
       <div className="input-section">
-        <label className="label" id="record-label">
-          Record Your Argument
+        <label className="label" htmlFor="argument-input">
+          Your Argument — speak or type
         </label>
         <div className="controls">
           <button
@@ -415,7 +420,6 @@ export default function App() {
             onClick={toggleRecording}
             disabled={isLoading}
             aria-pressed={isRecording}
-            aria-describedby="record-label"
           >
             {isRecording ? '⏹ Stop Recording' : '🎙 Start Recording'}
           </button>
@@ -432,7 +436,19 @@ export default function App() {
           )}
         </div>
 
-        {transcript && <div className="transcript-area">{transcript}</div>}
+        <textarea
+          id="argument-input"
+          className="transcript-area"
+          value={transcript}
+          onChange={(e) => {
+            setTranscript(e.target.value)
+            finalTranscriptRef.current = e.target.value
+          }}
+          placeholder="Type the argument here, or use Start Recording to dictate it…"
+          readOnly={isRecording}
+          disabled={isLoading}
+          rows={4}
+        />
       </div>
 
       <button
