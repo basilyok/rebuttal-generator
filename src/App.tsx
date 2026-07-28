@@ -1,6 +1,21 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import './App.css'
-import { PROVIDERS, getProvider, generateText, supportsParallelCalls } from './providers'
+import {
+  PROVIDERS,
+  getProvider,
+  generateText,
+  supportsParallelCalls,
+  modelsFor,
+  fetchLiveModels,
+  saveCachedCatalog,
+  loadCachedCatalog,
+  estimateCost,
+  costOf,
+  formatCost,
+  isFreeModel,
+  type ModelOption,
+  type Usage,
+} from './providers'
 
 interface Rebuttal {
   brief: string
@@ -25,19 +40,7 @@ if (localStorage.getItem('anthropic_api_key') && !localStorage.getItem(keyStorag
   localStorage.removeItem('anthropic_api_key')
 }
 
-// Speech recognition error codes that are routine and should not alarm the user
-const BENIGN_SPEECH_ERRORS = new Set(['no-speech', 'aborted'])
-
-const SPEECH_ERROR_MESSAGES: Record<string, string> = {
-  'not-allowed': 'Microphone access was denied. Allow microphone access for this site and try again.',
-  'service-not-allowed': 'Microphone access was denied. Allow microphone access for this site and try again.',
-  'audio-capture': 'No microphone was found. Check that a microphone is connected and try again.',
-  network: 'The speech service hit a network error. Check your connection and try again.',
-}
-
-function joinSpeech(a: string, b: string): string {
-  return [a.trim(), b.trim()].filter(Boolean).join(' ')
-}
+const storedProviderId = () => localStorage.getItem('ai_provider') || 'anthropic'
 
 export default function App() {
   const [isRecording, setIsRecording] = useState(false)
@@ -46,22 +49,30 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
-  const [providerId, setProviderId] = useState(() => getProvider(localStorage.getItem('ai_provider') || 'anthropic').id)
+  const [providerId, setProviderId] = useState(() => getProvider(storedProviderId()).id)
+  const [models, setModels] = useState<ModelOption[]>(() => modelsFor(getProvider(storedProviderId())))
   const [modelId, setModelId] = useState(() => {
-    const provider = getProvider(localStorage.getItem('ai_provider') || 'anthropic')
+    const provider = getProvider(storedProviderId())
     const stored = localStorage.getItem('ai_model') || ''
-    return provider.models.some((m) => m.id === stored) ? stored : provider.defaultModel
+    return modelsFor(provider).some((m) => m.id === stored) ? stored : provider.defaultModel
   })
-  const [apiKey, setApiKey] = useState(() => loadStoredKey(getProvider(localStorage.getItem('ai_provider') || 'anthropic').id))
+  const [catalogFetchedAt, setCatalogFetchedAt] = useState<number | null>(
+    () => loadCachedCatalog(storedProviderId())?.fetchedAt ?? null
+  )
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [apiKey, setApiKey] = useState(() => loadStoredKey(getProvider(storedProviderId()).id))
   const [keyDraft, setKeyDraft] = useState('')
   const [showApiKeyInput, setShowApiKeyInput] = useState(() => {
-    const provider = getProvider(localStorage.getItem('ai_provider') || 'anthropic')
+    const provider = getProvider(storedProviderId())
     return provider.requiresKey && !loadStoredKey(provider.id)
   })
   const [providerStatus, setProviderStatus] = useState('')
+  const [lastRun, setLastRun] = useState<{ usage: Usage; cost: number | null } | null>(null)
+  const [sessionCost, setSessionCost] = useState(0)
   const [updateAvailable, setUpdateAvailable] = useState(false)
 
   const provider = getProvider(providerId)
+  const model = useMemo(() => models.find((m) => m.id === modelId), [models, modelId])
 
   const recognitionRef = useRef<any>(null)
   // Finalized speech segments; interim hypotheses are displayed but never persisted
@@ -80,28 +91,36 @@ export default function App() {
     recognition.continuous = true
     recognition.interimResults = true
 
+    const join = (a: string, b: string) => [a.trim(), b.trim()].filter(Boolean).join(' ')
+
     recognition.onresult = (event: any) => {
       let interim = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const text = event.results[i][0].transcript
         if (event.results[i].isFinal) {
-          finalTranscriptRef.current = joinSpeech(finalTranscriptRef.current, text)
+          finalTranscriptRef.current = join(finalTranscriptRef.current, text)
         } else {
           interim += text
         }
       }
-      setTranscript(joinSpeech(finalTranscriptRef.current, interim))
+      setTranscript(join(finalTranscriptRef.current, interim))
     }
 
     recognition.onerror = (event: any) => {
-      if (BENIGN_SPEECH_ERRORS.has(event.error)) {
-        // Routine (silence timeout / programmatic stop) — not worth alarming the user,
-        // but don't auto-restart after an abort.
-        if (event.error === 'aborted') wantRecordingRef.current = false
+      // 'no-speech' and 'aborted' are routine — not worth alarming the user
+      if (event.error === 'no-speech') return
+      if (event.error === 'aborted') {
+        wantRecordingRef.current = false
         return
       }
       wantRecordingRef.current = false
-      setError(SPEECH_ERROR_MESSAGES[event.error] || `Speech recognition error: ${event.error}`)
+      const messages: Record<string, string> = {
+        'not-allowed': 'Microphone access was denied. Allow microphone access for this site and try again.',
+        'service-not-allowed': 'Microphone access was denied. Allow microphone access for this site and try again.',
+        'audio-capture': 'No microphone was found. Check that a microphone is connected and try again.',
+        network: 'The speech service hit a network error. Check your connection and try again.',
+      }
+      setError(messages[event.error] || `Speech recognition error: ${event.error}`)
     }
 
     recognition.onend = () => {
@@ -207,12 +226,17 @@ export default function App() {
     setTranscript('')
     setRebuttal(null)
     setError('')
+    setLastRun(null)
   }
 
   const generateRebuttal = async () => {
     const argument = transcript.trim()
     if (!argument) {
       setError('Please provide an argument first')
+      return
+    }
+    if (!model) {
+      setError('Please choose a model')
       return
     }
     if (provider.requiresKey && !apiKey) {
@@ -225,28 +249,33 @@ export default function App() {
     setError('')
     setRebuttal(null)
     setIsExpanded(false)
+    setLastRun(null)
 
-    const call = (system: string, maxTokens: number) =>
-      generateText({
-        provider,
-        model: modelId,
-        apiKey,
-        system,
-        userContent: argument,
-        maxTokens,
-        onStatus: setProviderStatus,
-      })
+    const call = (system: string, length: 'brief' | 'detailed') =>
+      generateText({ provider, model, apiKey, system, userContent: argument, length, onStatus: setProviderStatus })
 
     try {
-      let brief: string
-      let detailed: string
+      let brief, detailed
       if (supportsParallelCalls(provider)) {
-        ;[brief, detailed] = await Promise.all([call(BRIEF_SYSTEM, 300), call(DETAILED_SYSTEM, 2000)])
+        ;[brief, detailed] = await Promise.all([call(BRIEF_SYSTEM, 'brief'), call(DETAILED_SYSTEM, 'detailed')])
       } else {
-        brief = await call(BRIEF_SYSTEM, 300)
-        detailed = await call(DETAILED_SYSTEM, 2000)
+        brief = await call(BRIEF_SYSTEM, 'brief')
+        detailed = await call(DETAILED_SYSTEM, 'detailed')
       }
-      setRebuttal({ brief, detailed })
+      setRebuttal({ brief: brief.text, detailed: detailed.text })
+
+      const totals: Usage = {
+        inputTokens: (brief.usage?.inputTokens ?? 0) + (detailed.usage?.inputTokens ?? 0),
+        outputTokens: (brief.usage?.outputTokens ?? 0) + (detailed.usage?.outputTokens ?? 0),
+        reasoningTokens: (brief.usage?.reasoningTokens ?? 0) + (detailed.usage?.reasoningTokens ?? 0),
+        reportedCostUsd:
+          typeof brief.usage?.reportedCostUsd === 'number' || typeof detailed.usage?.reportedCostUsd === 'number'
+            ? (brief.usage?.reportedCostUsd ?? 0) + (detailed.usage?.reportedCostUsd ?? 0)
+            : undefined,
+      }
+      const cost = costOf(model, totals)
+      setLastRun({ usage: totals, cost })
+      if (cost) setSessionCost((prev) => prev + cost)
     } catch (err) {
       if (err instanceof DOMException && err.name === 'TimeoutError') {
         setError('The request timed out. Please try again.')
@@ -259,22 +288,47 @@ export default function App() {
     }
   }
 
-  const handleProviderChange = (id: string) => {
-    const next = getProvider(id)
+  const applyProvider = (next: ReturnType<typeof getProvider>) => {
+    const nextModels = modelsFor(next)
     const storedKey = loadStoredKey(next.id)
     setProviderId(next.id)
-    setModelId(next.defaultModel)
+    setModels(nextModels)
+    setModelId(nextModels.some((m) => m.id === next.defaultModel) ? next.defaultModel : nextModels[0].id)
+    setCatalogFetchedAt(loadCachedCatalog(next.id)?.fetchedAt ?? null)
     setApiKey(storedKey)
     setShowApiKeyInput(next.requiresKey && !storedKey)
     setKeyDraft('')
     setError('')
+    setLastRun(null)
     localStorage.setItem('ai_provider', next.id)
     localStorage.setItem('ai_model', next.defaultModel)
   }
 
   const handleModelChange = (id: string) => {
     setModelId(id)
+    setLastRun(null)
     localStorage.setItem('ai_model', id)
+  }
+
+  const handleRefreshModels = async () => {
+    if (provider.requiresKey && !apiKey && provider.id !== 'openrouter') {
+      setError('Enter your API key first — the model list comes from the provider.')
+      setShowApiKeyInput(true)
+      return
+    }
+    setIsRefreshing(true)
+    setError('')
+    try {
+      const live = await fetchLiveModels(provider, apiKey)
+      const { fetchedAt } = saveCachedCatalog(provider.id, live)
+      setModels(live)
+      setCatalogFetchedAt(fetchedAt)
+      if (!live.some((m) => m.id === modelId)) handleModelChange(live[0].id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not refresh the model list')
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   const openApiKeyForm = () => {
@@ -304,6 +358,15 @@ export default function App() {
     }
   }
 
+  const estimate = estimateCost(model, transcript)
+  const costLine = () => {
+    if (provider.kind === 'webllm') return 'Free — runs on your device, nothing is billed'
+    if (model?.unknownPrice) return 'Pricing unknown for this model'
+    if (isFreeModel(model)) return 'Free model — no charge'
+    if (estimate === null) return null
+    return `≈ ${formatCost(estimate)} per rebuttal${model?.reasoning ? ' (includes hidden reasoning tokens)' : ''}`
+  }
+
   return (
     <div className="container">
       {updateAvailable && (
@@ -327,7 +390,7 @@ export default function App() {
               id="ai-provider"
               className="select"
               value={providerId}
-              onChange={(e) => handleProviderChange(e.target.value)}
+              onChange={(e) => applyProvider(getProvider(e.target.value))}
               disabled={isLoading}
             >
               {PROVIDERS.map((p) => (
@@ -338,9 +401,21 @@ export default function App() {
             </select>
           </div>
           <div>
-            <label className="label" htmlFor="ai-model">
-              Model
-            </label>
+            <div className="label-row">
+              <label className="label" htmlFor="ai-model">
+                Model
+              </label>
+              {provider.modelsUrl && (
+                <button
+                  className="link-button subtle"
+                  onClick={handleRefreshModels}
+                  disabled={isLoading || isRefreshing}
+                  title="Fetch the provider's current model list"
+                >
+                  {isRefreshing ? 'Refreshing…' : '↻ Refresh'}
+                </button>
+              )}
+            </div>
             <select
               id="ai-model"
               className="select"
@@ -348,13 +423,22 @@ export default function App() {
               onChange={(e) => handleModelChange(e.target.value)}
               disabled={isLoading}
             >
-              {provider.models.map((m) => (
+              {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                 </option>
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="meta-row">
+          {costLine() && <span className="cost-estimate">{costLine()}</span>}
+          {catalogFetchedAt && (
+            <span className="catalog-age">
+              {models.length} models · updated {new Date(catalogFetchedAt).toLocaleDateString()}
+            </span>
+          )}
         </div>
         {provider.note && <p className="key-help">{provider.note}</p>}
       </div>
@@ -388,7 +472,7 @@ export default function App() {
           <p className="key-help">
             {provider.keyIsFree
               ? 'This provider needs an API key even for its free models, but creating one is free — no payment details required. '
-              : 'Your key is stored only in this browser and sent only to this provider. '}
+              : 'Your key is saved in this browser only, and sent only to this provider. You will not need to enter it again. '}
             {provider.keyUrl && (
               <>
                 Get one from{' '}
@@ -506,6 +590,17 @@ export default function App() {
               <div className="rebuttal-detailed-content">{rebuttal.detailed}</div>
             </div>
           </div>
+
+          {lastRun && (
+            <p className="cost-actual">
+              Cost: <strong>{formatCost(lastRun.cost)}</strong>{' '}
+              <span className="token-detail">
+                ({lastRun.usage.inputTokens.toLocaleString()} in / {lastRun.usage.outputTokens.toLocaleString()} out
+                {lastRun.usage.reasoningTokens ? `, ${lastRun.usage.reasoningTokens.toLocaleString()} reasoning` : ''})
+              </span>
+              {sessionCost > 0 && <span className="token-detail"> · session total {formatCost(sessionCost)}</span>}
+            </p>
+          )}
         </div>
       )}
     </div>

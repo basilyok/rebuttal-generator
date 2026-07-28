@@ -14,9 +14,13 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 ✅ **AI Rebuttals**
 - Brief rebuttals (1-2 sentences) for quick comebacks
 - Detailed rebuttals (comprehensive analysis) - expandable
-- 10 selectable AI providers with sub-models: Claude, Gemini, Groq, OpenRouter,
-  Mistral, DeepSeek, Grok, Cohere, Together AI, and a free no-key local
-  in-browser option (WebLLM/WebGPU)
+- 10 selectable AI providers with 50+ sub-models: Claude, Gemini, Groq,
+  OpenRouter, Mistral, DeepSeek, Grok, Cohere, Together AI, and a free no-key
+  local in-browser option (WebLLM/WebGPU)
+- Cost estimate before generating, actual cost + token usage after, session total
+- Reasoning-model aware: generous token budgets, per-provider reasoning
+  minimisation, and automatic retry so "thinking" models still return answers
+- ↻ Refresh pulls each provider's live model catalog at runtime
 
 ✅ **PWA (Progressive Web App)**
 - Install on desktop (Chrome, Edge, Safari)
