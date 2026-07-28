@@ -225,6 +225,8 @@ export default function App() {
       setIsRecording(false)
     } else {
       setError('')
+      // Dictating is a fresh argument, not a rebuttal of the fetched article
+      setArticle(null)
       wantRecordingRef.current = true
       try {
         recognition.start()
@@ -289,10 +291,13 @@ export default function App() {
     setIsExpanded(false)
     setLastRun(null)
 
-    // Article text is delimited so the model can tell content from instructions
+    // Article text is delimited so the model can tell content from instructions.
+    // Neutralise any closing tag in the page content itself, or it could break
+    // out of the delimiter and have its text read as instructions.
     const isArticle = !!article
+    const sealDelimiter = (value: string) => value.replace(/<\/?article/gi, '&lt;article')
     const userContent = isArticle
-      ? `<article title="${article.title.replace(/"/g, "'")}">\n${argument}\n</article>`
+      ? `<article title="${sealDelimiter(article.title).replace(/"/g, "'")}">\n${sealDelimiter(argument)}\n</article>`
       : argument
     const briefSystem = isArticle ? BRIEF_ARTICLE_SYSTEM : BRIEF_SYSTEM
     const detailedSystem = isArticle ? DETAILED_ARTICLE_SYSTEM : DETAILED_SYSTEM
@@ -548,7 +553,12 @@ export default function App() {
           <div className="mode-toggle" role="group" aria-label="Input mode">
             <button
               className={`mode-button ${inputMode === 'text' ? 'active' : ''}`}
-              onClick={() => setInputMode('text')}
+              onClick={() => {
+                setInputMode('text')
+                // Switching away means the user is supplying their own argument,
+                // so the article-specific prompt must no longer apply
+                setArticle(null)
+              }}
               disabled={isLoading}
               aria-pressed={inputMode === 'text'}
             >
@@ -642,6 +652,8 @@ export default function App() {
           onChange={(e) => {
             setTranscript(e.target.value)
             finalTranscriptRef.current = e.target.value
+            // Clearing the box out entirely discards the article context too
+            if (!e.target.value.trim()) setArticle(null)
           }}
           placeholder={
             inputMode === 'url'

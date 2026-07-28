@@ -48,9 +48,33 @@ export function normalizeUrl(input: string): string {
   return parsed.toString()
 }
 
+/** Reader output is markdown, but entities can still survive in it. */
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“',
+  mdash: '—', ndash: '–', hellip: '…', bull: '•',
+}
+
+function decodeEntities(text: string): string {
+  if (!text.includes('&')) return text
+  return text.replace(/&(#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]{1,31});/g, (match, entity: string) => {
+    if (entity[0] === '#') {
+      const codePoint =
+        entity[1] === 'x' || entity[1] === 'X' ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10)
+      if (!Number.isFinite(codePoint) || codePoint <= 0 || codePoint > 0x10ffff) return match
+      try {
+        return String.fromCodePoint(codePoint)
+      } catch {
+        return match
+      }
+    }
+    return NAMED_ENTITIES[entity] ?? NAMED_ENTITIES[entity.toLowerCase()] ?? match
+  })
+}
+
 /** Strip markdown noise so the model sees prose, not navigation chrome. */
 function cleanMarkdown(markdown: string): string {
-  return markdown
+  return decodeEntities(markdown)
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '') // images
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // links -> their text
     .replace(/^\s*[*+-]\s*$/gm, '')
