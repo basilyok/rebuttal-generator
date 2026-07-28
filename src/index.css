@@ -276,6 +276,60 @@ h1 {
   color: #6b7280;
 }
 
+.mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 12px;
+}
+
+.mode-button {
+  border: none;
+  background: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #4b5563;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.mode-button:hover:not(:disabled):not(.active) {
+  background: #e5e7eb;
+}
+
+.mode-button.active {
+  background: #ffffff;
+  color: #4c5fd7;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.mode-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.article-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #f0f4ff;
+  border-left: 4px solid #4c5fd7;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #333;
+}
+
+.clear-article {
+  margin-top: 12px;
+}
+
 .cost-actual {
   margin-top: 16px;
   padding-top: 12px;

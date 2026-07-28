@@ -6,7 +6,7 @@ A modern, installable web app that uses AI to generate intelligent rebuttals to 
 
 ## Features
 
-- 🎤 **Voice or Text Input**: Dictate the argument via the browser microphone (Web Speech API) or just type/edit it in the text box
+- 🎤 **Voice, Text, or URL Input**: Dictate the argument via the browser microphone (Web Speech API), type it, or paste a link to an article and let the app pull the text in
 - 🤖 **10 AI Providers, 50+ models**: Anthropic Claude, Google Gemini, Groq, OpenRouter, Mistral, DeepSeek, xAI Grok, Cohere, Together AI — or run a model locally in your browser for free with no API key (WebLLM/WebGPU)
 - 💰 **Cost transparency**: estimated cost before you generate, actual cost and token counts after, and a running session total
 - ↻ **Self-updating model list**: pull each provider's live catalog at runtime, so new model releases appear without a code change
@@ -68,6 +68,37 @@ Gemini `thinkingConfig`), and automatically retrying once with double the budget
 if a response still comes back empty. Models marked "no reasoning" in the
 dropdown avoid the issue entirely and are the cheapest, fastest choice.
 
+## Rebutting an article from a URL
+
+Switch the input to **🔗 Article URL**, paste a link, and the app pulls the
+article's text into the editable box so you can review or trim it before
+generating.
+
+Extraction runs in a Cloudflare Pages Function (`functions/api/article.js`) on
+the same deployment, because browsers cannot fetch third-party pages directly —
+almost no publisher sends permissive CORS headers. The function fetches the page
+at the edge, pulls the prose out with `HTMLRewriter`, and caps the result at
+~20,000 characters to keep requests and costs bounded. **Only the article URL is
+sent to it — your API keys never leave the browser.** It rejects non-public
+addresses (localhost, private ranges) so it cannot be used to probe internal
+networks. When run locally with `npm run dev` no function is served, so the app
+falls back to [Jina Reader](https://jina.ai/reader/), a CORS-enabled reader
+service.
+
+**When an article isn't readable** — a paywall, a login wall, or a bot check —
+the function looks for a publicly archived copy in the
+[Internet Archive's Wayback Machine](https://web.archive.org/) and uses that if
+one exists, labelling the result so you know where the text came from. If there
+is no readable copy anywhere, you get a plain-English message asking you to open
+the article and paste its text instead, which always works.
+
+A note on scope: this uses ordinary reader extraction plus a public library
+archive. It is not a paywall bypass, and it will not defeat publishers' access
+controls — if an article is paywalled and unarchived, the app tells you so
+rather than trying to work around it. (`removepaywall.com`, mentioned as a
+possible option, publishes no API — it is a browser UI only — so it cannot be
+called from code in any case.)
+
 ## Keeping the model list current
 
 New models ship constantly. Three ways this stays current, in order of effort:
@@ -125,7 +156,7 @@ npm run preview
 
 1. **Pick an AI**: Choose a provider and model from the dropdowns. For zero-cost, zero-signup use, pick **Local in-browser (FREE, no key)** — the model downloads once and runs on your GPU
 2. **Enter API Key** (cloud providers only): the app links to each provider's key page; free-tier keys exist for Gemini, Groq, OpenRouter, Mistral, and Cohere
-3. **Enter Your Argument**: Type it directly, or click "Start Recording" and speak it — dictated text stays editable afterwards
+3. **Enter Your Argument**: Type it, click "Start Recording" and speak it, or switch to **🔗 Article URL** and paste a link — dictated and fetched text both stay editable afterwards
 4. **Generate Rebuttal**: Click "Generate Rebuttal" to create a response
 5. **View Details**: Click "View Detailed Rebuttal" to expand and see the comprehensive analysis
 

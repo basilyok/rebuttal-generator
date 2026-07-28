@@ -6,10 +6,11 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 
 ### 📦 Complete Features
 
-✅ **Voice Input**
-- Real-time speech recognition using Web Speech API
-- Automatic transcription as you speak
-- Works in Chrome, Edge, Safari, Firefox
+✅ **Voice, Text, or Article URL Input**
+- Real-time speech recognition using Web Speech API (Chrome, Edge, Safari)
+- Manual typing/editing of the argument
+- Paste an article URL and the text is fetched via a Cloudflare Pages Function,
+  with an Internet Archive fallback when the live page isn't readable
 
 ✅ **AI Rebuttals**
 - Brief rebuttals (1-2 sentences) for quick comebacks
