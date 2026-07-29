@@ -591,6 +591,158 @@ h1 {
   border-width: 2px;
 }
 
+/* --- Send zone: the only part that is ever sent to anyone -------------------- */
+
+.strategy-line {
+  font-size: 13px;
+  color: #4b5563;
+  font-style: italic;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.chip {
+  font-size: 12px;
+  color: #374151;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.send-zone {
+  border: 2px solid #4c5fd7;
+  border-radius: 12px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.send-zone-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.send-zone-head .rebuttal-title {
+  margin-bottom: 0;
+}
+
+.copy-message {
+  font-size: 13px;
+  padding: 8px 16px;
+}
+
+.message-body {
+  line-height: 1.75;
+  color: #1f2937;
+  font-size: 15px;
+  white-space: pre-wrap;
+}
+
+.message-body a {
+  color: #4c5fd7;
+}
+
+.claim-badge {
+  margin-top: 16px;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.claim-badge-warn {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #fde68a;
+}
+
+.claim-panel-body {
+  padding: 12px 4px 0;
+  font-size: 13px;
+}
+
+.claim-warn {
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 10px;
+}
+
+/* --- The honest check: always visible, never behind a click ------------------ */
+
+.weak-link {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-left: 4px solid #ea580c;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #7c2d12;
+  white-space: pre-wrap;
+}
+
+.weak-link-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+/* --- Briefing zone: explicitly not for sending ------------------------------- */
+
+.briefing-header {
+  margin-top: 20px;
+}
+
+.briefing-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 999px;
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+
+.answered-list .unanswered {
+  color: #991b1b;
+  font-weight: 600;
+}
+
+.label-optional {
+  font-weight: 400;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.audience-section {
+  margin-bottom: 20px;
+}
+
+.audience-section .text-input {
+  width: 100%;
+}
+
 .share-row {
   display: flex;
   flex-wrap: wrap;

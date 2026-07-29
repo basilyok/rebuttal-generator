@@ -63,16 +63,22 @@ export async function onRequestPost(context) {
   }
 
   const argument = asText(payload?.argument)
+  const message = asText(payload?.message)
   const brief = asText(payload?.brief)
   const detailed = asText(payload?.detailed)
-  if (!argument || !brief || !detailed) {
-    return json({ error: 'A shared rebuttal needs the argument and both rebuttal parts.' }, 400)
+  // Accept the current shape (message) or the pre-constitution one (brief+detailed)
+  if (!argument || !(message || (brief && detailed))) {
+    return json({ error: 'A shared reply needs the argument and the message.' }, 400)
   }
 
   // Build the record field by field — never persist arbitrary client JSON, so a
   // stray key (an API key above all) cannot be smuggled into storage.
+  // Note what is deliberately absent: the weak-link note and the briefing are private
+  // notes to the sender. Publishing them would hand the recipient the sender's own doubts.
   const record = {
     argument,
+    message,
+    strategy: asText(payload?.strategy, 1000),
     brief,
     detailed,
     steelman: asText(payload?.steelman),

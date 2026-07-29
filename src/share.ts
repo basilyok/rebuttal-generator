@@ -6,10 +6,19 @@
 
 import type { Citation } from './providers'
 
+/**
+ * A published reply. Only the sendable message and its sources are ever shared —
+ * the weak-link note and the briefing are private to the sender by design.
+ *
+ * `brief`/`detailed`/`steelman` are the pre-constitution shape, kept optional so links
+ * created before the rewrite still render.
+ */
 export interface SharedRebuttal {
   argument: string
-  brief: string
-  detailed: string
+  message?: string
+  strategy?: string
+  brief?: string
+  detailed?: string
   steelman?: string
   citations?: Citation[]
   steelmanCitations?: Citation[]

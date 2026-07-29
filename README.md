@@ -1,6 +1,15 @@
 # Rebuttal Generator
 
-A modern, installable web app that uses AI to generate intelligent rebuttals to arguments. Simply speak your argument into the microphone, and the app will instantly generate a brief rebuttal with the option to expand and view a more detailed analysis. Choose from 10 AI providers — including a completely free option that runs the model locally in your browser with no API key.
+An installable web app that writes a reply designed to **change the mind of the specific
+person who made the argument** — not to score points for an audience.
+
+Paste an argument, speak it, or give it a URL. You get one message you could actually
+send, grounded in sources that were really retrieved, plus a private briefing that tells
+you the weakest point in *your own* position before you send anything.
+
+How it writes is governed by **[CONSTITUTION.md](CONSTITUTION.md)** — ten rules drawn from
+the research on what actually changes minds. Read that first if you plan to change the
+prompts.
 
 **🌍 Live at [rebuttal.m36x.com](https://rebuttal.m36x.com/) on Cloudflare Pages** • **📱 Fully PWA-enabled** • **⚡ [Deployment guide](DEPLOYMENT_GUIDE.md)**
 
@@ -8,8 +17,9 @@ A modern, installable web app that uses AI to generate intelligent rebuttals to 
 
 - 🎤 **Voice, Text, or URL Input**: Dictate the argument via the browser microphone (Web Speech API), type it, or paste a link to an article and let the app pull the text in
 - 🤖 **10 AI Providers, 50+ models**: Anthropic Claude, Google Gemini, Groq, OpenRouter, Mistral, DeepSeek, xAI Grok, Cohere, Together AI — or run a model locally in your browser for free with no API key (WebLLM/WebGPU)
-- 🔗 **Real sources, not invented ones**: on models that can actually search the web, the rebuttal cites what it retrieved, with clickable links
-- ⚖️ **Steelman**: a collapsed section that argues the strongest honest case *for* the original argument, so you can see what you're up against
+- 🔗 **Real sources on every model**: the app searches the web itself (Tavily, keyless — no account needed) and the reply may cite *only* what was actually retrieved. Any URL the model invents is stripped before you see it
+- ⚠️ **The weak link in your own position**, shown every time, before you send — if the other side is better supported, it says so
+- ⚖️ **Their best case, and where you answer it**: a private briefing that checks your reply actually addresses their strongest argument, and flags anything it leaves unanswered
 - 📤 **Shareable links**: publish a result to an unguessable URL you can send to anyone
 - 💰 **Cost transparency**: estimated cost before you generate, actual cost and token counts after, and a running session total
 - ↻ **Self-updating model list**: pull each provider's live catalog at runtime, so new model releases appear without a code change
@@ -102,44 +112,41 @@ rather than trying to work around it. (`removepaywall.com`, mentioned as a
 possible option, publishes no API — it is a browser UI only — so it cannot be
 called from code in any case.)
 
-## Sources, and why some models can't provide links
+## What you get back
 
-**Back it up with sources** asks the model to search the web and cite what it
-actually retrieved. Citations are pulled from each provider's structured
-response — not scraped out of the prose — so the links are real:
+Two zones, deliberately separated — mixing them is how you end up pasting your own doubts
+to the person you're trying to convince.
 
-| Provider | How | Citation source |
-|----------|-----|-----------------|
-| Google Gemini | `tools: [{google_search: {}}]` | `groundingMetadata.groundingChunks[].web` |
-| Anthropic Claude | `web_search_20250305` tool | citations attached to text blocks |
-| OpenRouter | `plugins: [{id: "web"}]` — works on **any** model there | `message.annotations[].url_citation` |
+**The send zone** is one message, written to be sent as-is. It opens by restating their
+actual claim, concedes something real, gives them an off-ramp *before* disagreeing, then
+carries the evidence. The Copy button takes this and nothing else.
 
-Everything else — Groq, Mistral, DeepSeek, xAI, Cohere, Together, and local
-in-browser models — **cannot search**. For those the app says so plainly next to
-the checkbox and the model names its sources without linking them.
+**The briefing** is for you and is labelled "don't send": the weakest point in your own
+position, anything you should verify first, and their strongest case mapped against the
+paragraph of your reply that answers it — with anything unanswered flagged.
 
-This is deliberate. Without retrieval, a model asked for "source links" produces
-confident, plausible, *fabricated* URLs. In a tool built to win arguments, a
-citation that doesn't resolve is worse than no citation, so the app never asks
-for links it cannot ground. Perplexity Sonar (via OpenRouter, $1/$1 per Mtok) is
-the cheapest purpose-built option.
+## Sources — and why a fabricated URL is structurally impossible
 
-Searching costs extra on top of tokens — roughly half a cent per rebuttal on
-OpenRouter's plugin, passed through on native provider search — so the
-pre-flight estimate understates a grounded rebuttal. If a model turns out not to
-support search, the app retries without it and still returns an answer rather
-than failing.
+**Find real evidence to cite** searches the web *before* generating, using
+[Tavily](https://tavily.com). Those results are injected as a fixed, numbered set and the
+model is told it may cite only from that set. Afterwards, **any URL in the output that
+wasn't in the set is stripped** and reported in the claim badge.
 
-## Steelman
+That ordering is the whole point. Asking a model politely not to invent citations does not
+work — and the research is explicit that persuasion-tuned generation *systematically
+degrades factual accuracy* (Hackenburg et al., *Science* 2025). Making the citation set
+fixed and verifying against it turns a request into a guarantee.
 
-Below the rebuttal, **Steelman: the strongest case FOR this argument** builds the
-best honest case for the position you're attacking. It's the integrity check on
-the rebuttal: if the strongest opposing case is weak, your rebuttal is sound; if
-it's strong, better to know before you use it.
+Tavily needs **no account and no API key** — the app uses its keyless mode. A free key
+(1,000 searches/month, no card) only raises the rate limit, and there's a field for it in
+settings. Social platforms and forums are excluded from results: a LinkedIn post is not
+evidence that will persuade anyone.
 
-It is collapsed by default and only generated the first time you open it, so
-rebuttals you never expand cost nothing extra. When sources are on, the steelman
-is grounded too.
+Because the app does its own searching, **every provider can cite sources now** — including
+Groq, Mistral, DeepSeek, xAI, Cohere, Together, and the free local in-browser model, none
+of which can search on their own. If Tavily is unavailable, models with native search
+(Gemini, Claude, OpenRouter) fall back to it; otherwise the reply is generated without
+sources and the badge says so plainly.
 
 ## Sharing a rebuttal
 

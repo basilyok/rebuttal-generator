@@ -1,5 +1,9 @@
 # Project Summary: Rebuttal Generator
 
+**Purpose: change the mind of the specific person who made the argument.** Not to score
+points for a spectator. Everything below serves that, and [CONSTITUTION.md](CONSTITUTION.md)
+governs how output is written — read it before touching `src/prompts.ts`.
+
 ## ✅ What's Been Created
 
 You now have a **fully-functional, deployable PWA** (Progressive Web App) that generates AI-powered rebuttals using Claude Haiku 4.5.
@@ -12,9 +16,13 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 - Paste an article URL and the text is fetched via a Cloudflare Pages Function,
   with an Internet Archive fallback when the live page isn't readable
 
-✅ **AI Rebuttals**
-- Brief rebuttals (1-2 sentences) for quick comebacks
-- Detailed rebuttals (comprehensive analysis) - expandable
+✅ **AI Replies**
+- One sendable message, structured for persuasion: restate → concede → off-ramp →
+  narrowed disagreement → evidence → answer the concessions → ask
+- A private briefing zone, never sent: the weak point in your own position, what to
+  verify, and their best case mapped to where your reply answers it
+- Web search runs *before* generation (Tavily, keyless) and the reply may cite only what
+  was retrieved; invented URLs are stripped
 - 10 selectable AI providers with 50+ sub-models: Claude, Gemini, Groq,
   OpenRouter, Mistral, DeepSeek, Grok, Cohere, Together AI, and a free no-key
   local in-browser option (WebLLM/WebGPU)

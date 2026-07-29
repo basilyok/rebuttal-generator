@@ -543,6 +543,8 @@ const TIMEOUT_MS = 120_000
 export interface Citation {
   url: string
   title: string
+  /** Excerpt from the page, when the source provided one (Tavily does) */
+  snippet?: string
 }
 
 export interface GenerateArgs {
