@@ -1,0 +1,11 @@
+name = "m36x-rebuttal"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-07-01"
+
+# Storage for unlisted share links (/api/share). Create the namespace once with:
+#   npx wrangler kv namespace create SHARES
+# then paste the returned id below. Without this binding the share endpoint
+# returns 501 and the rest of the app is unaffected.
+[[kv_namespaces]]
+binding = "SHARES"
+id = "3ba59116bf3a4f1190b27e16616d9f8e"

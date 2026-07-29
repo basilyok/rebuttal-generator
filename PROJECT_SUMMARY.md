@@ -18,6 +18,12 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 - 10 selectable AI providers with 50+ sub-models: Claude, Gemini, Groq,
   OpenRouter, Mistral, DeepSeek, Grok, Cohere, Together AI, and a free no-key
   local in-browser option (WebLLM/WebGPU)
+- AI settings collapse behind a summary line naming the model and what it is good at
+- Web-grounded sources with real citation links on Gemini, Claude and OpenRouter;
+  models that cannot search say so instead of inventing URLs
+- Collapsed steelman section arguing the strongest honest case FOR the argument,
+  generated only when opened
+- Unlisted share links (`/?s=<id>`) backed by Cloudflare KV
 - Cost estimate before generating, actual cost + token usage after, session total
 - Reasoning-model aware: generous token budgets, per-provider reasoning
   minimisation, and automatic retry so "thinking" models still return answers
@@ -47,6 +53,10 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 
 ```
 rebuttal-generator/
+├── functions/api/
+│   ├── article.js             # Article extraction + Internet Archive fallback
+│   └── share.js               # Unlisted share links (Cloudflare KV)
+├── wrangler.toml              # Pages config + SHARES KV binding
 ├── public/
 │   ├── manifest.json          # PWA metadata
 │   ├── sw.js                  # Service worker (offline support)
@@ -91,7 +101,7 @@ npm run build
 ### 4. Deploy
 
 ```bash
-npx wrangler pages deploy dist --project-name=m36x-rebuttal
+npx wrangler pages deploy
 ```
 
 Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.

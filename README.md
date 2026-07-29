@@ -8,6 +8,9 @@ A modern, installable web app that uses AI to generate intelligent rebuttals to 
 
 - 🎤 **Voice, Text, or URL Input**: Dictate the argument via the browser microphone (Web Speech API), type it, or paste a link to an article and let the app pull the text in
 - 🤖 **10 AI Providers, 50+ models**: Anthropic Claude, Google Gemini, Groq, OpenRouter, Mistral, DeepSeek, xAI Grok, Cohere, Together AI — or run a model locally in your browser for free with no API key (WebLLM/WebGPU)
+- 🔗 **Real sources, not invented ones**: on models that can actually search the web, the rebuttal cites what it retrieved, with clickable links
+- ⚖️ **Steelman**: a collapsed section that argues the strongest honest case *for* the original argument, so you can see what you're up against
+- 📤 **Shareable links**: publish a result to an unguessable URL you can send to anyone
 - 💰 **Cost transparency**: estimated cost before you generate, actual cost and token counts after, and a running session total
 - ↻ **Self-updating model list**: pull each provider's live catalog at runtime, so new model releases appear without a code change
 - ⚡ **Instant Rebuttals**: Brief and detailed rebuttals generated in parallel
@@ -98,6 +101,57 @@ controls — if an article is paywalled and unarchived, the app tells you so
 rather than trying to work around it. (`removepaywall.com`, mentioned as a
 possible option, publishes no API — it is a browser UI only — so it cannot be
 called from code in any case.)
+
+## Sources, and why some models can't provide links
+
+**Back it up with sources** asks the model to search the web and cite what it
+actually retrieved. Citations are pulled from each provider's structured
+response — not scraped out of the prose — so the links are real:
+
+| Provider | How | Citation source |
+|----------|-----|-----------------|
+| Google Gemini | `tools: [{google_search: {}}]` | `groundingMetadata.groundingChunks[].web` |
+| Anthropic Claude | `web_search_20250305` tool | citations attached to text blocks |
+| OpenRouter | `plugins: [{id: "web"}]` — works on **any** model there | `message.annotations[].url_citation` |
+
+Everything else — Groq, Mistral, DeepSeek, xAI, Cohere, Together, and local
+in-browser models — **cannot search**. For those the app says so plainly next to
+the checkbox and the model names its sources without linking them.
+
+This is deliberate. Without retrieval, a model asked for "source links" produces
+confident, plausible, *fabricated* URLs. In a tool built to win arguments, a
+citation that doesn't resolve is worse than no citation, so the app never asks
+for links it cannot ground. Perplexity Sonar (via OpenRouter, $1/$1 per Mtok) is
+the cheapest purpose-built option.
+
+Searching costs extra on top of tokens — roughly half a cent per rebuttal on
+OpenRouter's plugin, passed through on native provider search — so the
+pre-flight estimate understates a grounded rebuttal. If a model turns out not to
+support search, the app retries without it and still returns an answer rather
+than failing.
+
+## Steelman
+
+Below the rebuttal, **Steelman: the strongest case FOR this argument** builds the
+best honest case for the position you're attacking. It's the integrity check on
+the rebuttal: if the strongest opposing case is weak, your rebuttal is sound; if
+it's strong, better to know before you use it.
+
+It is collapsed by default and only generated the first time you open it, so
+rebuttals you never expand cost nothing extra. When sources are on, the steelman
+is grounded too.
+
+## Sharing a rebuttal
+
+**🔗 Get a shareable link** publishes the argument, the rebuttal, the steelman and
+any sources to an unguessable URL (`/?s=<id>`) backed by Cloudflare KV. Opening
+that link shows the result read-only, with a button to write your own.
+
+Be aware of what this means: the link is **unlisted, not private**. It is not
+browsable, indexed, or discoverable — there is no public gallery — but anyone you
+give it to can read it, and so can anyone they forward it to. Links expire after
+a year. Your API key is never sent to the sharing service; the endpoint stores
+only known fields, so nothing else in the payload can be persisted.
 
 ## Keeping the model list current
 

@@ -26,6 +26,10 @@ export interface ModelOption {
   reasoning?: boolean
   /** Pricing unknown (e.g. discovered via live refresh with no price data) */
   unknownPrice?: boolean
+  /** Can search the web, so it can return real, verifiable source links */
+  search?: boolean
+  /** One-line description of what this model is good for, shown when settings are collapsed */
+  blurb?: string
 }
 
 export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'cohere' | 'webllm'
@@ -58,10 +62,41 @@ export const PROVIDERS: Provider[] = [
     keyPlaceholder: 'sk-ant-…',
     modelsUrl: 'https://api.anthropic.com/v1/models',
     models: [
-      { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fast & cheap)', inPrice: 1, outPrice: 5 },
-      { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', inPrice: 2, outPrice: 10, reasoning: true },
-      { id: 'claude-opus-5', label: 'Claude Opus 5', inPrice: 5, outPrice: 25, reasoning: true },
-      { id: 'claude-fable-5', label: 'Claude Fable 5 (most capable)', inPrice: 10, outPrice: 50, reasoning: true },
+      {
+        id: 'claude-haiku-4-5',
+        label: 'Claude Haiku 4.5 (fast & cheap)',
+        inPrice: 1,
+        outPrice: 5,
+        search: true,
+        blurb: 'Quick and inexpensive, answers directly without hidden reasoning — a solid everyday default',
+      },
+      {
+        id: 'claude-sonnet-5',
+        label: 'Claude Sonnet 5',
+        inPrice: 2,
+        outPrice: 10,
+        reasoning: true,
+        search: true,
+        blurb: 'Balanced pick: reasons carefully about the argument without the cost of the largest models',
+      },
+      {
+        id: 'claude-opus-5',
+        label: 'Claude Opus 5',
+        inPrice: 5,
+        outPrice: 25,
+        reasoning: true,
+        search: true,
+        blurb: 'Strong at picking apart flawed logic and spotting the weak joint in an argument',
+      },
+      {
+        id: 'claude-fable-5',
+        label: 'Claude Fable 5 (most capable)',
+        inPrice: 10,
+        outPrice: 50,
+        reasoning: true,
+        search: true,
+        blurb: 'The most capable option — best for nuanced arguments where the rebuttal has to be airtight',
+      },
     ],
     defaultModel: 'claude-haiku-4-5',
     note: 'Claude Sonnet 5 is $2/$10 per Mtok as introductory pricing through 2026-08-31, then $3/$15.',
@@ -76,12 +111,28 @@ export const PROVIDERS: Provider[] = [
     keyPlaceholder: 'AIza…',
     modelsUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
     models: [
-      { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite (cheapest)', inPrice: 0.25, outPrice: 1.5, reasoning: true },
-      { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', inPrice: 0.3, outPrice: 2.5, reasoning: true },
-      { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (flagship)', inPrice: 1.5, outPrice: 7.5, reasoning: true },
-      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', inPrice: 1.5, outPrice: 9, reasoning: true },
-      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)', inPrice: 0.5, outPrice: 3, reasoning: true },
-      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (preview — no free tier)', inPrice: 2, outPrice: 12, reasoning: true },
+      {
+        id: 'gemini-3.1-flash-lite',
+        label: 'Gemini 3.1 Flash-Lite (cheapest)',
+        inPrice: 0.25,
+        outPrice: 1.5,
+        reasoning: true,
+        search: true,
+        blurb: 'Cheapest way to get a grounded rebuttal — searches the web for real sources on a free-tier key',
+      },
+      { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', inPrice: 0.3, outPrice: 2.5, reasoning: true, search: true },
+      {
+        id: 'gemini-3.6-flash',
+        label: 'Gemini 3.6 Flash (flagship)',
+        inPrice: 1.5,
+        outPrice: 7.5,
+        reasoning: true,
+        search: true,
+        blurb: 'Google’s current flagship — strong reasoning plus Google Search grounding for verifiable links',
+      },
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', inPrice: 1.5, outPrice: 9, reasoning: true, search: true },
+      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)', inPrice: 0.5, outPrice: 3, reasoning: true, search: true },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (preview — no free tier)', inPrice: 2, outPrice: 12, reasoning: true, search: true },
     ],
     defaultModel: 'gemini-3.1-flash-lite',
     note: 'Free tier available on every model except Gemini 3.1 Pro — a free key will be rejected by that one.',
@@ -98,7 +149,13 @@ export const PROVIDERS: Provider[] = [
     modelsUrl: 'https://api.groq.com/openai/v1/models',
     models: [
       { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (cheapest)', inPrice: 0.05, outPrice: 0.08 },
-      { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile', inPrice: 0.59, outPrice: 0.79 },
+      {
+        id: 'llama-3.3-70b-versatile',
+        label: 'Llama 3.3 70B Versatile',
+        inPrice: 0.59,
+        outPrice: 0.79,
+        blurb: 'Near-instant replies with no hidden reasoning — the most reliable pick when you want speed',
+      },
       { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', inPrice: 0.075, outPrice: 0.3, reasoning: true },
       { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B (flagship)', inPrice: 0.15, outPrice: 0.6, reasoning: true },
       { id: 'qwen/qwen3.6-27b', label: 'Qwen 3.6 27B', inPrice: 0.6, outPrice: 3, reasoning: true },
@@ -117,13 +174,21 @@ export const PROVIDERS: Provider[] = [
     baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
     modelsUrl: 'https://openrouter.ai/api/v1/models',
     models: [
-      { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B (no reasoning, reliable)', inPrice: 0.13, outPrice: 0.4 },
+      {
+        id: 'meta-llama/llama-3.3-70b-instruct',
+        label: 'Llama 3.3 70B (no reasoning, reliable)',
+        inPrice: 0.13,
+        outPrice: 0.4,
+        blurb: 'Cheap and dependable, answers directly — a good default when you just want a fast rebuttal',
+      },
       { id: 'qwen/qwen3.7-flash', label: 'Qwen3.7 Flash (near-free)', inPrice: 0.03, outPrice: 0.13, reasoning: true },
       { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', label: 'Nemotron 3 Ultra 550B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
       { id: 'nvidia/nemotron-3-super-120b-a12b:free', label: 'Nemotron 3 Super 120B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
       { id: 'nvidia/nemotron-3-nano-30b-a3b:free', label: 'Nemotron 3 Nano 30B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
       { id: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
       { id: 'openai/gpt-oss-20b:free', label: 'GPT-OSS 20B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
+      { id: 'perplexity/sonar', label: 'Perplexity Sonar (built for citations)', inPrice: 1, outPrice: 1, search: true, blurb: 'Purpose-built for web-sourced answers — the cheapest way to get a rebuttal backed by real links' },
+      { id: 'perplexity/sonar-pro', label: 'Perplexity Sonar Pro', inPrice: 3, outPrice: 15, search: true },
       { id: 'openai/gpt-5.6-luna', label: 'GPT-5.6 Luna', inPrice: 0.5, outPrice: 3, reasoning: true },
       { id: 'openai/gpt-5.6-terra', label: 'GPT-5.6 Terra', inPrice: 1.25, outPrice: 7.5, reasoning: true },
       { id: 'openai/gpt-5.6-sol', label: 'GPT-5.6 Sol (most capable GPT)', inPrice: 5, outPrice: 30, reasoning: true },
@@ -228,7 +293,13 @@ export const PROVIDERS: Provider[] = [
     kind: 'webllm',
     requiresKey: false,
     models: [
-      { id: 'Llama-3.2-1B-Instruct-q4f32_1-MLC', label: 'Llama 3.2 1B (~900 MB download)', inPrice: 0, outPrice: 0 },
+      {
+        id: 'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+        label: 'Llama 3.2 1B (~900 MB download)',
+        inPrice: 0,
+        outPrice: 0,
+        blurb: 'Runs on your own GPU — free, private, and works offline once downloaded; keep arguments short',
+      },
       { id: 'Llama-3.2-3B-Instruct-q4f32_1-MLC', label: 'Llama 3.2 3B (~2.3 GB download)', inPrice: 0, outPrice: 0 },
       { id: 'Phi-3.5-mini-instruct-q4f16_1-MLC', label: 'Phi 3.5 Mini (~2.5 GB download)', inPrice: 0, outPrice: 0 },
       { id: 'gemma-2-2b-it-q4f16_1-MLC', label: 'Gemma 2 2B (~1.5 GB download)', inPrice: 0, outPrice: 0 },
@@ -241,6 +312,44 @@ export const PROVIDERS: Provider[] = [
 
 export function getProvider(id: string): Provider {
   return PROVIDERS.find((p) => p.id === id) || PROVIDERS[0]
+}
+
+/**
+ * One-line description of a model's character, for the collapsed settings summary.
+ * Falls back to a derived description because the live catalog refresh can surface
+ * hundreds of models that no hand-written table could cover.
+ */
+export function describeModel(model: ModelOption | undefined, provider: Provider): string {
+  if (!model) return 'No model selected'
+  if (model.blurb) return model.blurb
+  if (provider.kind === 'webllm') return 'Runs entirely on your device — free and private, nothing is sent anywhere'
+
+  const traits: string[] = []
+  if (isFreeModel(model)) traits.push('free to use')
+  else if (!model.unknownPrice) {
+    const perMTok = model.inPrice + model.outPrice
+    if (perMTok <= 1) traits.push('very cheap')
+    else if (perMTok >= 20) traits.push('premium tier')
+  }
+  if (provider.id === 'groq') traits.push('extremely fast')
+  traits.push(
+    model.reasoning
+      ? 'thinks before answering, so it handles multi-step arguments well'
+      : 'answers directly, so it is fast and predictable'
+  )
+  if (model.search) traits.push('can search the web for real sources')
+
+  const sentence = traits.join(' · ')
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1)
+}
+
+/** Whether this model can produce genuine, verifiable source links. */
+export function canSearchWeb(provider: Provider, model: ModelOption | undefined): boolean {
+  if (!model) return false
+  // Gemini and Anthropic ground natively; on OpenRouter the web plugin works on any model
+  if (provider.kind === 'gemini' || provider.kind === 'anthropic') return true
+  if (provider.id === 'openrouter') return true
+  return !!model.search
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +443,7 @@ export async function fetchLiveModels(provider: Provider, apiKey: string): Promi
           inPrice,
           outPrice,
           reasoning: (m.supported_parameters || []).includes('reasoning') || looksLikeReasoningModel(m.id),
+          search: (m.supported_parameters || []).includes('web_search_options'),
         }
       })
       // Free models first, then cheapest first
@@ -430,6 +540,11 @@ export function isFreeModel(model: ModelOption | undefined): boolean {
 
 const TIMEOUT_MS = 120_000
 
+export interface Citation {
+  url: string
+  title: string
+}
+
 export interface GenerateArgs {
   provider: Provider
   model: ModelOption
@@ -438,23 +553,40 @@ export interface GenerateArgs {
   userContent: string
   /** 'brief' is a 1-2 sentence answer; 'detailed' is a multi-paragraph one */
   length: 'brief' | 'detailed'
+  /** Ask the provider to search the web so the answer carries real citations */
+  webSearch?: boolean
   onStatus?: (message: string) => void
 }
 
 export interface GenerateResult {
   text: string
   usage: Usage | null
+  citations?: Citation[]
 }
 
 /**
  * Output budget. Reasoning models spend this budget on hidden thinking BEFORE
  * emitting anything visible, so they need far more headroom than the answer
- * itself requires.
+ * itself requires. Search results are injected into the response turn too, so
+ * a grounded answer needs headroom even on a non-reasoning model.
  */
-function budgetFor(model: ModelOption, length: 'brief' | 'detailed', attempt = 0): number {
+function budgetFor(model: ModelOption, length: 'brief' | 'detailed', attempt = 0, webSearch = false): number {
   const base = model.reasoning ? (length === 'brief' ? 4000 : 8000) : length === 'brief' ? 400 : 2000
-  return base * (attempt + 1)
+  return Math.max(base, webSearch ? 4000 : 0) * (attempt + 1)
 }
+
+/** Same URL often appears in several citations; keep the first title we saw. */
+function dedupeCitations(citations: Citation[]): Citation[] {
+  const seen = new Map<string, Citation>()
+  for (const c of citations) {
+    if (!c?.url || seen.has(c.url)) continue
+    seen.set(c.url, { url: c.url, title: c.title || new URL(c.url, 'https://x').hostname || c.url })
+  }
+  return [...seen.values()]
+}
+
+/** A request rejected because this model/account cannot use the search tool. */
+class SearchUnsupportedError extends Error {}
 
 class ReasoningStarvationError extends Error {
   constructor() {
@@ -481,7 +613,7 @@ function providerErrorMessage(data: any, status: number): string {
 // --- Anthropic --------------------------------------------------------------
 
 async function callAnthropic(args: GenerateArgs, attempt: number): Promise<GenerateResult> {
-  const { model, apiKey, system, userContent, length } = args
+  const { model, apiKey, system, userContent, length, webSearch } = args
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -493,26 +625,54 @@ async function callAnthropic(args: GenerateArgs, attempt: number): Promise<Gener
     },
     body: JSON.stringify({
       model: model.id,
-      max_tokens: budgetFor(model, length, attempt),
+      max_tokens: budgetFor(model, length, attempt, webSearch),
       system,
       messages: [{ role: 'user', content: userContent }],
+      // Basic version: widest model support, flattest response, ZDR-eligible
+      ...(webSearch ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] } : {}),
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   })
 
   const data = await parseJsonSafe(response)
-  if (!response.ok) throw new Error(providerErrorMessage(data, response.status))
+  if (!response.ok) {
+    const message = providerErrorMessage(data, response.status)
+    // The model may not support the tool, or an admin disabled search org-wide
+    if (webSearch && response.status === 400 && /web.?search|tool/i.test(message)) {
+      throw new SearchUnsupportedError(message)
+    }
+    throw new Error(message)
+  }
 
   const usage: Usage = {
     inputTokens: data?.usage?.input_tokens ?? 0,
     outputTokens: data?.usage?.output_tokens ?? 0,
   }
 
-  const text = (data?.content ?? [])
-    .filter((block: { type: string }) => block.type === 'text')
-    .map((block: { text: string }) => block.text)
+  const blocks: any[] = data?.content ?? []
+  const text = blocks
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
     .join('')
     .trim()
+
+  // Prefer the citations Claude actually used over every result the search returned
+  const cited: Citation[] = blocks
+    .filter((block) => block.type === 'text' && Array.isArray(block.citations))
+    .flatMap((block) => block.citations)
+    .filter((c: any) => c?.url)
+    .map((c: any) => ({ url: c.url, title: c.title || '' }))
+
+  if (!cited.length) {
+    for (const block of blocks) {
+      if (block.type !== 'web_search_tool_result') continue
+      // On error this is an object, not an array — guard before iterating
+      if (!Array.isArray(block.content)) continue
+      for (const result of block.content) {
+        if (result?.url) cited.push({ url: result.url, title: result.title || '' })
+      }
+    }
+  }
 
   if (!text) {
     if (data?.stop_reason === 'refusal') {
@@ -521,7 +681,11 @@ async function callAnthropic(args: GenerateArgs, attempt: number): Promise<Gener
     if (data?.stop_reason === 'max_tokens') throw new ReasoningStarvationError()
     throw new Error('The model returned no text. Please try again.')
   }
-  return { text: data.stop_reason === 'max_tokens' ? `${text}…` : text, usage }
+  return {
+    text: data.stop_reason === 'max_tokens' ? `${text}…` : text,
+    usage,
+    citations: dedupeCitations(cited),
+  }
 }
 
 // --- OpenAI-compatible (OpenRouter, Groq, Mistral, DeepSeek, xAI, Together) --
@@ -548,7 +712,7 @@ function reasoningControls(provider: Provider, model: ModelOption, allowDisable:
 }
 
 async function callOpenAICompatible(args: GenerateArgs, attempt: number, allowDisable = true): Promise<GenerateResult> {
-  const { provider, model, apiKey, system, userContent, length } = args
+  const { provider, model, apiKey, system, userContent, length, webSearch } = args
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${apiKey}`,
@@ -558,7 +722,7 @@ async function callOpenAICompatible(args: GenerateArgs, attempt: number, allowDi
     headers['X-Title'] = 'Rebuttal Generator'
   }
 
-  const budget = budgetFor(model, length, attempt)
+  const budget = budgetFor(model, length, attempt, webSearch)
   const body: Record<string, unknown> = {
     model: model.id,
     messages: [
@@ -566,6 +730,12 @@ async function callOpenAICompatible(args: GenerateArgs, attempt: number, allowDi
       { role: 'user', content: userContent },
     ],
     ...reasoningControls(provider, model, allowDisable),
+  }
+  // OpenRouter runs the search itself and injects results, so this works on any
+  // model — including ones with no tool-calling support. Omit `engine` so native
+  // provider search is used where available and Exa elsewhere.
+  if (webSearch && provider.id === 'openrouter') {
+    body.plugins = [{ id: 'web', max_results: 4 }]
   }
   // Groq prefers max_completion_tokens; reasoning tokens count against both
   if (provider.id === 'groq') body.max_completion_tokens = budget
@@ -612,7 +782,16 @@ async function callOpenAICompatible(args: GenerateArgs, attempt: number, allowDi
     if (finishReason === 'length' || (usage.reasoningTokens ?? 0) > 0) throw new ReasoningStarvationError()
     throw new Error('The model returned no text. Please try again or pick another model.')
   }
-  return { text: finishReason === 'length' ? `${text}…` : text, usage }
+
+  // On chat/completions the citation is NESTED under url_citation — the flat
+  // shape belongs to the Responses API and reading it here yields undefined.
+  const citations = dedupeCitations(
+    (message?.annotations ?? [])
+      .filter((a: any) => a?.type === 'url_citation' && a.url_citation?.url)
+      .map((a: any) => ({ url: a.url_citation.url, title: a.url_citation.title || '' }))
+  )
+
+  return { text: finishReason === 'length' ? `${text}…` : text, usage, citations }
 }
 
 // --- Google Gemini ----------------------------------------------------------
@@ -627,7 +806,7 @@ function geminiThinkingConfig(model: ModelOption): Record<string, unknown> | und
 }
 
 async function callGemini(args: GenerateArgs, attempt: number): Promise<GenerateResult> {
-  const { model, apiKey, system, userContent, length } = args
+  const { model, apiKey, system, userContent, length, webSearch } = args
   const thinkingConfig = geminiThinkingConfig(model)
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.id)}:generateContent`
 
@@ -637,8 +816,10 @@ async function callGemini(args: GenerateArgs, attempt: number): Promise<Generate
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: userContent }] }],
+      // Orthogonal to systemInstruction and thinkingConfig — same entry for 2.5 and 3.x
+      ...(webSearch ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
-        maxOutputTokens: budgetFor(model, length, attempt),
+        maxOutputTokens: budgetFor(model, length, attempt, webSearch),
         ...(thinkingConfig ? { thinkingConfig } : {}),
       },
     }),
@@ -646,7 +827,13 @@ async function callGemini(args: GenerateArgs, attempt: number): Promise<Generate
   })
 
   const data = await parseJsonSafe(response)
-  if (!response.ok) throw new Error(providerErrorMessage(data, response.status))
+  if (!response.ok) {
+    const message = providerErrorMessage(data, response.status)
+    if (webSearch && response.status === 400 && /tool|search|grounding/i.test(message)) {
+      throw new SearchUnsupportedError(message)
+    }
+    throw new Error(message)
+  }
 
   const meta = data?.usageMetadata ?? {}
   const usage: Usage = {
@@ -663,12 +850,20 @@ async function callGemini(args: GenerateArgs, attempt: number): Promise<Generate
     .join('')
     .trim()
 
+  // Non-web chunk kinds exist (maps, retrievedContext), so guard on .web
+  const citations = dedupeCitations(
+    (candidate?.groundingMetadata?.groundingChunks ?? [])
+      .map((chunk: any) => chunk?.web)
+      .filter((web: any) => web?.uri)
+      .map((web: any) => ({ url: web.uri, title: web.title || '' }))
+  )
+
   if (!text) {
     const reason = candidate?.finishReason || data?.promptFeedback?.blockReason
     if (reason === 'MAX_TOKENS') throw new ReasoningStarvationError()
     throw new Error(reason ? `The model returned no text (${reason}).` : 'The model returned no text.')
   }
-  return { text, usage }
+  return { text, usage, citations }
 }
 
 // --- Cohere -----------------------------------------------------------------
@@ -778,6 +973,11 @@ export async function generateText(args: GenerateArgs): Promise<GenerateResult> 
   try {
     return await dispatch(args, 0)
   } catch (err) {
+    // This model or account cannot search — produce an answer anyway, unsourced
+    if (err instanceof SearchUnsupportedError) {
+      args.onStatus?.('This model cannot search the web — answering without sources…')
+      return dispatch({ ...args, webSearch: false }, 0)
+    }
     if (!(err instanceof ReasoningStarvationError)) throw err
     // The model spent its whole budget thinking. Retry once with double the room.
     args.onStatus?.('Model needed more room to think — retrying with a larger budget…')

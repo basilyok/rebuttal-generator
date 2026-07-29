@@ -7,11 +7,25 @@ This app is deployed on **Cloudflare Pages** as project `m36x-rebuttal`, live at
 
 ```bash
 npm run build
-npx wrangler pages deploy dist --project-name=m36x-rebuttal
+npx wrangler pages deploy
 ```
 
 That's it. `wrangler` must be logged in (`npx wrangler login` once per machine;
-check with `npx wrangler whoami`).
+check with `npx wrangler whoami`). The project name, output directory, and the
+KV binding all come from `wrangler.toml`, so no flags are needed.
+
+### Share-link storage (one-time)
+
+Share links live in a Cloudflare KV namespace bound as `SHARES`. It already
+exists and its id is in `wrangler.toml`. To recreate it from scratch:
+
+```bash
+npx wrangler kv namespace create SHARES
+```
+
+Paste the returned id into the `[[kv_namespaces]]` block in `wrangler.toml`.
+Without the binding the app still works — `/api/share` returns 501 and the share
+button reports that sharing is unavailable.
 
 Notes:
 
