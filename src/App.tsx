@@ -47,6 +47,31 @@ import {
   clearSharedIdFromLocation,
   type SharedRebuttal,
 } from './share'
+import {
+  detectInitialLanguage,
+  loadLocale,
+  makeT,
+  english,
+  LANGUAGE_STORAGE,
+  SUPPORTED,
+  type Dict,
+} from './i18n'
+import { detectLanguage, isRtl, displayLanguageName } from './lang'
+import { fetchAuthState, signIn, signOut, saveLanguagePreference, authErrorMessage, SIGNED_OUT, type AuthState } from './auth'
+import {
+  fetchVault,
+  saveVault,
+  deleteVault,
+  seal,
+  unlock,
+  unlockWithDeviceKey,
+  resealWithDeviceKey,
+  forgetDeviceKey,
+  WrongPassphraseError,
+  type KeyBundle,
+  type VaultBlob,
+} from './vault'
+import { AccountBar, VaultDialog, type VaultUiState } from './AccountBar'
 
 /**
  * One generated reply. `message` is the only part that is ever sent to anyone —
@@ -73,6 +98,35 @@ function loadStoredKey(providerId: string): string {
   return (localStorage.getItem(keyStorageId(providerId)) || '').trim()
 }
 
+/**
+ * Every API key this browser holds, as the vault stores them.
+ *
+ * localStorage stays the working store — nothing downstream had to change — and the
+ * vault is a synced mirror of it. Keeping that direction (local is truth, vault is a
+ * copy) means a signed-out user, a failed decrypt, or a blocked IndexedDB all
+ * degrade to exactly the behaviour the app had before accounts existed.
+ */
+function collectKeyBundle(): KeyBundle {
+  const bundle: KeyBundle = {}
+  for (const provider of PROVIDERS) {
+    if (!provider.requiresKey) continue
+    const key = loadStoredKey(provider.id)
+    if (key) bundle[provider.id] = key
+  }
+  const tavily = (localStorage.getItem(TAVILY_KEY_STORAGE) || '').trim()
+  if (tavily) bundle.tavily = tavily
+  return bundle
+}
+
+/** Write a decrypted bundle into local storage. Never clears keys this device already has. */
+function applyKeyBundle(bundle: KeyBundle): void {
+  for (const [id, key] of Object.entries(bundle)) {
+    if (typeof key !== 'string' || !key) continue
+    if (id === 'tavily') localStorage.setItem(TAVILY_KEY_STORAGE, key)
+    else localStorage.setItem(keyStorageId(id), key)
+  }
+}
+
 // One-time migration from the single-provider era
 if (localStorage.getItem('anthropic_api_key') && !localStorage.getItem(keyStorageId('anthropic'))) {
   localStorage.setItem(keyStorageId('anthropic'), (localStorage.getItem('anthropic_api_key') || '').trim())
@@ -88,11 +142,11 @@ if (localStorage.getItem('anthropic_api_key') && !localStorage.getItem(keyStorag
 const storedProviderId = () => getProvider(localStorage.getItem('ai_provider') || 'anthropic').id
 
 /** Real, retrieved sources. Rendered only when the model actually returned some. */
-function SourceList({ citations }: { citations?: Citation[] }) {
+function SourceList({ citations, title }: { citations?: Citation[]; title: string }) {
   if (!citations?.length) return null
   return (
     <div className="sources">
-      <div className="sources-title">Sources</div>
+      <div className="sources-title">{title}</div>
       <ol className="sources-list">
         {citations.map((c) => (
           <li key={c.url}>
@@ -147,6 +201,28 @@ export default function App() {
   const [shareCopied, setShareCopied] = useState(false)
   const [useSources, setUseSources] = useState(true)
   const [audience, setAudience] = useState('')
+
+  // --- language ------------------------------------------------------------
+  // Typed as string, not the Language union: values also arrive from the account
+  // record and from <select>, and are validated against SUPPORTED at those edges.
+  const [language, setLanguage] = useState<string>(detectInitialLanguage)
+  const [dict, setDict] = useState<Dict>(english)
+  const t = useMemo(() => makeT(dict), [dict])
+  /** Explicit override of the reply language; empty means follow the argument. */
+  const [replyLanguageOverride, setReplyLanguageOverride] = useState('')
+  const [showReplyLangPicker, setShowReplyLangPicker] = useState(false)
+
+  // --- account and vault ---------------------------------------------------
+  const [auth, setAuth] = useState<AuthState>(SIGNED_OUT)
+  const [vaultBlob, setVaultBlob] = useState<VaultBlob | null>(null)
+  const [vaultState, setVaultState] = useState<VaultUiState>('none')
+  const [vaultPrompt, setVaultPrompt] = useState<'setup' | 'unlock' | null>(null)
+  const [vaultBusy, setVaultBusy] = useState(false)
+  const [vaultError, setVaultError] = useState('')
+
+  // Always-current translator, for callbacks registered once (speech recognition)
+  const tRef = useRef(t)
+  tRef.current = t
   const [tavilyDraft, setTavilyDraft] = useState(() => loadTavilyKey())
   const [tavilySaved, setTavilySaved] = useState(false)
   const [messageCopied, setMessageCopied] = useState(false)
@@ -177,6 +253,88 @@ export default function App() {
     citations: Citation[]
     modelSearch: boolean
   } | null>(null)
+
+  // Load the active locale, and tell the document what it is. `lang` matters for
+  // screen readers and hyphenation; `dir` is what actually makes Arabic legible.
+  useEffect(() => {
+    let cancelled = false
+    loadLocale(language).then((next) => {
+      if (!cancelled) setDict(next)
+    })
+    document.documentElement.lang = language
+    document.documentElement.dir = isRtl(language) ? 'rtl' : 'ltr'
+    return () => {
+      cancelled = true
+    }
+  }, [language])
+
+  // Sign-in state, plus the account's saved language. A preference stored on the
+  // account wins over this device's locale — that is what "maintained across logins"
+  // means — but never over a choice made explicitly on this device in this session.
+  useEffect(() => {
+    let cancelled = false
+    fetchAuthState().then((state) => {
+      if (cancelled) return
+      setAuth(state)
+      const saved = state.user?.language
+      const chosenHere = localStorage.getItem(LANGUAGE_STORAGE)
+      if (saved && SUPPORTED.includes(saved as never) && !chosenHere) setLanguage(saved)
+    })
+
+    // Report a failed sign-in once, then clean the URL so a refresh does not repeat it
+    const params = new URLSearchParams(window.location.search)
+    const authError = params.get('auth_error')
+    if (authError) {
+      const message = authErrorMessage(authError)
+      if (message) setError(message)
+      params.delete('auth_error')
+      const query = params.toString()
+      window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''))
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Pull the encrypted vault once signed in, and open it silently if this device
+  // already holds the derived key — the whole point is not asking again.
+  useEffect(() => {
+    if (!auth.user) {
+      setVaultState('none')
+      setVaultBlob(null)
+      return
+    }
+    let cancelled = false
+    fetchVault()
+      .then(async (blob) => {
+        if (cancelled) return
+        setVaultBlob(blob)
+        if (!blob) {
+          setVaultState('none')
+          return
+        }
+        const bundle = await unlockWithDeviceKey(blob)
+        if (cancelled) return
+        if (bundle) {
+          applyKeyBundle(bundle)
+          setApiKey(loadStoredKey(providerId))
+          setTavilyDraft(loadTavilyKey())
+          setShowApiKeyInput(getProvider(providerId).requiresKey && !loadStoredKey(providerId))
+          setVaultState('unlocked')
+        } else {
+          setVaultState('locked')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setVaultState('none')
+      })
+    return () => {
+      cancelled = true
+    }
+    // providerId is intentionally omitted: this must run on sign-in, not on every
+    // provider switch, and the key it applies is re-read by applyProvider anyway.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.user?.id])
 
   // Initialize Web Speech API
   useEffect(() => {
@@ -211,11 +369,13 @@ export default function App() {
         return
       }
       wantRecordingRef.current = false
+      // tRef, not t: this effect runs once, so capturing `t` directly would freeze
+      // these messages in whatever language was active at mount.
       const messages: Record<string, string> = {
-        'not-allowed': 'Microphone access was denied. Allow microphone access for this site and try again.',
-        'service-not-allowed': 'Microphone access was denied. Allow microphone access for this site and try again.',
-        'audio-capture': 'No microphone was found. Check that a microphone is connected and try again.',
-        network: 'The speech service hit a network error. Check your connection and try again.',
+        'not-allowed': tRef.current('error.micDenied'),
+        'service-not-allowed': tRef.current('error.micDenied'),
+        'audio-capture': tRef.current('error.micMissing'),
+        network: tRef.current('error.speechNetwork'),
       }
       setError(messages[event.error] || `Speech recognition error: ${event.error}`)
     }
@@ -301,7 +461,7 @@ export default function App() {
     if (!id) return
     loadSharedResult(id)
       .then(setShared)
-      .catch((err) => setSharedError(err instanceof Error ? err.message : 'That shared rebuttal could not be loaded.'))
+      .catch((err) => setSharedError(err instanceof Error ? err.message : t('error.loadShared')))
   }, [])
 
   const dismissShared = () => {
@@ -330,7 +490,7 @@ export default function App() {
       setShareUrl(shareUrlFor(id))
       setShareCopied(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not publish this rebuttal.')
+      setError(err instanceof Error ? err.message : t('error.publish'))
     } finally {
       setIsSharing(false)
     }
@@ -348,7 +508,7 @@ export default function App() {
   const toggleRecording = () => {
     const recognition = recognitionRef.current
     if (!recognition) {
-      setError('Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.')
+      setError(t('error.speechUnsupported'))
       return
     }
 
@@ -361,6 +521,13 @@ export default function App() {
       // Dictating is a fresh argument, not a rebuttal of the fetched article
       setArticle(null)
       wantRecordingRef.current = true
+      // Dictate in the interface language. Set here rather than at construction so a
+      // language change takes effect without tearing down the recogniser.
+      try {
+        recognition.lang = language
+      } catch {
+        // Some engines reject unknown tags; the browser default is a fine fallback
+      }
       try {
         recognition.start()
       } catch {
@@ -394,7 +561,7 @@ export default function App() {
       setError(
         err instanceof ArticleError || err instanceof Error
           ? err.message
-          : 'Could not load that article. Try pasting the text instead.'
+          : t('error.article')
       )
     } finally {
       setIsFetchingArticle(false)
@@ -428,11 +595,11 @@ export default function App() {
   const generateReply = async () => {
     const argument = transcript.trim()
     if (!argument) {
-      setError('Add the argument you want to respond to first')
+      setError(t('error.needArgument'))
       return
     }
     if (!model) {
-      setError('Please choose a model')
+      setError(t('error.needModel'))
       return
     }
     if (provider.requiresKey && !apiKey) {
@@ -471,7 +638,16 @@ export default function App() {
         venue = undefined
       }
     }
-    const promptContext: PromptContext = { audience, venue, isArticle }
+    // The message follows the argument's language; the private notes follow the
+    // sender's interface language. They differ precisely when someone answers an
+    // argument written in a language other than the one they are reading the app in.
+    const promptContext: PromptContext = {
+      audience,
+      venue,
+      isArticle,
+      replyLanguage,
+      briefingLanguage: language,
+    }
 
     try {
       // Evidence first: search results become the ONLY citable set, which is what
@@ -479,7 +655,7 @@ export default function App() {
       let citations: Citation[] = []
       let searchNote = ''
       if (useSources) {
-        setProviderStatus('Searching for evidence…')
+        setProviderStatus(t('generate.searching'))
         try {
           const found = await searchForEvidence(queryFor(argument, article?.title), {
             apiKey: loadTavilyKey(),
@@ -489,7 +665,7 @@ export default function App() {
         } catch (err) {
           // Never fail a reply because search failed — fall back to the model's own
           // search where it has one, and say so if there is nothing at all.
-          searchNote = err instanceof SearchError ? err.message : 'Evidence search was unavailable.'
+          searchNote = err instanceof SearchError ? err.message : t('error.searchUnavailable')
         }
       }
 
@@ -497,7 +673,7 @@ export default function App() {
       const modelSearch = useSources && !citations.length && canSearchWeb(provider, model)
       lastRequestRef.current = { userContent, promptContext, citations, modelSearch }
 
-      setProviderStatus('Writing the reply…')
+      setProviderStatus(t('generate.writing'))
       const call = (system: string, webSearch = false) =>
         generateText({
           provider,
@@ -546,9 +722,9 @@ export default function App() {
       addUsage(checkResult.usage)
     } catch (err) {
       if (err instanceof DOMException && err.name === 'TimeoutError') {
-        setError('The request timed out. Please try again.')
+        setError(t('error.timeout'))
       } else {
-        setError(err instanceof Error ? err.message : 'Could not write the reply')
+        setError(err instanceof Error ? err.message : t('error.generic'))
       }
     } finally {
       setIsLoading(false)
@@ -582,7 +758,7 @@ export default function App() {
       setReply((prev) => (prev ? { ...prev, theirCase: parsed.theirCase, answered: parsed.answered } : prev))
       addUsage(result.usage)
     } catch (err) {
-      setBriefingError(err instanceof Error ? err.message : 'Could not build their case.')
+      setBriefingError(err instanceof Error ? err.message : t('error.briefing'))
     } finally {
       setBriefingLoading(false)
       setProviderStatus('')
@@ -593,6 +769,7 @@ export default function App() {
     const key = tavilyDraft.trim()
     if (key) localStorage.setItem(TAVILY_KEY_STORAGE, key)
     else localStorage.removeItem(TAVILY_KEY_STORAGE)
+    afterKeyChange()
     setTavilySaved(true)
     setTimeout(() => setTavilySaved(false), 2000)
   }
@@ -629,6 +806,89 @@ export default function App() {
     localStorage.setItem('ai_model', nextModelId)
   }
 
+  /**
+   * Change interface language. Saved locally so it survives a reload while signed
+   * out, and to the account so it survives a sign-in on a different device.
+   */
+  const handleLanguageChange = (next: string) => {
+    setLanguage(next)
+    try {
+      localStorage.setItem(LANGUAGE_STORAGE, next)
+    } catch {
+      // storage blocked — the choice still applies for this session
+    }
+    if (auth.user) void saveLanguagePreference(next)
+  }
+
+  const handleSignOut = async () => {
+    await signOut()
+    // Drop the derived key too. Without this, "sign out" on a shared machine would
+    // leave the next person able to decrypt the vault by simply signing back in.
+    await forgetDeviceKey()
+    setAuth((current) => ({ ...current, user: null }))
+    setVaultState('none')
+    setVaultBlob(null)
+    setVaultPrompt(null)
+  }
+
+  /**
+   * Push the current keys into the vault. Called after any key change while
+   * unlocked, so the vault never drifts from what this browser is actually using.
+   */
+  const syncVault = async () => {
+    if (!auth.user || vaultState !== 'unlocked' || !vaultBlob) return
+    const bundle = collectKeyBundle()
+    if (!Object.keys(bundle).length) return
+    setVaultState('saving')
+    try {
+      const sealed = await resealWithDeviceKey(bundle, vaultBlob)
+      if (sealed) {
+        await saveVault(sealed)
+        setVaultBlob(sealed)
+      }
+    } catch {
+      // A failed sync is not worth interrupting the user; the keys still work locally
+    } finally {
+      setVaultState('unlocked')
+    }
+  }
+
+  const handleVaultSubmit = async (passphrase: string) => {
+    setVaultBusy(true)
+    setVaultError('')
+    try {
+      if (vaultPrompt === 'setup') {
+        const bundle = collectKeyBundle()
+        const sealed = await seal(bundle, passphrase)
+        await saveVault(sealed)
+        setVaultBlob(sealed)
+        setVaultState('unlocked')
+      } else if (vaultBlob) {
+        const bundle = await unlock(vaultBlob, passphrase)
+        applyKeyBundle(bundle)
+        setApiKey(loadStoredKey(providerId))
+        setTavilyDraft(loadTavilyKey())
+        setShowApiKeyInput(provider.requiresKey && !loadStoredKey(providerId))
+        setVaultState('unlocked')
+      }
+      setVaultPrompt(null)
+    } catch (err) {
+      setVaultError(
+        err instanceof WrongPassphraseError ? t('account.wrongPassphrase') : t('error.generic')
+      )
+    } finally {
+      setVaultBusy(false)
+    }
+  }
+
+  const handleForgetVault = async () => {
+    if (!window.confirm(t('account.forgetKeysConfirm'))) return
+    await deleteVault()
+    setVaultBlob(null)
+    setVaultState('none')
+    setVaultPrompt(null)
+  }
+
   /** Back to the curated list after a refresh pulled in the provider's whole catalog. */
   const handleResetCatalog = () => {
     clearCachedCatalog(provider.id)
@@ -645,7 +905,7 @@ export default function App() {
 
   const handleRefreshModels = async () => {
     if (provider.requiresKey && !apiKey && provider.id !== 'openrouter') {
-      setError('Enter your API key first — the model list comes from the provider.')
+      setError(t('error.needKeyForModels'))
       setShowApiKeyInput(true)
       return
     }
@@ -658,7 +918,7 @@ export default function App() {
       setCatalogFetchedAt(fetchedAt)
       if (!live.some((m) => m.id === modelId)) handleModelChange(live[0].id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not refresh the model list')
+      setError(err instanceof Error ? err.message : t('error.refreshModels'))
     } finally {
       setIsRefreshing(false)
     }
@@ -672,14 +932,39 @@ export default function App() {
   const handleSaveApiKey = () => {
     const key = keyDraft.trim()
     if (!key) {
-      setError('Please enter a valid API key')
+      setError(t('error.needKey'))
       return
     }
     localStorage.setItem(keyStorageId(provider.id), key)
     setApiKey(key)
     setShowApiKeyInput(false)
     setError('')
+    afterKeyChange()
   }
+
+  /**
+   * A key just changed. If the vault is open, mirror it; if the user is signed in
+   * with no vault yet, this is the natural moment to offer one — they have just
+   * demonstrated they have a key worth not typing again.
+   */
+  const afterKeyChange = () => {
+    if (vaultState === 'unlocked') void syncVault()
+    else if (auth.user && vaultState === 'none' && !vaultBlob) setVaultPrompt('setup')
+  }
+
+  const estimate = estimateCost(model, transcript)
+  const costLine = () => {
+    if (provider.kind === 'webllm') return t('settings.costFreeLocal')
+    if (model?.unknownPrice) return t('settings.costUnknown')
+    if (isFreeModel(model)) return t('settings.costFreeModel')
+    if (estimate === null) return null
+    const cost = formatCost(estimate)
+    return model?.reasoning ? t('settings.costIncludesReasoning', { cost }) : t('settings.costPerReply', { cost })
+  }
+
+  /** Which language the sendable message will be written in. */
+  const detectedLanguage = useMemo(() => detectLanguage(transcript).language, [transcript])
+  const replyLanguage = replyLanguageOverride || detectedLanguage
 
   const handleUpdateClick = () => {
     const waiting = waitingWorkerRef.current
@@ -691,33 +976,50 @@ export default function App() {
     }
   }
 
-  const estimate = estimateCost(model, transcript)
-  const costLine = () => {
-    if (provider.kind === 'webllm') return 'Free — runs on your device, nothing is billed'
-    if (model?.unknownPrice) return 'Pricing unknown for this model'
-    if (isFreeModel(model)) return 'Free model — no charge'
-    if (estimate === null) return null
-    return `≈ ${formatCost(estimate)} per reply${model?.reasoning ? ' (includes hidden reasoning tokens)' : ''}`
-  }
-
   return (
     <div className="container">
+      <AccountBar
+        t={t}
+        language={language}
+        onLanguageChange={handleLanguageChange}
+        auth={auth}
+        vaultState={vaultState}
+        onSignIn={() => signIn('google')}
+        onSignOut={handleSignOut}
+        onUnlockClick={() => setVaultPrompt('unlock')}
+      />
+
       {updateAvailable && (
         <div className="success update-banner" role="status">
-          🎉 A new version is available!{' '}
+          {t('app.updateAvailable')}{' '}
           <button className="link-button" onClick={handleUpdateClick}>
-            Reload
+            {t('app.reload')}
           </button>
         </div>
       )}
-      <h1>🎤 Rebuttal Generator</h1>
-      <p className="subtitle">Write the reply that actually changes their mind</p>
+      <h1>{t('app.title')}</h1>
+      <p className="subtitle">{t('app.subtitle')}</p>
+
+      {vaultPrompt && (
+        <VaultDialog
+          t={t}
+          mode={vaultPrompt}
+          busy={vaultBusy}
+          error={vaultError}
+          onSubmit={handleVaultSubmit}
+          onDismiss={() => {
+            setVaultPrompt(null)
+            setVaultError('')
+          }}
+          onForget={vaultPrompt === 'unlock' ? handleForgetVault : undefined}
+        />
+      )}
 
       {sharedError && (
         <div className="error" role="alert">
           ⚠️ {sharedError}{' '}
           <button className="link-button" onClick={dismissShared}>
-            Start fresh
+            {t('share.startFresh')}
           </button>
         </div>
       )}
@@ -725,17 +1027,19 @@ export default function App() {
       {shared && (
         <div className="shared-view">
           <div className="shared-banner">
-            <strong>Someone shared this reply with you</strong>
+            <strong>{t('share.banner')}</strong>
             <span className="token-detail">
-              {shared.modelLabel ? `Generated with ${shared.modelLabel}` : 'Generated with AI'}
-              {shared.createdAt ? ` · ${new Date(shared.createdAt).toLocaleDateString()}` : ''}
+              {shared.modelLabel
+                ? t('share.generatedWith', { model: shared.modelLabel })
+                : t('share.generatedWithAI')}
+              {shared.createdAt ? ` · ${new Date(shared.createdAt).toLocaleDateString(language)}` : ''}
             </span>
           </div>
 
-          <h3 className="shared-heading">The argument</h3>
+          <h3 className="shared-heading">{t('share.theArgument')}</h3>
           {shared.articleUrl && (
             <p className="key-help">
-              From{' '}
+              {t('share.from')}{' '}
               <a href={shared.articleUrl} target="_blank" rel="noopener noreferrer nofollow">
                 {shared.articleTitle || hostOf(shared.articleUrl)}
               </a>
@@ -743,12 +1047,12 @@ export default function App() {
           )}
           <div className="transcript-area shared-argument">{shared.argument}</div>
 
-          <h3 className="shared-heading">The reply</h3>
+          <h3 className="shared-heading">{t('share.theReply')}</h3>
           {/* Current shape is a single message; older links carry brief + detailed */}
           {shared.message ? (
             <div className="rebuttal-detailed-content shared-detailed">
               <RichText text={shared.message} />
-              <SourceList citations={shared.citations} />
+              <SourceList citations={shared.citations} title={t('reply.sourcesTitle')} />
             </div>
           ) : (
             <>
@@ -756,7 +1060,7 @@ export default function App() {
               {shared.detailed && (
                 <div className="rebuttal-detailed-content shared-detailed">
                   <RichText text={shared.detailed} />
-                  <SourceList citations={shared.citations} />
+                  <SourceList citations={shared.citations} title={t('reply.sourcesTitle')} />
                 </div>
               )}
             </>
@@ -764,16 +1068,16 @@ export default function App() {
 
           {shared.steelman && (
             <>
-              <h3 className="shared-heading">The strongest case FOR the argument</h3>
+              <h3 className="shared-heading">{t('share.steelmanHeading')}</h3>
               <div className="rebuttal-detailed-content steelman-content shared-detailed">
                 <RichText text={shared.steelman} />
-                <SourceList citations={shared.steelmanCitations} />
+                <SourceList citations={shared.steelmanCitations} title={t('reply.sourcesTitle')} />
               </div>
             </>
           )}
 
           <button className="button button-primary shared-cta" onClick={dismissShared}>
-            ✍️ Write your own reply
+            {t('share.writeYourOwn')}
           </button>
         </div>
       )}
@@ -789,10 +1093,10 @@ export default function App() {
       >
         <span className={`expander-arrow ${showSettings ? 'open' : ''}`}>▼</span>
         <span className="settings-summary">
-          <span className="settings-model">{model?.label ?? 'Choose a model'}</span>
+          <span className="settings-model">{model?.label ?? t('settings.chooseModel')}</span>
           <span className="settings-blurb">{describeModel(model, provider)}</span>
         </span>
-        <span className="settings-action">{showSettings ? 'Hide' : 'Change'}</span>
+        <span className="settings-action">{showSettings ? t('settings.hide') : t('settings.change')}</span>
       </button>
 
       <div id="ai-settings" className={`collapsible ${showSettings ? '' : 'collapsed'}`} aria-hidden={!showSettings}>
@@ -802,7 +1106,7 @@ export default function App() {
         <div className="provider-grid">
           <div>
             <label className="label" htmlFor="ai-provider">
-              AI Provider
+              {t('settings.provider')}
             </label>
             <select
               id="ai-provider"
@@ -821,16 +1125,16 @@ export default function App() {
           <div>
             <div className="label-row">
               <label className="label" htmlFor="ai-model">
-                Model
+                {t('settings.model')}
               </label>
               {provider.modelsUrl && (
                 <button
                   className="link-button subtle"
                   onClick={handleRefreshModels}
                   disabled={isLoading || isRefreshing}
-                  title="Fetch the provider's current model list"
+                  title={t('settings.refreshTitle')}
                 >
-                  {isRefreshing ? 'Refreshing…' : '↻ Refresh'}
+                  {isRefreshing ? t('settings.refreshing') : t('settings.refresh')}
                 </button>
               )}
             </div>
@@ -854,14 +1158,18 @@ export default function App() {
           {costLine() && <span className="cost-estimate">{costLine()}</span>}
           {catalogFetchedAt && (
             <span className="catalog-age">
-              {models.length} models · updated {new Date(catalogFetchedAt).toLocaleDateString()} ·{' '}
+              {t('settings.modelsUpdated', {
+                count: models.length,
+                date: new Date(catalogFetchedAt).toLocaleDateString(language),
+              })}{' '}
+              ·{' '}
               <button
                 className="link-button subtle"
                 onClick={handleResetCatalog}
                 disabled={isLoading || isRefreshing}
-                title="Go back to the short, hand-picked list"
+                title={t('settings.useShortListTitle')}
               >
-                use the short list
+                {t('settings.useShortList')}
               </button>
             </span>
           )}
@@ -872,7 +1180,7 @@ export default function App() {
       {provider.requiresKey && showApiKeyInput && (
         <div className="input-section">
           <label className="label" htmlFor="api-key">
-            {provider.label.replace(/ \(.*\)$/, '')} API Key
+            {t('settings.apiKeyLabel', { provider: provider.label.replace(/ \(.*\)$/, '') })}
           </label>
           <div className="controls">
             <input
@@ -883,46 +1191,47 @@ export default function App() {
               spellCheck={false}
               value={keyDraft}
               onChange={(e) => setKeyDraft(e.target.value)}
-              placeholder={provider.keyPlaceholder || 'Enter your API key'}
+              placeholder={provider.keyPlaceholder || t('settings.apiKeyPlaceholder')}
               onKeyDown={(e) => e.key === 'Enter' && handleSaveApiKey()}
             />
             <button className="button button-primary" onClick={handleSaveApiKey}>
-              Save Key
+              {t('settings.saveKey')}
             </button>
             {apiKey && (
               <button className="button button-secondary" onClick={() => setShowApiKeyInput(false)}>
-                Cancel
+                {t('settings.cancel')}
               </button>
             )}
           </div>
           <p className="key-help">
-            {provider.keyIsFree
-              ? 'This provider needs an API key even for its free models, but creating one is free — no payment details required. '
-              : 'Your key is saved in this browser only, and sent only to this provider. You will not need to enter it again. '}
+            {vaultState === 'unlocked'
+              ? t('settings.keyHelpSynced')
+              : provider.keyIsFree
+                ? t('settings.keyHelpFree')
+                : t('settings.keyHelpPaid')}
             {provider.keyUrl && (
               <>
-                Get one from{' '}
+                {t('settings.getOneFrom')}{' '}
                 <a href={provider.keyUrl} target="_blank" rel="noopener noreferrer">
                   {provider.keyUrl.replace(/^https:\/\//, '')}
                 </a>
                 .{' '}
               </>
             )}
-            Prefer no key at all? Pick <strong>Local in-browser (FREE, no key)</strong> in the AI Provider
-            dropdown.
+            {t('settings.preferNoKey', { option: t('settings.localOption') })}
           </p>
         </div>
       )}
 
       {provider.requiresKey && !showApiKeyInput && (
         <button className="button button-secondary change-key-button" onClick={openApiKeyForm}>
-          Change API Key
+          {t('settings.changeKey')}
         </button>
       )}
 
       <div className="input-section">
         <label className="label" htmlFor="tavily-key">
-          Evidence search key <span className="label-optional">optional</span>
+          {t('settings.tavilyLabel')} <span className="label-optional">{t('settings.optional')}</span>
         </label>
         <div className="controls">
           <input
@@ -937,15 +1246,21 @@ export default function App() {
             onKeyDown={(e) => e.key === 'Enter' && saveTavilyKey()}
           />
           <button className="button button-secondary" onClick={saveTavilyKey}>
-            {tavilySaved ? '✓ Saved' : 'Save'}
+            {tavilySaved ? t('settings.saved') : t('settings.save')}
           </button>
         </div>
         <p className="key-help">
-          Evidence search already works with no key at all. A free{' '}
-          <a href="https://tavily.com" target="_blank" rel="noopener noreferrer">
-            Tavily
-          </a>{' '}
-          key (1,000 searches a month, no card) only raises the rate limit if you hit it.
+          {/* Split on the {link} placeholder so the anchor survives translation */}
+          {t('settings.tavilyHelp').split('{link}').map((part, i, all) => (
+            <span key={i}>
+              {part}
+              {i < all.length - 1 && (
+                <a href="https://tavily.com" target="_blank" rel="noopener noreferrer">
+                  Tavily
+                </a>
+              )}
+            </span>
+          ))}
         </p>
       </div>
           </div>
@@ -955,9 +1270,9 @@ export default function App() {
       <div className="input-section">
         <div className="label-row">
           <label className="label" htmlFor="argument-input">
-            What are you responding to?
+            {t('input.label')}
           </label>
-          <div className="mode-toggle" role="group" aria-label="Input mode">
+          <div className="mode-toggle" role="group" aria-label={t('input.modeGroup')}>
             <button
               className={`mode-button ${inputMode === 'text' ? 'active' : ''}`}
               onClick={() => {
@@ -969,7 +1284,7 @@ export default function App() {
               disabled={isLoading}
               aria-pressed={inputMode === 'text'}
             >
-              ✍️ Speak or type
+              {t('input.modeText')}
             </button>
             <button
               className={`mode-button ${inputMode === 'url' ? 'active' : ''}`}
@@ -977,7 +1292,7 @@ export default function App() {
               disabled={isLoading}
               aria-pressed={inputMode === 'url'}
             >
-              🔗 Article URL
+              {t('input.modeUrl')}
             </button>
           </div>
         </div>
@@ -1005,10 +1320,10 @@ export default function App() {
                 {isFetchingArticle ? (
                   <>
                     <span className="spinner"></span>
-                    Fetching…
+                    {t('input.fetching')}
                   </>
                 ) : (
-                  'Fetch article'
+                  t('input.fetchArticle')
                 )}
               </button>
             </div>
@@ -1021,9 +1336,9 @@ export default function App() {
               <div className="article-badge" role="status">
                 <strong>✓ {article.title}</strong>
                 <span className="token-detail">
-                  {article.words.toLocaleString()} words
-                  {article.via === 'archive' && ' · read from an Internet Archive snapshot'}
-                  {article.truncated && ' · trimmed to keep the request small'}
+                  {t('input.articleWords', { count: article.words.toLocaleString(language) })}
+                  {article.via === 'archive' && t('input.articleViaArchive')}
+                  {article.truncated && t('input.articleTruncated')}
                 </span>
               </div>
             )}
@@ -1036,17 +1351,17 @@ export default function App() {
               disabled={isLoading}
               aria-pressed={isRecording}
             >
-              {isRecording ? '⏹ Stop Recording' : '🎙 Start Recording'}
+              {isRecording ? t('input.stopRecording') : t('input.startRecording')}
             </button>
             {isRecording && (
               <div className="recording-indicator" role="status">
                 <span className="recording-dot"></span>
-                Recording…
+                {t('input.recording')}
               </div>
             )}
             {transcript && !isRecording && (
               <button className="button button-secondary" onClick={clearTranscript} disabled={isLoading}>
-                Clear
+                {t('input.clear')}
               </button>
             )}
           </div>
@@ -1062,25 +1377,21 @@ export default function App() {
             // Clearing the box out entirely discards the article context too
             if (!e.target.value.trim()) setArticle(null)
           }}
-          placeholder={
-            inputMode === 'url'
-              ? 'The article text will appear here once fetched — you can edit it before generating.'
-              : 'Type the argument here, or use Start Recording to dictate it…'
-          }
+          placeholder={inputMode === 'url' ? t('input.placeholderUrl') : t('input.placeholderText')}
           readOnly={isRecording}
           disabled={isLoading}
           rows={inputMode === 'url' ? 8 : 4}
         />
         {inputMode === 'url' && transcript && (
           <button className="button button-secondary clear-article" onClick={clearTranscript} disabled={isLoading}>
-            Clear
+            {t('input.clear')}
           </button>
         )}
       </div>
 
       <div className="input-section audience-section">
         <label className="label" htmlFor="audience-input">
-          Who wrote it, and where? <span className="label-optional">optional — but it changes how this is written</span>
+          {t('audience.label')} <span className="label-optional">{t('audience.optional')}</span>
         </label>
         <input
           id="audience-input"
@@ -1088,14 +1399,47 @@ export default function App() {
           type="text"
           value={audience}
           onChange={(e) => setAudience(e.target.value)}
-          placeholder="e.g. my father-in-law, over text · a stranger on LinkedIn"
+          placeholder={t('audience.placeholder')}
           disabled={isLoading}
         />
-        <p className="key-help">
-          Leave it blank and this gets inferred from the text. Saying who they are lets the reply use sources they
-          already trust and match how they actually talk.
-        </p>
+        <p className="key-help">{t('audience.help')}</p>
       </div>
+
+      {/* Which language the reply will be written in. Shown only once there is enough
+          text to have detected something, and always overridable — a wrong guess here
+          would send someone a reply in a language they do not speak. */}
+      {transcript.trim().length > 40 && (
+        <div className="reply-language" role="status">
+          🌐 {t('replyLang.detected', { language: displayLanguageName(replyLanguage, language) })}{' '}
+          <button className="link-button subtle" onClick={() => setShowReplyLangPicker(!showReplyLangPicker)}>
+            {t('replyLang.change')}
+          </button>
+          {showReplyLangPicker && (
+            <span className="reply-language-picker">
+              <label className="visually-hidden" htmlFor="reply-language">
+                {t('replyLang.label')}
+              </label>
+              <select
+                id="reply-language"
+                className="language-select"
+                value={replyLanguageOverride}
+                onChange={(e) => setReplyLanguageOverride(e.target.value)}
+                disabled={isLoading}
+              >
+                <option value="">
+                  {t('replyLang.auto', { language: displayLanguageName(detectedLanguage, language) })}
+                </option>
+                {SUPPORTED.map((code) => (
+                  <option key={code} value={code}>
+                    {displayLanguageName(code, language)}
+                  </option>
+                ))}
+              </select>
+              <span className="key-help">{t('replyLang.help')}</span>
+            </span>
+          )}
+        </div>
+      )}
 
       <label className="sources-toggle">
         <input
@@ -1105,12 +1449,8 @@ export default function App() {
           disabled={isLoading}
         />
         <span>
-          Find real evidence to cite
-          <span className="sources-hint">
-            {' '}
-            — searches the web first, and the reply may only cite what was actually found. Works on every model, no
-            key needed.
-          </span>
+          {t('sources.toggle')}
+          <span className="sources-hint">{t('sources.hint')}</span>
         </span>
       </label>
 
@@ -1122,10 +1462,10 @@ export default function App() {
         {isLoading ? (
           <>
             <span className="spinner"></span>
-            Writing…
+            {t('generate.working')}
           </>
         ) : (
-          '✨ Write my reply'
+          t('generate.submit')
         )}
       </button>
       {isLoading && providerStatus && (
@@ -1134,7 +1474,7 @@ export default function App() {
         </p>
       )}
       <span className="visually-hidden" role="status">
-        {isLoading ? 'Generating rebuttal' : ''}
+        {isLoading ? t('generate.srStatus') : ''}
       </span>
 
       {error && (
@@ -1157,9 +1497,9 @@ export default function App() {
 
           <div className="send-zone">
             <div className="send-zone-head">
-              <h2 className="rebuttal-title">Your reply</h2>
+              <h2 className="rebuttal-title">{t('reply.title')}</h2>
               <button className="button button-primary copy-message" onClick={copyMessage}>
-                {messageCopied ? '✓ Copied' : '📋 Copy message'}
+                {messageCopied ? t('reply.copied') : t('reply.copy')}
               </button>
             </div>
             <div className="message-body">
@@ -1173,29 +1513,30 @@ export default function App() {
               aria-expanded={showClaims}
               aria-controls="claim-panel"
             >
-              {reply.citations.length > 0
-                ? `${reply.citations.length} source${reply.citations.length === 1 ? '' : 's'} cited`
-                : 'No sources cited'}
-              {reply.strippedUrls.length > 0 &&
-                ` · ${reply.strippedUrls.length} unverified link${reply.strippedUrls.length === 1 ? '' : 's'} removed`}
-              {reply.toVerify?.length ? ` · ${reply.toVerify.length} to check` : ''}
+              {reply.citations.length === 0
+                ? t('reply.noSources')
+                : reply.citations.length === 1
+                  ? t('reply.sourcesCitedOne')
+                  : t('reply.sourcesCited', { count: reply.citations.length })}
+              {reply.strippedUrls.length === 1 && t('reply.linksRemovedOne')}
+              {reply.strippedUrls.length > 1 && t('reply.linksRemoved', { count: reply.strippedUrls.length })}
+              {reply.toVerify?.length ? t('reply.toCheck', { count: reply.toVerify.length }) : ''}
             </button>
 
             <div id="claim-panel" className={`collapsible ${showClaims ? '' : 'collapsed'}`} aria-hidden={!showClaims}>
               <div className="collapsible-clip">
                 <div className="claim-panel-body">
-                  {reply.citations.length > 0 && <SourceList citations={reply.citations} />}
+                  {reply.citations.length > 0 && <SourceList citations={reply.citations} title={t('reply.sourcesTitle')} />}
                   {reply.strippedUrls.length > 0 && (
                     <p className="claim-warn">
-                      The model produced {reply.strippedUrls.length} link
-                      {reply.strippedUrls.length === 1 ? '' : 's'} that were not among the sources actually
-                      retrieved. They were removed rather than shown to you, because an invented citation is
-                      worse than none.
+                      {reply.strippedUrls.length === 1
+                        ? t('reply.claimWarnOne')
+                        : t('reply.claimWarn', { count: reply.strippedUrls.length })}
                     </p>
                   )}
                   {reply.toVerify?.length ? (
                     <>
-                      <div className="sources-title">Check before sending</div>
+                      <div className="sources-title">{t('reply.checkBeforeSending')}</div>
                       <ul className="sources-list">
                         {reply.toVerify.map((item, i) => (
                           <li key={i}>{item}</li>
@@ -1204,10 +1545,7 @@ export default function App() {
                     </>
                   ) : null}
                   {!reply.citations.length && !reply.toVerify?.length && (
-                    <p className="token-detail">
-                      No sources were retrieved for this reply. Every factual claim in it is unverified — check
-                      anything you plan to lean on.
-                    </p>
+                    <p className="token-detail">{t('reply.noSourcesRetrieved')}</p>
                   )}
                 </div>
               </div>
@@ -1216,7 +1554,7 @@ export default function App() {
 
           {reply.weakLink && (
             <div className="weak-link" role="note">
-              <div className="weak-link-title">⚠️ Before you send — the weak point in your position</div>
+              <div className="weak-link-title">{t('weakLink.title')}</div>
               <RichText text={reply.weakLink} />
             </div>
           )}
@@ -1231,10 +1569,10 @@ export default function App() {
           >
             <span className={`expander-arrow ${isBriefingOpen ? 'open' : ''}`}>▼</span>
             <span className="expander-text">
-              Their best case — and where you answer it
+              {t('briefing.title')}
               {briefingLoading && <span className="spinner steelman-spinner"></span>}
             </span>
-            <span className="briefing-tag">for you — don’t send</span>
+            <span className="briefing-tag">{t('briefing.tag')}</span>
           </button>
 
           <div
@@ -1251,7 +1589,7 @@ export default function App() {
                     <RichText text={reply.theirCase} />
                     {reply.answered?.length ? (
                       <>
-                        <div className="sources-title">Does your reply answer it?</div>
+                        <div className="sources-title">{t('briefing.answered')}</div>
                         <ul className="sources-list answered-list">
                           {reply.answered.map((line, i) => (
                             <li key={i} className={/unanswered/i.test(line) ? 'unanswered' : undefined}>
@@ -1263,13 +1601,13 @@ export default function App() {
                     ) : null}
                     {reply.unusedCitations.length > 0 && (
                       <>
-                        <div className="sources-title">Retrieved but not used</div>
-                        <SourceList citations={reply.unusedCitations} />
+                        <div className="sources-title">{t('briefing.unused')}</div>
+                        <SourceList citations={reply.unusedCitations} title={t('reply.sourcesTitle')} />
                       </>
                     )}
                   </>
                 ) : (
-                  <span className="token-detail">Building their strongest case…</span>
+                  <span className="token-detail">{t('briefing.building')}</span>
                 )}
               </div>
             </div>
@@ -1281,13 +1619,10 @@ export default function App() {
                 <div className="controls">
                   <input className="text-input" value={shareUrl} readOnly onFocus={(e) => e.target.select()} />
                   <button className="button button-secondary" onClick={copyShareUrl}>
-                    {shareCopied ? '✓ Copied' : 'Copy link'}
+                    {shareCopied ? t('reply.copied') : t('share.copyLink')}
                   </button>
                 </div>
-                <p className="key-help">
-                  Anyone with this link can read the argument and the rebuttal. It is unlisted — not indexed and not
-                  browsable — but it is not private. Links expire after a year.
-                </p>
+                <p className="key-help">{t('share.help')}</p>
               </div>
             ) : (
               <>
@@ -1295,27 +1630,35 @@ export default function App() {
                   {isSharing ? (
                     <>
                       <span className="spinner"></span>
-                      Creating link…
+                      {t('share.creating')}
                     </>
                   ) : (
-                    '🔗 Get a shareable link'
+                    t('share.get')
                   )}
                 </button>
-                <span className="token-detail share-caveat">
-                  Publishes this argument and rebuttal so anyone with the link can read them
-                </span>
+                <span className="token-detail share-caveat">{t('share.caveat')}</span>
               </>
             )}
           </div>
 
           {lastRun && (
             <p className="cost-actual">
-              Cost: <strong>{formatCost(lastRun.cost)}</strong>{' '}
+              {t('cost.actual')} <strong>{formatCost(lastRun.cost)}</strong>{' '}
               <span className="token-detail">
-                ({lastRun.usage.inputTokens.toLocaleString()} in / {lastRun.usage.outputTokens.toLocaleString()} out
-                {lastRun.usage.reasoningTokens ? `, ${lastRun.usage.reasoningTokens.toLocaleString()} reasoning` : ''})
+                {lastRun.usage.reasoningTokens
+                  ? t('cost.tokensWithReasoning', {
+                      in: lastRun.usage.inputTokens.toLocaleString(language),
+                      out: lastRun.usage.outputTokens.toLocaleString(language),
+                      reasoning: lastRun.usage.reasoningTokens.toLocaleString(language),
+                    })
+                  : t('cost.tokens', {
+                      in: lastRun.usage.inputTokens.toLocaleString(language),
+                      out: lastRun.usage.outputTokens.toLocaleString(language),
+                    })}
               </span>
-              {sessionCost > 0 && <span className="token-detail"> · session total {formatCost(sessionCost)}</span>}
+              {sessionCost > 0 && (
+                <span className="token-detail">{t('cost.sessionTotal', { total: formatCost(sessionCost) })}</span>
+              )}
             </p>
           )}
         </div>

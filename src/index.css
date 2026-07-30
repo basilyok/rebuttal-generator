@@ -236,7 +236,7 @@ h1 {
 }
 
 .link-button.subtle {
-  margin-left: 0;
+  margin-inline-start: 0;
   font-size: 12px;
   font-weight: 600;
   color: #4c5fd7;
@@ -320,7 +320,7 @@ h1 {
   margin-top: 12px;
   padding: 10px 14px;
   background: #f0f4ff;
-  border-left: 4px solid #4c5fd7;
+  border-inline-start: 4px solid #4c5fd7;
   border-radius: 8px;
   font-size: 13px;
   color: #333;
@@ -348,7 +348,7 @@ h1 {
 }
 
 .link-button {
-  margin-left: 8px;
+  margin-inline-start: 8px;
   text-decoration: underline;
   background: none;
   border: none;
@@ -403,7 +403,7 @@ h1 {
 
 .rebuttal-brief {
   background: #f0f4ff;
-  border-left: 4px solid #667eea;
+  border-inline-start: 4px solid #667eea;
   padding: 16px;
   border-radius: 8px;
   margin-bottom: 16px;
@@ -425,7 +425,7 @@ h1 {
   user-select: none;
   transition: background 0.2s ease;
   width: 100%;
-  text-align: left;
+  text-align: start;
   font-family: inherit;
   font-size: 15px;
   color: #333;
@@ -562,7 +562,7 @@ h1 {
 
 .sources-list {
   margin: 0;
-  padding-left: 20px;
+  padding-inline-start: 20px;
   font-size: 13px;
   line-height: 1.7;
 }
@@ -585,7 +585,7 @@ h1 {
 }
 
 .steelman-spinner {
-  margin-left: 10px;
+  margin-inline-start: 10px;
   width: 12px;
   height: 12px;
   border-width: 2px;
@@ -656,7 +656,7 @@ h1 {
 .claim-badge {
   margin-top: 16px;
   width: 100%;
-  text-align: left;
+  text-align: start;
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -693,7 +693,7 @@ h1 {
   padding: 14px 16px;
   background: #fff7ed;
   border: 1px solid #fdba74;
-  border-left: 4px solid #ea580c;
+  border-inline-start: 4px solid #ea580c;
   border-radius: 8px;
   font-size: 14px;
   line-height: 1.65;
@@ -771,7 +771,7 @@ h1 {
   gap: 2px;
   padding: 12px 16px;
   background: #f0f4ff;
-  border-left: 4px solid #4c5fd7;
+  border-inline-start: 4px solid #4c5fd7;
   border-radius: 8px;
   font-size: 14px;
   margin-bottom: 24px;
@@ -886,5 +886,162 @@ h1 {
 
   .provider-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Account bar, language switcher, and the vault dialogs.
+
+   Layout uses logical properties throughout so the whole app mirrors correctly
+   under dir="rtl" (Arabic) without a separate stylesheet.
+   --------------------------------------------------------------------------- */
+
+.account-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.language-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-select {
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+}
+
+/* The one control that must stay findable when every other word on screen is
+   unreadable to the user, so it is a visible button rather than a menu item. */
+.english-escape {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.account-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.account-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.account-name {
+  color: #4b5563;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sign-in-button {
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.vault-locked {
+  font-size: 13px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.vault-synced {
+  font-size: 13px;
+  color: #15803d;
+  white-space: nowrap;
+}
+
+.vault-dialog {
+  border: 1px solid #c7d2fe;
+  background: #f5f7ff;
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.vault-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  color: #312e81;
+}
+
+.vault-warning {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-inline-start: 4px solid #ea580c;
+  background: #fff7ed;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #7c2d12;
+}
+
+.vault-hint {
+  color: #b45309;
+}
+
+.vault-actions {
+  margin-top: 14px;
+  align-items: center;
+}
+
+/* Which language the reply itself will be written in — distinct from the UI
+   language, and shown near the input because that is what determines it. */
+.reply-language {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 16px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.reply-language-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-basis: 100%;
+}
+
+.reply-language-picker .key-help {
+  margin: 0;
+  flex-basis: 100%;
+}
+
+/* RTL: the few places a physical direction is still meaningful. */
+[dir='rtl'] .expander-arrow {
+  transform: scaleX(-1);
+}
+
+[dir='rtl'] .expander-arrow.open {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 600px) {
+  .account-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .account-controls {
+    justify-content: space-between;
   }
 }

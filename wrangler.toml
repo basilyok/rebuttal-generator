@@ -9,3 +9,18 @@ compatibility_date = "2026-07-01"
 [[kv_namespaces]]
 binding = "SHARES"
 id = "3ba59116bf3a4f1190b27e16616d9f8e"
+
+# Accounts: sessions, profiles, language preference, and the ENCRYPTED key vault.
+# Keys are prefixed — session:<id>, user:<id>, vault:<id>, oauth:<state>.
+#
+# The vault entries hold ciphertext only. The encryption key is derived in the
+# user's browser from a passphrase this server never receives, so a dump of this
+# namespace yields nothing usable. See src/vault.ts before changing anything here.
+#
+#   npx wrangler kv namespace create ACCOUNTS
+#
+# Without this binding the auth endpoints return 501 and the app behaves exactly
+# as it did before sign-in existed.
+[[kv_namespaces]]
+binding = "ACCOUNTS"
+id = "cf639d7e71374271a4ee79c7af834d3f"

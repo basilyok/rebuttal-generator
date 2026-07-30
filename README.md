@@ -202,6 +202,107 @@ New models ship constantly. Three ways this stays current, in order of effort:
    deliberately short, and adding a model that cannot hold the prompt in
    [CONSTITUTION.md](CONSTITUTION.md) makes the app worse, not more capable.
 
+## Accounts, and how your API keys are stored
+
+Signing in is **optional**. Without it the app behaves exactly as it always has:
+keys live in this browser's local storage and never leave it. Signing in adds two
+things — your keys follow you to a new device, and your language choice sticks to
+your account instead of to one browser.
+
+### The keys are encrypted before they leave your browser
+
+This is the part worth understanding, because "let us hold your API keys" is a
+request you should be suspicious of. Anthropic and OpenAI keys spend real money.
+
+So the server never sees them. When you set a passphrase, the browser derives an
+AES-256 key from it with PBKDF2 (600,000 iterations, SHA-256), encrypts your keys
+with AES-GCM, and uploads only the ciphertext, salt and IV. **The passphrase is
+never transmitted**, and there is no code path in `functions/api/vault.js` that
+could decrypt a vault — it stores three opaque strings and hands the same three
+back. A full dump of that KV namespace yields nothing spendable.
+
+The cost is one passphrase per new device. After that the derived key is cached in
+IndexedDB as a **non-extractable** `CryptoKey`: the browser will decrypt with it but
+will not hand its bytes back to any script, so you are not asked again and the raw
+key never sits in JavaScript. Signing out deletes it.
+
+Forgetting the passphrase is not a disaster — nothing is recoverable, but nothing is
+lost either. You re-enter your API keys, which you can always read from the
+provider's own console.
+
+See [`src/vault.ts`](src/vault.ts) and [`functions/api/vault.js`](functions/api/vault.js).
+If a change ever makes the server able to read a provider key, that is a breaking
+change to the app's privacy promise, not a refactor.
+
+### Enabling sign-in on your own deployment
+
+Sign-in stays hidden until you configure it, so a fork with no OAuth credentials
+just works without it.
+
+1. Create the accounts KV namespace and paste the id into `wrangler.toml`:
+
+```bash
+npx wrangler kv namespace create ACCOUNTS
+```
+
+2. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+   create an **OAuth 2.0 Client ID** of type *Web application*. Add your origin to
+   Authorised JavaScript origins, and this exact callback to Authorised redirect URIs:
+
+   `https://your-domain.example/api/auth/google/callback`
+
+3. Store the credentials as Pages secrets (never commit them):
+
+```bash
+npx wrangler pages secret put GOOGLE_CLIENT_ID --project-name=m36x-rebuttal
+```
+
+```bash
+npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name=m36x-rebuttal
+```
+
+Meta and Apple are not wired up. The session layer is provider-agnostic
+(`functions/_lib/session.js` namespaces user ids by provider), so adding them is
+mechanical — but Apple in particular needs a paid Apple Developer account and a
+client secret that expires every six months.
+
+## Languages
+
+The interface ships in twelve languages: English, Spanish, French, German,
+Portuguese, Italian, Japanese, Korean, Simplified Chinese, Arabic, Hindi and Greek.
+It picks one from your browser's language settings on first visit, and Arabic
+switches the whole layout to right-to-left.
+
+**English is always one click away.** Whenever the interface is not in English, a
+literal "English" button sits beside the language picker — because someone who has
+landed in a language they cannot read cannot be expected to find "English" inside a
+dropdown whose own label they also cannot read.
+
+Your choice is remembered in this browser, and on your account if you are signed in,
+so it follows you rather than resetting on each new device.
+
+### The reply's language is not the interface's language
+
+These are deliberately separate. The reply is aimed at **the person who wrote the
+argument**, so it follows *their* language — an English reply to a Spanish post
+persuades nobody, however good it is. Paste a Spanish article while reading the app
+in English and you get a Spanish reply, with a chip telling you so and a dropdown to
+override it.
+
+The private briefing does the opposite: the weak-link note and their-best-case
+section are for **you**, so they come back in your interface language even when the
+reply is in another.
+
+This also matters for quality in a way that is easy to miss. The constitution's
+anti-reactance rule (rule 7) is enforced by banning specific phrases — "you must",
+"the fact is", "Actually," — and a banned-phrase list is language-specific. Shipping
+only the English list would let the model write *"debes"* or *"el hecho es"* freely
+and the rule would silently stop working. So every language has its own list, in
+[`src/i18n/persuasion.ts`](src/i18n/persuasion.ts), along with notes on things
+English does not force you to decide — Japanese politeness level, French tu/vous,
+Korean speech level. Adding a language means adding that entry too, not just the UI
+strings.
+
 ## Quick Start
 
 ### Prerequisites

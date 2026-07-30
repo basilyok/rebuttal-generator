@@ -1,0 +1,216 @@
+// Greek — a translation of en.ts. Keys are never translated, only values.
+//
+// REGISTER: consistent singular informal (εσύ) throughout. The πληθυντικός
+// ευγενείας is the register of banks, telecoms and government forms; using it
+// here would make the app sound exactly like the enterprise software it is not.
+// This is one person helping another person write a private message, so every
+// imperative is the plain singular (γράψε, διάλεξε, έλεγξε).
+//
+// "Passphrase" is rendered as «κωδικός» everywhere rather than «συνθηματικό»:
+// those strings exist so a non-technical person understands what they are
+// choosing and what happens if they lose it.
+//
+// No elisions (σ᾽ αυτό, γι᾽ αυτό) anywhere — apostrophes inside single-quoted
+// TypeScript strings are a needless way to break the build.
+
+const el = {
+  // --- shell -----------------------------------------------------------------
+  'app.title': '🎤 Rebuttal Generator',
+  'app.subtitle': 'Γράψε την απάντηση που θα τον κάνει όντως να αλλάξει γνώμη',
+  'app.updateAvailable': '🎉 Υπάρχει νέα έκδοση!',
+  'app.reload': 'Ανανέωση',
+
+  // --- account ---------------------------------------------------------------
+  'account.signIn': 'Σύνδεση',
+  'account.signInWithGoogle': 'Σύνδεση με Google',
+  'account.signInBlurb': 'Συνδέσου για να έχεις τα κλειδιά API και τη γλώσσα σου σε όλες σου τις συσκευές.',
+  'account.signOut': 'Αποσύνδεση',
+  'account.signedInAs': 'Συνδέθηκες ως {name}',
+  'account.menu': 'Λογαριασμός',
+  'account.keysSynced': 'Τα κλειδιά συγχρονίστηκαν',
+  'account.keysLocked': 'Τα κλειδιά είναι κλειδωμένα',
+  'account.unlock': 'Ξεκλείδωμα',
+  'account.unlockTitle': 'Ξεκλείδωσε τα αποθηκευμένα κλειδιά σου',
+  'account.unlockBlurb':
+    'Τα κλειδιά σου είναι κρυπτογραφημένα με έναν κωδικό που δεν φεύγει ποτέ από τη συσκευή σου — ούτε εμείς μπορούμε να τα διαβάσουμε. Γράψε τον μία φορά σε αυτή τη συσκευή.',
+  'account.passphrase': 'Κωδικός',
+  'account.passphrasePlaceholder': 'Ο κωδικός για τα κλειδιά σου',
+  'account.unlockAction': 'Ξεκλείδωμα',
+  'account.wrongPassphrase': 'Αυτός ο κωδικός δεν ξεκλείδωσε τα κλειδιά σου. Δοκίμασε ξανά.',
+  'account.setupTitle': 'Κράτα τα κλειδιά σου σε όλες τις συσκευές',
+  'account.setupBlurb':
+    'Διάλεξε έναν κωδικό. Τα κλειδιά API κρυπτογραφούνται με αυτόν εδώ, μέσα στο πρόγραμμα περιήγησης, πριν ανέβουν κάπου — έτσι στον διακομιστή φτάνει μόνο ένα ανακατεμένο κείμενο που δεν μπορεί να διαβάσει.',
+  'account.setupWarning':
+    'Αυτόν τον κωδικό δεν μπορεί να τον βρει ξανά κανείς, ούτε εμείς. Αν τον ξεχάσεις, απλώς ξαναγράφεις τα κλειδιά API σου — τίποτε άλλο δεν χάνεται.',
+  'account.confirmPassphrase': 'Επιβεβαίωσε τον κωδικό',
+  'account.passphraseMismatch': 'Οι δύο κωδικοί δεν ταιριάζουν.',
+  'account.passphraseShort': 'Βάλε τουλάχιστον 12 χαρακτήρες — έναν σύντομο κωδικό τον μαντεύει εύκολα ένας υπολογιστής.',
+  'account.passphraseLettersOnly': 'Πρόσθεσε έναν αριθμό ή ένα σύμβολο για να μαντεύεται πιο δύσκολα.',
+  'account.saveKeys': 'Κρυπτογράφηση και αποθήκευση',
+  'account.forgetKeys': 'Διαγραφή αποθηκευμένων κλειδιών',
+  'account.forgetKeysConfirm':
+    'Να διαγραφούν τα κρυπτογραφημένα κλειδιά σου από τον διακομιστή; Σε αυτό το πρόγραμμα περιήγησης παραμένουν.',
+  'account.notNow': 'Όχι τώρα',
+  'account.syncing': 'Αποθήκευση…',
+  'account.vaultSaved': 'Τα κλειδιά σου κρυπτογραφήθηκαν και αποθηκεύτηκαν.',
+
+  // --- language --------------------------------------------------------------
+  'language.label': 'Γλώσσα',
+  'language.switchToEnglish': 'English',
+  'language.choose': 'Διάλεξε γλώσσα',
+  'language.followDevice': 'Όπως η συσκευή μου',
+
+  // --- AI settings -----------------------------------------------------------
+  'settings.chooseModel': 'Διάλεξε μοντέλο',
+  'settings.hide': 'Απόκρυψη',
+  'settings.change': 'Αλλαγή',
+  'settings.provider': 'Πάροχος AI',
+  'settings.model': 'Μοντέλο',
+  'settings.refresh': '↻ Ανανέωση',
+  'settings.refreshing': 'Ανανέωση…',
+  'settings.refreshTitle': 'Φέρε την τρέχουσα λίστα μοντέλων του παρόχου',
+  'settings.useShortList': 'γύρνα στη σύντομη λίστα',
+  'settings.useShortListTitle': 'Επιστροφή στη σύντομη, διαλεγμένη στο χέρι λίστα',
+  'settings.modelsUpdated': '{count} μοντέλα · ενημερώθηκε {date}',
+  'settings.apiKeyLabel': 'Κλειδί API {provider}',
+  'settings.apiKeyPlaceholder': 'Γράψε το κλειδί API σου',
+  'settings.saveKey': 'Αποθήκευση κλειδιού',
+  'settings.cancel': 'Άκυρο',
+  'settings.changeKey': 'Αλλαγή κλειδιού API',
+  'settings.keyHelpFree':
+    'Αυτός ο πάροχος ζητάει κλειδί API ακόμη και για τα δωρεάν μοντέλα του, αλλά το κλειδί βγαίνει δωρεάν — δεν χρειάζεται κάρτα. ',
+  'settings.keyHelpPaid':
+    'Το κλειδί σου αποθηκεύεται μόνο σε αυτό το πρόγραμμα περιήγησης και στέλνεται μόνο σε αυτόν τον πάροχο. Δεν θα χρειαστεί να το ξαναγράψεις. ',
+  'settings.keyHelpSynced':
+    'Το κλειδί σου κρυπτογραφείται σε αυτή τη συσκευή και συγχρονίζεται με τον λογαριασμό σου, οπότε δεν θα χρειαστεί να το ξαναγράψεις σε καμία συσκευή. ',
+  'settings.getOneFrom': 'Πάρε ένα από',
+  'settings.preferNoKey': 'Δεν θέλεις καθόλου κλειδί; Διάλεξε {option} στη λίστα «Πάροχος AI».',
+  'settings.localOption': 'Τοπικά στο πρόγραμμα περιήγησης (ΔΩΡΕΑΝ, χωρίς κλειδί)',
+  'settings.tavilyLabel': 'Κλειδί για την αναζήτηση στοιχείων',
+  'settings.optional': 'προαιρετικό',
+  'settings.save': 'Αποθήκευση',
+  'settings.saved': '✓ Αποθηκεύτηκε',
+  'settings.tavilyHelp':
+    'Η αναζήτηση στοιχείων δουλεύει ήδη χωρίς κανένα κλειδί. Ένα δωρεάν κλειδί {link} (1.000 αναζητήσεις τον μήνα, χωρίς κάρτα) απλώς ανεβάζει το όριο, αν το φτάσεις ποτέ.',
+  'settings.costPerReply': '≈ {cost} ανά απάντηση',
+  'settings.costIncludesReasoning': '≈ {cost} ανά απάντηση (μαζί με τα κρυφά tokens σκέψης)',
+  'settings.costFreeLocal': 'Δωρεάν — τρέχει στη συσκευή σου, δεν χρεώνεται τίποτα',
+  'settings.costUnknown': 'Δεν ξέρουμε τη χρέωση για αυτό το μοντέλο',
+  'settings.costFreeModel': 'Δωρεάν μοντέλο — χωρίς χρέωση',
+
+  // --- input -----------------------------------------------------------------
+  'input.label': 'Σε τι απαντάς;',
+  'input.modeGroup': 'Τρόπος εισαγωγής',
+  'input.modeText': '✍️ Μίλα ή γράψε',
+  'input.modeUrl': '🔗 Σύνδεσμος άρθρου',
+  'input.urlPlaceholder': 'https://example.com/to-arthro',
+  'input.fetchArticle': 'Φέρε το άρθρο',
+  'input.fetching': 'Φόρτωση…',
+  'input.startRecording': '🎙 Έναρξη ηχογράφησης',
+  'input.stopRecording': '⏹ Διακοπή ηχογράφησης',
+  'input.recording': 'Ηχογράφηση…',
+  'input.clear': 'Καθάρισμα',
+  'input.placeholderText': 'Γράψε εδώ το επιχείρημα, ή πάτα «Έναρξη ηχογράφησης» και πες το…',
+  'input.placeholderUrl': 'Το κείμενο του άρθρου θα εμφανιστεί εδώ μόλις έρθει — μπορείς να το πειράξεις πριν γράψεις την απάντηση.',
+  'input.articleWords': '{count} λέξεις',
+  'input.articleViaArchive': ' · διαβάστηκε από αντίγραφο του Internet Archive',
+  'input.articleTruncated': ' · κόπηκε λίγο για να μείνει μικρό το αίτημα',
+
+  // --- audience --------------------------------------------------------------
+  'audience.label': 'Ποιος το έγραψε, και πού;',
+  'audience.optional': 'προαιρετικό — αλλά αλλάζει τον τρόπο που γράφεται η απάντηση',
+  'audience.placeholder': 'π.χ. ο πεθερός μου, σε μηνύματα · ένας άγνωστος στο LinkedIn',
+  'audience.help':
+    'Άφησέ το κενό και θα βγει από το ίδιο το κείμενο. Αν πεις ποιος είναι, η απάντηση μπορεί να πιάσει πηγές που ήδη εμπιστεύεται και να μιλήσει όπως μιλάει κι εκείνος.',
+
+  // --- reply language --------------------------------------------------------
+  'replyLang.detected': 'Γλώσσα απάντησης: {language}',
+  'replyLang.change': 'αλλαγή',
+  'replyLang.label': 'Γλώσσα της απάντησης',
+  'replyLang.help':
+    'Η απάντηση πάει στο άτομο που έγραψε το επιχείρημα, οπότε ακολουθεί τη δική του γλώσσα, όχι τη γλώσσα του περιβάλλοντος.',
+  'replyLang.auto': 'Όπως το επιχείρημα ({language})',
+
+  // --- sources ---------------------------------------------------------------
+  'sources.toggle': 'Βρες αληθινά στοιχεία για παραπομπή',
+  'sources.hint':
+    ' — ψάχνει πρώτα στο διαδίκτυο, και η απάντηση επιτρέπεται να παραπέμπει μόνο σε ό,τι όντως βρέθηκε. Δουλεύει με κάθε μοντέλο, χωρίς κλειδί.',
+
+  // --- generate --------------------------------------------------------------
+  'generate.submit': '✨ Γράψε την απάντησή μου',
+  'generate.working': 'Γράφω…',
+  'generate.searching': 'Ψάχνω στοιχεία…',
+  'generate.writing': 'Γράφω την απάντηση…',
+  'generate.srStatus': 'Γράφεται η απάντηση',
+
+  // --- reply -----------------------------------------------------------------
+  'reply.title': 'Η απάντησή σου',
+  'reply.copy': '📋 Αντιγραφή μηνύματος',
+  'reply.copied': '✓ Αντιγράφηκε',
+  'reply.sourcesCited': 'Αναφέρονται {count} πηγές',
+  'reply.sourcesCitedOne': 'Αναφέρεται 1 πηγή',
+  'reply.noSources': 'Δεν αναφέρονται πηγές',
+  'reply.linksRemoved': ' · αφαιρέθηκαν {count} ανεπιβεβαίωτοι σύνδεσμοι',
+  'reply.linksRemovedOne': ' · αφαιρέθηκε 1 ανεπιβεβαίωτος σύνδεσμος',
+  'reply.toCheck': ' · {count} για έλεγχο',
+  'reply.claimWarn':
+    'Το μοντέλο έβγαλε {count} συνδέσμους που δεν ήταν ανάμεσα στις πηγές που πραγματικά βρέθηκαν. Αφαιρέθηκαν αντί να σου εμφανιστούν, γιατί μια επινοημένη παραπομπή είναι χειρότερη από καμία.',
+  'reply.claimWarnOne':
+    'Το μοντέλο έβγαλε 1 σύνδεσμο που δεν ήταν ανάμεσα στις πηγές που πραγματικά βρέθηκαν. Αφαιρέθηκε αντί να σου εμφανιστεί, γιατί μια επινοημένη παραπομπή είναι χειρότερη από καμία.',
+  'reply.checkBeforeSending': 'Έλεγξέ το πριν το στείλεις',
+  'reply.noSourcesRetrieved':
+    'Δεν βρέθηκε καμία πηγή για αυτή την απάντηση. Κάθε πραγματολογικός ισχυρισμός μέσα της είναι ανεπιβεβαίωτος — έλεγξε ό,τι σκοπεύεις να επικαλεστείς.',
+  'reply.sourcesTitle': 'Πηγές',
+
+  // --- weak link + briefing --------------------------------------------------
+  'weakLink.title': '⚠️ Πριν το στείλεις — το αδύναμο σημείο της δικής σου θέσης',
+  'briefing.title': 'Το καλύτερο επιχείρημα της άλλης πλευράς — και πού το απαντάς',
+  'briefing.tag': 'μόνο για σένα — μην το στείλεις',
+  'briefing.building': 'Φτιάχνω το ισχυρότερο επιχείρημα της άλλης πλευράς…',
+  'briefing.answered': 'Το απαντάει η απάντησή σου;',
+  'briefing.unused': 'Βρέθηκε αλλά δεν χρησιμοποιήθηκε',
+
+  // --- share -----------------------------------------------------------------
+  'share.get': '🔗 Φτιάξε σύνδεσμο για κοινοποίηση',
+  'share.creating': 'Φτιάχνω τον σύνδεσμο…',
+  'share.copyLink': 'Αντιγραφή συνδέσμου',
+  'share.caveat': 'Δημοσιεύει το επιχείρημα και την απάντηση, ώστε να τα διαβάζει όποιος έχει τον σύνδεσμο',
+  'share.help':
+    'Όποιος έχει αυτόν τον σύνδεσμο μπορεί να διαβάσει το επιχείρημα και την απάντηση. Η σελίδα δεν είναι καταχωρισμένη πουθενά — δεν βγαίνει σε αναζητήσεις ούτε σε λίστες — αλλά ούτε και ιδιωτική είναι. Οι σύνδεσμοι λήγουν μετά από έναν χρόνο.',
+  'share.banner': 'Κάποιος μοιράστηκε μαζί σου αυτή την απάντηση',
+  'share.generatedWith': 'Γράφτηκε με {model}',
+  'share.generatedWithAI': 'Γράφτηκε με AI',
+  'share.theArgument': 'Το επιχείρημα',
+  'share.theReply': 'Η απάντηση',
+  'share.steelmanHeading': 'Το ισχυρότερο επιχείρημα ΥΠΕΡ αυτής της θέσης',
+  'share.from': 'Από',
+  'share.writeYourOwn': '✍️ Γράψε τη δική σου απάντηση',
+  'share.startFresh': 'Ξεκίνα από την αρχή',
+
+  // --- cost ------------------------------------------------------------------
+  'cost.actual': 'Κόστος:',
+  'cost.tokens': '({in} είσοδος / {out} έξοδος)',
+  'cost.tokensWithReasoning': '({in} είσοδος / {out} έξοδος, {reasoning} σκέψη)',
+  'cost.sessionTotal': ' · σύνολο συνεδρίας {total}',
+
+  // --- errors ----------------------------------------------------------------
+  'error.needArgument': 'Βάλε πρώτα το επιχείρημα στο οποίο θέλεις να απαντήσεις',
+  'error.needModel': 'Διάλεξε ένα μοντέλο',
+  'error.needKey': 'Γράψε ένα έγκυρο κλειδί API',
+  'error.needKeyForModels': 'Γράψε πρώτα το κλειδί API σου — τη λίστα μοντέλων τη δίνει ο πάροχος.',
+  'error.timeout': 'Το αίτημα άργησε πάρα πολύ. Δοκίμασε ξανά.',
+  'error.generic': 'Δεν μπόρεσα να γράψω την απάντηση',
+  'error.refreshModels': 'Δεν μπόρεσα να ανανεώσω τη λίστα μοντέλων',
+  'error.briefing': 'Δεν μπόρεσα να φτιάξω το επιχείρημα της άλλης πλευράς.',
+  'error.publish': 'Δεν μπόρεσα να δημοσιεύσω αυτή την απάντηση.',
+  'error.loadShared': 'Αυτή η κοινοποιημένη απάντηση δεν φόρτωσε.',
+  'error.article': 'Δεν μπόρεσα να φορτώσω το άρθρο. Δοκίμασε να επικολλήσεις το κείμενο.',
+  'error.searchUnavailable': 'Η αναζήτηση στοιχείων δεν ήταν διαθέσιμη.',
+  'error.speechUnsupported':
+    'Αυτό το πρόγραμμα περιήγησης δεν υποστηρίζει αναγνώριση φωνής. Δοκίμασε Chrome, Edge ή Safari.',
+  'error.micDenied': 'Δεν δόθηκε πρόσβαση στο μικρόφωνο. Δώσε άδεια μικροφώνου σε αυτόν τον ιστότοπο και δοκίμασε ξανά.',
+  'error.micMissing': 'Δεν βρέθηκε μικρόφωνο. Δες αν είναι συνδεδεμένο και δοκίμασε ξανά.',
+  'error.speechNetwork': 'Η υπηρεσία φωνής βρήκε πρόβλημα δικτύου. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.',
+}
+
+export default el
