@@ -16,17 +16,15 @@ prompts.
 ## Features
 
 - 🎤 **Voice, Text, or URL Input**: Dictate the argument via the browser microphone (Web Speech API), type it, or paste a link to an article and let the app pull the text in
-- 🤖 **10 AI Providers, 50+ models**: Anthropic Claude, Google Gemini, Groq, OpenRouter, Mistral, DeepSeek, xAI Grok, Cohere, Together AI — or run a model locally in your browser for free with no API key (WebLLM/WebGPU)
+- 🤖 **A short, curated model list**: six providers, sixteen models — every one of them able to hold this app's long, constraint-heavy prompt. Anthropic Claude, Google Gemini, Groq, OpenRouter (the only browser route to GPT), DeepSeek, or a model running locally in your browser with no API key at all (WebLLM/WebGPU)
 - 🔗 **Real sources on every model**: the app searches the web itself (Tavily, keyless — no account needed) and the reply may cite *only* what was actually retrieved. Any URL the model invents is stripped before you see it
 - ⚠️ **The weak link in your own position**, shown every time, before you send — if the other side is better supported, it says so
 - ⚖️ **Their best case, and where you answer it**: a private briefing that checks your reply actually addresses their strongest argument, and flags anything it leaves unanswered
 - 📤 **Shareable links**: publish a result to an unguessable URL you can send to anyone
 - 💰 **Cost transparency**: estimated cost before you generate, actual cost and token counts after, and a running session total
-- ↻ **Self-updating model list**: pull each provider's live catalog at runtime, so new model releases appear without a code change
-- ⚡ **Instant Rebuttals**: Brief and detailed rebuttals generated in parallel
-- 📖 **Expandable Details**: Click to view comprehensive, well-reasoned detailed rebuttals
+- ↻ **Off-menu access**: the curated list is a recommendation, not a cage — ↻ Refresh pulls any provider's full live catalog at runtime, so new releases appear without a code change
 - 🎨 **Beautiful UI**: Modern, responsive design that works on desktop and mobile
-- 🔒 **Secure**: Your API key is stored locally in browser storage and never sent to any server except Anthropic
+- 🔒 **Secure**: Your API key is stored locally in browser storage and sent only to the provider it belongs to — never to this app's own servers
 - 📱 **PWA (Progressive Web App)**: Install on phone/desktop; the app shell loads offline after your first visit (generating rebuttals requires internet)
 - ⚡ **Lightning Fast**: Vite builds + service worker caching = instant loads
 
@@ -34,28 +32,45 @@ prompts.
 
 - **Frontend**: React 18 + TypeScript
 - **Build Tool**: Vite
-- **AI**: 10 providers via direct browser API calls (see below), plus in-browser inference via [WebLLM](https://webllm.mlc.ai/) (WebGPU)
+- **AI**: 5 cloud providers via direct browser API calls (see below), plus in-browser inference via [WebLLM](https://webllm.mlc.ai/) (WebGPU)
 - **Speech Recognition**: Web Speech API (native browser)
 
 ## Choosing an AI
 
-| Provider | Cost | API key? | Notes |
-|----------|------|----------|-------|
-| Local in-browser (WebLLM) | **Free** | **No** | Llama/Phi/Gemma/Qwen run on your GPU via WebGPU; one-time model download (0.9–4.5 GB), fully private |
-| Google Gemini | Free tier + paid | Yes (free) | Gemini 3.6 Flash, 3.5/3.1 Flash-Lite, 3.1 Pro. Free tier on all but 3.1 Pro |
-| Groq | Free tier | Yes (free) | Extremely fast Llama 3.x, GPT-OSS, Qwen 3.6 |
-| OpenRouter | Free models + paid | Yes (free) | Genuinely free models, plus paid GPT-5.6, Claude Opus 5, Gemini, Grok, Kimi — 350+ total |
-| Mistral | Free tier + paid | Yes (free) | Mistral Small 4 / Medium 3.5 / Large 3, Magistral |
-| Cohere | Free trial + paid | Yes (free) | Command A / R / R7B |
-| Anthropic Claude | Paid | Yes | Claude Haiku 4.5 / Sonnet 5 / Opus 5 / Fable 5 |
-| DeepSeek | Paid (very cheap) | Yes | DeepSeek V4 Flash / V4 Pro |
-| xAI Grok | Paid | Yes | Grok 4.5 / 4.3 / 4.20 (reasoning and non-reasoning) |
-| Together AI | Paid | Yes | Kimi K3, DeepSeek V4 Pro, Qwen3.7 Max, GLM-5.2, MiniMax M3 |
+| Provider | Cost | API key? | Models |
+|----------|------|----------|--------|
+| OpenRouter | Free models + paid | Yes (free) | **Nemotron 3 Super 120B** and **Ultra 550B** (genuinely free), Qwen3.7 Flash, **GPT-5.6 Luna / Terra**, Grok 4.5 |
+| Google Gemini | Free tier + paid | Yes (free) | Gemini 3.1 Flash-Lite, Gemini 3.6 Flash — free tier on both |
+| Groq | Free tier | Yes (free) | Llama 3.3 70B, GPT-OSS 120B — the fastest responses here |
+| Anthropic Claude | Paid | Yes | Claude Haiku 4.5 / **Sonnet 5** / Fable 5 |
+| DeepSeek | Paid (very cheap) | Yes | DeepSeek V4 Pro — frontier reasoning at ~1/10 the price |
+| Local in-browser (WebLLM) | **Free** | **No** | Qwen 2.5 7B, Llama 3.2 3B on your own GPU via WebGPU; downloads once, nothing leaves your device |
 
 Every provider here was verified to support direct browser (CORS) calls — this
 app has no backend. OpenAI's own API blocks browser calls, which is why GPT
 models are offered through OpenRouter instead. API keys are stored per-provider
 in your browser's local storage and sent only to that provider.
+
+### Why the list is short
+
+The bar is not "the API works." This app asks a model to hold a long,
+almost entirely *negative* prompt — a fixed eight-step structure, plain prose
+with no markdown, a list of banned phrases, and citations drawn only from a
+supplied set (see [CONSTITUTION.md](CONSTITUTION.md)). A model that cannot hold
+it does not return a slightly worse reply; it returns bullet points,
+"Actually,", and an invented statistic — in a message you might send to your
+father-in-law. **A model that produces a message you would regret sending is
+worse than no model.**
+
+So a model earns a slot only if it (1) can hold that prompt — which rules out
+roughly anything under 30B, (2) beats everything else here on price *and*
+quality, and (3) has actually worked in this app. Two things that used to
+justify entries no longer do: native web search is irrelevant now that Tavily
+grounds every provider, and duplicate routes to the same model are not choice.
+
+**The curated list is a recommendation, not a limit.** ↻ Refresh loads any
+provider's full live catalog — 350+ models on OpenRouter alone — so nothing is
+actually out of reach.
 
 ### Cost estimates
 
@@ -78,8 +93,11 @@ content with a `length` finish reason. The app handles this by giving reasoning
 models a much larger budget, asking each provider to minimise reasoning where
 its API allows it (OpenRouter `reasoning.effort`, Groq `reasoning_effort`,
 Gemini `thinkingConfig`), and automatically retrying once with double the budget
-if a response still comes back empty. Models marked "no reasoning" in the
-dropdown avoid the issue entirely and are the cheapest, fastest choice.
+if a response still comes back empty. If a model still fails this way, the
+non-reasoning options sidestep it entirely: **Claude Haiku 4.5**, **Groq Llama
+3.3 70B**, and both local in-browser models answer directly with no hidden
+thinking. They are not the cheapest — several reasoning models here cost less —
+but they are the most predictable.
 
 ## Rebutting an article from a URL
 
@@ -143,10 +161,12 @@ settings. Social platforms and forums are excluded from results: a LinkedIn post
 evidence that will persuade anyone.
 
 Because the app does its own searching, **every provider can cite sources now** — including
-Groq, Mistral, DeepSeek, xAI, Cohere, Together, and the free local in-browser model, none
-of which can search on their own. If Tavily is unavailable, models with native search
-(Gemini, Claude, OpenRouter) fall back to it; otherwise the reply is generated without
-sources and the badge says so plainly.
+Groq, DeepSeek and the free local in-browser model, none of which can search on their own.
+If Tavily is unavailable, models with native search (Gemini, Claude, OpenRouter) fall back
+to it; otherwise the reply is generated without sources and the badge says so plainly.
+
+This is also why native search is no longer a reason to keep a model in the curated list:
+it only ever runs as a fallback.
 
 ## Sharing a rebuttal
 
@@ -178,13 +198,16 @@ New models ship constantly. Three ways this stays current, in order of effort:
 3. **Edit `src/providers.ts`** to change the curated defaults — the per-provider
    `models` arrays hold the id, label, `inPrice`/`outPrice` (USD per million
    tokens) and a `reasoning` flag. This is the only place model data lives.
+   **Read the CURATION RULE comment at the top of that array first**: the list is
+   deliberately short, and adding a model that cannot hold the prompt in
+   [CONSTITUTION.md](CONSTITUTION.md) makes the app worse, not more capable.
 
 ## Quick Start
 
 ### Prerequisites
 
 - Node.js 18+ and npm (required by Vite 5)
-- An Anthropic API key (get one at [console.anthropic.com](https://console.anthropic.com))
+- An API key for one of the cloud providers above — free ones exist for Gemini, Groq and OpenRouter. Or no key at all, if you use the local in-browser option
 - A modern browser with microphone access (Chrome, Edge, Safari, Firefox)
 
 ### Installation
@@ -215,11 +238,12 @@ npm run preview
 
 ## How to Use
 
-1. **Pick an AI**: Choose a provider and model from the dropdowns. For zero-cost, zero-signup use, pick **Local in-browser (FREE, no key)** — the model downloads once and runs on your GPU
-2. **Enter API Key** (cloud providers only): the app links to each provider's key page; free-tier keys exist for Gemini, Groq, OpenRouter, Mistral, and Cohere
+1. **Pick an AI**: the collapsed summary names the model and what it is good at; open it to change provider or model. For zero-cost, zero-signup use, pick **Local in-browser (FREE, no key)** — the model downloads once and runs on your GPU
+2. **Enter API Key** (cloud providers only): the app links to each provider's key page; free-tier keys exist for Gemini, Groq and OpenRouter
 3. **Enter Your Argument**: Type it, click "Start Recording" and speak it, or switch to **🔗 Article URL** and paste a link — dictated and fetched text both stay editable afterwards
-4. **Generate Rebuttal**: Click "Generate Rebuttal" to create a response
-5. **View Details**: Click "View Detailed Rebuttal" to expand and see the comprehensive analysis
+4. **Say who will read it** (optional): one line about the recipient changes the register and which sources get used. Leave it blank and it is inferred from the text
+5. **Write my reply**: produces one sendable message, plus the weak link in your own position
+6. **Open the briefing** (optional): their strongest case, and whether your reply actually answers it — this part is never sent
 
 ## Features Explained
 
@@ -243,10 +267,22 @@ Provides a comprehensive response with:
 
 ## Privacy & Security
 
-- Your API key is stored only in your browser's local storage
-- Audio is processed only by your browser's speech recognition
-- The text of your arguments is sent only to Anthropic's API for rebuttal generation
-- No data is logged or stored on any third-party servers
+Keys are stored only in your browser's local storage, one entry per provider, and
+are sent only to the provider they belong to — never to this app's own endpoints.
+
+Where your argument text actually goes, in full:
+
+- **The AI provider you picked**, to write the reply. With the local in-browser
+  option it goes nowhere — inference runs on your own GPU.
+- **Tavily**, as the evidence-search query, on every generation where sourcing is
+  left on. Turn off "Find real evidence to cite" and no search request is made.
+- **This app's `/api/article` function**, but only in URL mode, and only the URL —
+  never your typed text. It fetches the page server-side because the browser cannot.
+- **This app's `/api/share` function**, only if you click "Get a shareable link".
+  That publishes deliberately; the private briefing and weak-link note are never sent.
+
+Audio never leaves the browser's own speech recognition. There is no analytics, no
+tracking, and no server-side logging by this app.
 
 ## Troubleshooting
 
@@ -269,10 +305,10 @@ Provides a comprehensive response with:
 
 Costs depend on the provider and model you pick, and the app shows them live —
 see [Cost estimates](#cost-estimates). The local in-browser option is entirely
-free. Free tiers (Gemini, Groq, OpenRouter free models, Mistral, Cohere trial)
-cost nothing within their limits. On paid providers a typical rebuttal pair
-ranges from a fraction of a cent (Qwen3.7 Flash, Llama 3.1 8B, Claude Haiku 4.5)
-to a few cents on the largest reasoning models (Claude Fable 5, GPT-5.6 Sol).
+free. Free tiers (Gemini, Groq, and the OpenRouter free models) cost nothing
+within their limits. On paid providers a reply ranges from a fraction of a cent
+(Qwen3.7 Flash, GPT-OSS 120B, DeepSeek V4 Pro) through ~3¢ (Claude Sonnet 5,
+GPT-5.6 Terra) to ~16¢ on the most capable model here (Claude Fable 5).
 
 ## Progressive Web App (PWA)
 
@@ -294,9 +330,10 @@ Once installed, the app:
 - ✅ Takes less space than a native app
 - ✅ Works just like a native mobile app
 
-**Note**: Generating rebuttals calls the Anthropic API and requires internet.
-Generated rebuttals live only in the current page session — they are not
-persisted across reloads.
+**Note**: Writing a reply calls your chosen provider (and Tavily for sourcing), so
+it needs internet — except with the local in-browser option, which works offline
+once the model has downloaded. Replies live only in the current page session; they
+are not persisted across reloads.
 
 ## Deployment
 

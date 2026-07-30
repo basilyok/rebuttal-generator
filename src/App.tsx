@@ -9,6 +9,7 @@ import {
   fetchLiveModels,
   saveCachedCatalog,
   loadCachedCatalog,
+  clearCachedCatalog,
   estimateCost,
   costOf,
   formatCost,
@@ -78,7 +79,13 @@ if (localStorage.getItem('anthropic_api_key') && !localStorage.getItem(keyStorag
   localStorage.removeItem('anthropic_api_key')
 }
 
-const storedProviderId = () => localStorage.getItem('ai_provider') || 'anthropic'
+/**
+ * The saved provider, resolved against the current catalog. Providers get retired, so a
+ * stored id may no longer exist — getProvider falls back, and returning the *resolved* id
+ * keeps every lookup keyed off it (cached catalog, stored key) pointing at the same
+ * provider the user actually ends up on.
+ */
+const storedProviderId = () => getProvider(localStorage.getItem('ai_provider') || 'anthropic').id
 
 /** Real, retrieved sources. Rendered only when the model actually returned some. */
 function SourceList({ citations }: { citations?: Citation[] }) {
@@ -605,9 +612,13 @@ export default function App() {
   const applyProvider = (next: ReturnType<typeof getProvider>) => {
     const nextModels = modelsFor(next)
     const storedKey = loadStoredKey(next.id)
+    // Resolve the id ONCE and persist that. Writing next.defaultModel unconditionally
+    // could store an id absent from a cached catalog, and the reload path re-adopts it
+    // without a membership check — leaving no model selected at all.
+    const nextModelId = nextModels.some((m) => m.id === next.defaultModel) ? next.defaultModel : nextModels[0].id
     setProviderId(next.id)
     setModels(nextModels)
-    setModelId(nextModels.some((m) => m.id === next.defaultModel) ? next.defaultModel : nextModels[0].id)
+    setModelId(nextModelId)
     setCatalogFetchedAt(loadCachedCatalog(next.id)?.fetchedAt ?? null)
     setApiKey(storedKey)
     setShowApiKeyInput(next.requiresKey && !storedKey)
@@ -615,7 +626,15 @@ export default function App() {
     setError('')
     setLastRun(null)
     localStorage.setItem('ai_provider', next.id)
-    localStorage.setItem('ai_model', next.defaultModel)
+    localStorage.setItem('ai_model', nextModelId)
+  }
+
+  /** Back to the curated list after a refresh pulled in the provider's whole catalog. */
+  const handleResetCatalog = () => {
+    clearCachedCatalog(provider.id)
+    setModels(provider.models)
+    setCatalogFetchedAt(null)
+    if (!provider.models.some((m) => m.id === modelId)) handleModelChange(provider.defaultModel)
   }
 
   const handleModelChange = (id: string) => {
@@ -835,7 +854,15 @@ export default function App() {
           {costLine() && <span className="cost-estimate">{costLine()}</span>}
           {catalogFetchedAt && (
             <span className="catalog-age">
-              {models.length} models · updated {new Date(catalogFetchedAt).toLocaleDateString()}
+              {models.length} models · updated {new Date(catalogFetchedAt).toLocaleDateString()} ·{' '}
+              <button
+                className="link-button subtle"
+                onClick={handleResetCatalog}
+                disabled={isLoading || isRefreshing}
+                title="Go back to the short, hand-picked list"
+              >
+                use the short list
+              </button>
             </span>
           )}
         </div>

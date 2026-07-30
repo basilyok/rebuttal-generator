@@ -23,9 +23,10 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
   verify, and their best case mapped to where your reply answers it
 - Web search runs *before* generation (Tavily, keyless) and the reply may cite only what
   was retrieved; invented URLs are stripped
-- 10 selectable AI providers with 50+ sub-models: Claude, Gemini, Groq,
-  OpenRouter, Mistral, DeepSeek, Grok, Cohere, Together AI, and a free no-key
-  local in-browser option (WebLLM/WebGPU)
+- 6 providers, 16 models — curated down to the ones that can actually hold this
+  app's long, constraint-heavy prompt: Claude, Gemini, Groq, OpenRouter (the only
+  browser route to GPT), DeepSeek, and a free no-key local in-browser option
+  (WebLLM/WebGPU). ↻ Refresh still loads any provider's full live catalog.
 - AI settings collapse behind a summary line naming the model and what it is good at
 - Web-grounded sources with real citation links on Gemini, Claude and OpenRouter;
   models that cannot search say so instead of inventing URLs
@@ -118,11 +119,12 @@ Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 
 ## 🎯 How It Works
 
-1. **User speaks** → Web Speech API captures audio and converts to text
-2. **User picks an AI** → provider + model dropdowns (`src/providers.ts` holds the registry and call adapters)
-3. **User clicks generate** → two parallel calls produce the brief (300 tokens max) and detailed (2000 tokens max) rebuttals (sequential for local models)
-4. **Results display** → Brief shown first, detailed expandable below
-5. **PWA magic** → Service worker caches assets for instant reopens
+1. **User speaks, types, or pastes a URL** → Web Speech API, the textarea, or `/api/article` extraction
+2. **User picks an AI** → provider + model dropdowns (`src/providers.ts` holds the curated registry and call adapters; read the CURATION RULE before adding models)
+3. **The app searches first** → Tavily (keyless) returns a fixed citation set; the reply may cite only from it
+4. **User clicks generate** → two parallel calls: the message and the honest check (sequential for local models)
+5. **Results display** → one sendable message plus the weak link; the briefing is a third call, made only if opened
+6. **PWA magic** → Service worker caches assets for instant reopens
 
 ---
 
@@ -147,9 +149,10 @@ Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 ## 💰 Cost & Performance
 
 ### Pricing
-- Uses Claude Haiku 4.5 (cheapest Claude model: $1/MTok input, $5/MTok output)
-- Cost per rebuttal pair: well under a cent
-- Completely free until you use it!
+- Free with no account at all: the local in-browser models (WebLLM)
+- Free with a free key: Gemini, Groq, and the OpenRouter Nemotron models
+- Paid: a fraction of a cent (Qwen3.7 Flash, GPT-OSS 120B, DeepSeek V4 Pro) up to
+  ~16¢ for the most capable option (Claude Fable 5); shown live before you generate
 
 ### Performance
 - First load: ~2-3 seconds (downloads assets)
@@ -162,16 +165,19 @@ Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 ## 🔒 Security Details
 
 ### API Key Management
-- Stored in browser's `localStorage`
-- Never leaves the user's device except to Anthropic API
+- Stored in browser's `localStorage`, one entry per provider (`api_key_<id>`)
+- Sent only to the provider it belongs to — never to this app's own endpoints
 - User can change anytime via "Change API Key" button
-- Users can revoke keys at `console.anthropic.com`
+- Revoke at the provider's own console
 
 ### Data Privacy
-- Transcripts sent only to Anthropic API
-- No third-party analytics or tracking
-- No server logs on your side
-- Compliant with GDPR (no PII collection)
+- Argument text goes to: the chosen AI provider, and Tavily as the search query
+  (unless sourcing is switched off). With the local in-browser model it goes nowhere
+- `/api/article` receives the URL only, in URL mode — never typed text
+- `/api/share` receives content only when the user clicks share; the private briefing
+  and weak-link note are never published
+- Audio never leaves the browser's own speech recognition
+- No third-party analytics or tracking, and no server logs on your side
 
 ---
 
@@ -197,8 +203,9 @@ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 ### Add Icons
 See `public/ICONS.md` for creating PWA icons
 
-### Modify Rebuttal Prompts
-Edit `src/App.tsx` - look for the `generateRebuttal()` function
+### Modify the Prompts
+Edit `src/prompts.ts` — but read [CONSTITUTION.md](CONSTITUTION.md) first; every rule
+in there traces to research on what actually changes someone's mind.
 
 ---
 
@@ -255,10 +262,11 @@ included in `public/`. See `public/ICONS.md` to regenerate them.
 - **React 18** - UI framework
 - **TypeScript** - Type safety
 - **Vite** - Lightning-fast build tool
-- **Claude Haiku 4.5** - AI rebuttal generation
+- **6 AI providers, 16 curated models** - reply generation (BYO key, browser-direct)
+- **Tavily** - keyless web search, so every model can cite real sources
 - **Web Speech API** - Voice recognition
 - **Service Workers** - PWA offline support
-- **Netlify/Vercel** - Free hosting
+- **Cloudflare Pages + Pages Functions** - hosting, article extraction, share links
 
 ---
 

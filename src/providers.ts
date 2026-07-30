@@ -32,7 +32,7 @@ export interface ModelOption {
   blurb?: string
 }
 
-export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'cohere' | 'webllm'
+export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'webllm'
 
 export interface Provider {
   id: string
@@ -51,7 +51,33 @@ export interface Provider {
   note?: string
 }
 
-// Pricing and model IDs verified against provider documentation, 2026-07-28.
+// Pricing and model IDs verified against the providers' live /models endpoints, 2026-07-30.
+//
+// CURATION RULE — read this before adding a model.
+//
+// This app writes one message intended to change one real person's mind. The system
+// prompt is long and almost entirely negative constraints: a fixed eight-step structure,
+// plain prose with no markdown, a list of banned phrases, and citations drawn only from a
+// supplied set. Following that is a frontier-model capability. A model that cannot hold it
+// does not produce a slightly worse reply — it produces bullet points, "Actually,", and an
+// invented statistic, in a message the user may send to their father-in-law.
+//
+// So the bar for inclusion is not "does the API work." It is:
+//
+//   1. Does it hold a long negative-constraint prompt? (rules out anything under ~30B)
+//   2. Does it earn its slot against everything else here on price AND quality?
+//   3. Has it actually worked in this app?
+//
+// Anything reachable through another entry at the same or better price is redundant, not
+// choice. Native web search is NOT a selection criterion any more: Tavily grounds every
+// provider (see src/search.ts), and the model's own search runs only when Tavily returns
+// nothing. The ↻ Refresh button still exposes each provider's full live catalog for anyone
+// who wants to go off-menu, so cutting a model here removes a recommendation, not access.
+//
+// The one deliberate exception is the local WebLLM entries, which are far below that bar.
+// They are the only way to use this app with no key and no text leaving the device, which
+// is worth keeping for a genuinely private dispute — so they are held to a different
+// standard and labelled honestly about it rather than quietly recommended.
 export const PROVIDERS: Provider[] = [
   {
     id: 'anthropic',
@@ -68,25 +94,16 @@ export const PROVIDERS: Provider[] = [
         inPrice: 1,
         outPrice: 5,
         search: true,
-        blurb: 'Quick and inexpensive, answers directly without hidden reasoning — a solid everyday default',
+        blurb: 'Answers directly with no hidden reasoning, so it is fast and predictable — the everyday default',
       },
       {
         id: 'claude-sonnet-5',
-        label: 'Claude Sonnet 5',
+        label: 'Claude Sonnet 5 (recommended)',
         inPrice: 2,
         outPrice: 10,
         reasoning: true,
         search: true,
-        blurb: 'Balanced pick: reasons carefully about the argument without the cost of the largest models',
-      },
-      {
-        id: 'claude-opus-5',
-        label: 'Claude Opus 5',
-        inPrice: 5,
-        outPrice: 25,
-        reasoning: true,
-        search: true,
-        blurb: 'Strong at picking apart flawed logic and spotting the weak joint in an argument',
+        blurb: 'The best balance here — holds the tone rules and the structure while thinking the argument through',
       },
       {
         id: 'claude-fable-5',
@@ -95,10 +112,10 @@ export const PROVIDERS: Provider[] = [
         outPrice: 50,
         reasoning: true,
         search: true,
-        blurb: 'The most capable option — best for nuanced arguments where the rebuttal has to be airtight',
+        blurb: 'Best judgement of register and what this particular reader will accept — for messages that matter',
       },
     ],
-    defaultModel: 'claude-haiku-4-5',
+    defaultModel: 'claude-sonnet-5',
     note: 'Claude Sonnet 5 is $2/$10 per Mtok as introductory pricing through 2026-08-31, then $3/$15.',
   },
   {
@@ -113,14 +130,13 @@ export const PROVIDERS: Provider[] = [
     models: [
       {
         id: 'gemini-3.1-flash-lite',
-        label: 'Gemini 3.1 Flash-Lite (cheapest)',
+        label: 'Gemini 3.1 Flash-Lite (cheapest capable)',
         inPrice: 0.25,
         outPrice: 1.5,
         reasoning: true,
         search: true,
-        blurb: 'Cheapest way to get a grounded rebuttal — searches the web for real sources on a free-tier key',
+        blurb: 'The cheapest model here that still holds the structure, and it runs on a free key',
       },
-      { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', inPrice: 0.3, outPrice: 2.5, reasoning: true, search: true },
       {
         id: 'gemini-3.6-flash',
         label: 'Gemini 3.6 Flash (flagship)',
@@ -128,14 +144,11 @@ export const PROVIDERS: Provider[] = [
         outPrice: 7.5,
         reasoning: true,
         search: true,
-        blurb: 'Google’s current flagship — strong reasoning plus Google Search grounding for verifiable links',
+        blurb: 'Google’s flagship — strong on long arguments, and still available on a free-tier key',
       },
-      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', inPrice: 1.5, outPrice: 9, reasoning: true, search: true },
-      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)', inPrice: 0.5, outPrice: 3, reasoning: true, search: true },
-      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (preview — no free tier)', inPrice: 2, outPrice: 12, reasoning: true, search: true },
     ],
     defaultModel: 'gemini-3.1-flash-lite',
-    note: 'Free tier available on every model except Gemini 3.1 Pro — a free key will be rejected by that one.',
+    note: 'Both models work on a free key — the best free option if you do not want to pay for anything.',
   },
   {
     id: 'groq',
@@ -148,20 +161,24 @@ export const PROVIDERS: Provider[] = [
     baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
     modelsUrl: 'https://api.groq.com/openai/v1/models',
     models: [
-      { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (cheapest)', inPrice: 0.05, outPrice: 0.08 },
       {
         id: 'llama-3.3-70b-versatile',
         label: 'Llama 3.3 70B Versatile',
         inPrice: 0.59,
         outPrice: 0.79,
-        blurb: 'Near-instant replies with no hidden reasoning — the most reliable pick when you want speed',
+        blurb: 'Replies in a second or two with no reasoning tokens to pay for — the fastest way to a draft',
       },
-      { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', inPrice: 0.075, outPrice: 0.3, reasoning: true },
-      { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B (flagship)', inPrice: 0.15, outPrice: 0.6, reasoning: true },
-      { id: 'qwen/qwen3.6-27b', label: 'Qwen 3.6 27B', inPrice: 0.6, outPrice: 3, reasoning: true },
+      {
+        id: 'openai/gpt-oss-120b',
+        label: 'GPT-OSS 120B (flagship)',
+        inPrice: 0.15,
+        outPrice: 0.6,
+        reasoning: true,
+        blurb: 'Open-weight reasoning at almost no cost, still fast — the value pick when you want it thought through',
+      },
     ],
     defaultModel: 'llama-3.3-70b-versatile',
-    note: 'Free tier with a free key — extremely fast inference.',
+    note: 'Free tier with a free key — by far the fastest responses of any provider here.',
   },
   {
     id: 'openrouter',
@@ -175,49 +192,56 @@ export const PROVIDERS: Provider[] = [
     modelsUrl: 'https://openrouter.ai/api/v1/models',
     models: [
       {
-        id: 'meta-llama/llama-3.3-70b-instruct',
-        label: 'Llama 3.3 70B (no reasoning, reliable)',
-        inPrice: 0.13,
-        outPrice: 0.4,
-        blurb: 'Cheap and dependable, answers directly — a good default when you just want a fast rebuttal',
+        id: 'nvidia/nemotron-3-super-120b-a12b:free',
+        label: 'Nemotron 3 Super 120B (FREE)',
+        inPrice: 0,
+        outPrice: 0,
+        reasoning: true,
+        blurb: 'Genuinely free and large enough to follow the rules — costs nothing but can be rate-limited at busy times',
       },
-      { id: 'qwen/qwen3.7-flash', label: 'Qwen3.7 Flash (near-free)', inPrice: 0.03, outPrice: 0.13, reasoning: true },
-      { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', label: 'Nemotron 3 Ultra 550B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
-      { id: 'nvidia/nemotron-3-super-120b-a12b:free', label: 'Nemotron 3 Super 120B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
-      { id: 'nvidia/nemotron-3-nano-30b-a3b:free', label: 'Nemotron 3 Nano 30B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
-      { id: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
-      { id: 'openai/gpt-oss-20b:free', label: 'GPT-OSS 20B (FREE)', inPrice: 0, outPrice: 0, reasoning: true },
-      { id: 'perplexity/sonar', label: 'Perplexity Sonar (built for citations)', inPrice: 1, outPrice: 1, search: true, blurb: 'Purpose-built for web-sourced answers — the cheapest way to get a rebuttal backed by real links' },
-      { id: 'perplexity/sonar-pro', label: 'Perplexity Sonar Pro', inPrice: 3, outPrice: 15, search: true },
-      { id: 'openai/gpt-5.6-luna', label: 'GPT-5.6 Luna', inPrice: 0.5, outPrice: 3, reasoning: true },
-      { id: 'openai/gpt-5.6-terra', label: 'GPT-5.6 Terra', inPrice: 1.25, outPrice: 7.5, reasoning: true },
-      { id: 'openai/gpt-5.6-sol', label: 'GPT-5.6 Sol (most capable GPT)', inPrice: 5, outPrice: 30, reasoning: true },
-      { id: 'anthropic/claude-sonnet-5', label: 'Claude Sonnet 5', inPrice: 2, outPrice: 10, reasoning: true },
-      { id: 'anthropic/claude-opus-5', label: 'Claude Opus 5', inPrice: 5, outPrice: 25, reasoning: true },
-      { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash', inPrice: 1.5, outPrice: 7.5, reasoning: true },
-      { id: 'x-ai/grok-4.5', label: 'Grok 4.5', inPrice: 2, outPrice: 6, reasoning: true },
-      { id: 'moonshotai/kimi-k3', label: 'Kimi K3', inPrice: 3, outPrice: 15, reasoning: true },
+      {
+        id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        label: 'Nemotron 3 Ultra 550B (FREE)',
+        inPrice: 0,
+        outPrice: 0,
+        reasoning: true,
+        blurb: 'The most capable free model anywhere — slower, and rate-limited, but you pay nothing',
+      },
+      {
+        id: 'qwen/qwen3.7-flash',
+        label: 'Qwen3.7 Flash (near-free)',
+        inPrice: 0.03,
+        outPrice: 0.13,
+        reasoning: true,
+        blurb: 'Costs a fraction of a cent per reply — the paid fallback when the free models are busy',
+      },
+      {
+        id: 'openai/gpt-5.6-luna',
+        label: 'GPT-5.6 Luna (cheapest GPT)',
+        inPrice: 0.5,
+        outPrice: 3,
+        reasoning: true,
+        blurb: 'GPT phrasing at a low price — natural, conversational register that rarely sounds like a template',
+      },
+      {
+        id: 'openai/gpt-5.6-terra',
+        label: 'GPT-5.6 Terra',
+        inPrice: 1.25,
+        outPrice: 7.5,
+        reasoning: true,
+        blurb: 'The standard GPT — reliably readable prose and careful handling of a concession you have to answer',
+      },
+      {
+        id: 'x-ai/grok-4.5',
+        label: 'Grok 4.5',
+        inPrice: 2,
+        outPrice: 6,
+        reasoning: true,
+        blurb: 'Blunter than the others and less prone to hedging — useful for a reader who distrusts polish',
+      },
     ],
-    defaultModel: 'meta-llama/llama-3.3-70b-instruct',
-    note: 'One free key unlocks genuinely free models, plus paid access to GPT, Claude, Gemini and 350+ others. Refresh the model list to pull the full live catalog with current prices.',
-  },
-  {
-    id: 'mistral',
-    label: 'Mistral (free tier + paid)',
-    kind: 'openai',
-    requiresKey: true,
-    keyIsFree: true,
-    keyUrl: 'https://console.mistral.ai/api-keys',
-    baseUrl: 'https://api.mistral.ai/v1/chat/completions',
-    modelsUrl: 'https://api.mistral.ai/v1/models',
-    models: [
-      { id: 'mistral-small-latest', label: 'Mistral Small 4', inPrice: 0.15, outPrice: 0.6, reasoning: true },
-      { id: 'mistral-large-latest', label: 'Mistral Large 3', inPrice: 0.5, outPrice: 1.5 },
-      { id: 'mistral-medium-latest', label: 'Mistral Medium 3.5 (flagship)', inPrice: 1.5, outPrice: 7.5, reasoning: true },
-      { id: 'magistral-medium-latest', label: 'Magistral Medium (reasoning)', inPrice: 2, outPrice: 5, reasoning: true },
-    ],
-    defaultModel: 'mistral-small-latest',
-    note: 'Free experimentation tier available with a free key.',
+    defaultModel: 'nvidia/nemotron-3-super-120b-a12b:free',
+    note: 'One free key unlocks the free models above and the only browser-reachable route to GPT. Press ↻ Refresh to load OpenRouter’s full live catalog (350+ models) with current prices.',
   },
   {
     id: 'deepseek',
@@ -229,63 +253,17 @@ export const PROVIDERS: Provider[] = [
     baseUrl: 'https://api.deepseek.com/chat/completions',
     modelsUrl: 'https://api.deepseek.com/models',
     models: [
-      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', inPrice: 0.14, outPrice: 0.28, reasoning: true },
-      { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro (flagship)', inPrice: 0.435, outPrice: 0.87, reasoning: true },
+      {
+        id: 'deepseek-v4-pro',
+        label: 'DeepSeek V4 Pro (flagship)',
+        inPrice: 0.435,
+        outPrice: 0.87,
+        reasoning: true,
+        blurb: 'Frontier-level reasoning for roughly a tenth of the price — the best value for a difficult argument',
+      },
     ],
-    defaultModel: 'deepseek-v4-flash',
-    note: 'Thinking mode is on by default and cannot be disabled — budgets are set generously to compensate.',
-  },
-  {
-    id: 'xai',
-    label: 'xAI Grok (paid)',
-    kind: 'openai',
-    requiresKey: true,
-    keyUrl: 'https://console.x.ai',
-    keyPlaceholder: 'xai-…',
-    baseUrl: 'https://api.x.ai/v1/chat/completions',
-    modelsUrl: 'https://api.x.ai/v1/models',
-    models: [
-      { id: 'grok-4.20-0309-non-reasoning', label: 'Grok 4.20 (no reasoning, fastest)', inPrice: 1.25, outPrice: 2.5 },
-      { id: 'grok-4.3', label: 'Grok 4.3', inPrice: 1.25, outPrice: 2.5, reasoning: true },
-      { id: 'grok-4.5', label: 'Grok 4.5 (flagship)', inPrice: 2, outPrice: 6, reasoning: true },
-      { id: 'grok-4.20-0309-reasoning', label: 'Grok 4.20 (reasoning)', inPrice: 1.25, outPrice: 2.5, reasoning: true },
-    ],
-    defaultModel: 'grok-4.20-0309-non-reasoning',
-  },
-  {
-    id: 'cohere',
-    label: 'Cohere (free trial + paid)',
-    kind: 'cohere',
-    requiresKey: true,
-    keyIsFree: true,
-    keyUrl: 'https://dashboard.cohere.com/api-keys',
-    baseUrl: 'https://api.cohere.com/v2/chat',
-    modelsUrl: 'https://api.cohere.com/v1/models',
-    models: [
-      { id: 'command-r7b-12-2024', label: 'Command R7B (cheapest)', inPrice: 0.0375, outPrice: 0.15 },
-      { id: 'command-r-08-2024', label: 'Command R', inPrice: 0.15, outPrice: 0.6 },
-      { id: 'command-a-03-2025', label: 'Command A (flagship)', inPrice: 2.5, outPrice: 10 },
-    ],
-    defaultModel: 'command-a-03-2025',
-    note: 'Free trial keys available with rate limits.',
-  },
-  {
-    id: 'together',
-    label: 'Together AI (paid)',
-    kind: 'openai',
-    requiresKey: true,
-    keyUrl: 'https://api.together.ai/settings/api-keys',
-    baseUrl: 'https://api.together.xyz/v1/chat/completions',
-    modelsUrl: 'https://api.together.xyz/v1/models',
-    models: [
-      { id: 'MiniMaxAI/MiniMax-M3', label: 'MiniMax M3 (cheapest)', inPrice: 0.3, outPrice: 1.2, reasoning: true },
-      { id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', label: 'Llama 3.3 70B Turbo (no reasoning)', inPrice: 1.04, outPrice: 1.04 },
-      { id: 'Qwen/Qwen3.7-Max', label: 'Qwen3.7 Max', inPrice: 1.25, outPrice: 3.75, reasoning: true },
-      { id: 'zai-org/GLM-5.2', label: 'GLM-5.2', inPrice: 1.4, outPrice: 4.4, reasoning: true },
-      { id: 'deepseek-ai/DeepSeek-V4-Pro', label: 'DeepSeek V4 Pro', inPrice: 1.74, outPrice: 3.48, reasoning: true },
-      { id: 'moonshotai/Kimi-K3', label: 'Kimi K3 (flagship)', inPrice: 3, outPrice: 15, reasoning: true },
-    ],
-    defaultModel: 'MiniMaxAI/MiniMax-M3',
+    defaultModel: 'deepseek-v4-pro',
+    note: 'Thinking mode is always on and cannot be disabled — budgets are set generously to compensate.',
   },
   {
     id: 'webllm',
@@ -294,19 +272,22 @@ export const PROVIDERS: Provider[] = [
     requiresKey: false,
     models: [
       {
-        id: 'Llama-3.2-1B-Instruct-q4f32_1-MLC',
-        label: 'Llama 3.2 1B (~900 MB download)',
+        id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC',
+        label: 'Qwen 2.5 7B (~4.5 GB download)',
         inPrice: 0,
         outPrice: 0,
-        blurb: 'Runs on your own GPU — free, private, and works offline once downloaded; keep arguments short',
+        blurb: 'Runs on your own GPU — nothing is sent anywhere, which matters if the argument is personal',
       },
-      { id: 'Llama-3.2-3B-Instruct-q4f32_1-MLC', label: 'Llama 3.2 3B (~2.3 GB download)', inPrice: 0, outPrice: 0 },
-      { id: 'Phi-3.5-mini-instruct-q4f16_1-MLC', label: 'Phi 3.5 Mini (~2.5 GB download)', inPrice: 0, outPrice: 0 },
-      { id: 'gemma-2-2b-it-q4f16_1-MLC', label: 'Gemma 2 2B (~1.5 GB download)', inPrice: 0, outPrice: 0 },
-      { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 7B (~4.5 GB download)', inPrice: 0, outPrice: 0 },
+      {
+        id: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+        label: 'Llama 3.2 3B (~2.3 GB — low-spec fallback)',
+        inPrice: 0,
+        outPrice: 0,
+        blurb: 'For machines that cannot run the 7B. Small enough that it will often ignore the tone and format rules',
+      },
     ],
-    defaultModel: 'Llama-3.2-1B-Instruct-q4f32_1-MLC',
-    note: 'Runs entirely in your browser via WebGPU — completely free, no API key, private. The model downloads once and is cached. Requires a WebGPU browser (Chrome/Edge; recent Safari).',
+    defaultModel: 'Qwen2.5-7B-Instruct-q4f16_1-MLC',
+    note: 'Runs entirely in your browser via WebGPU — free, no API key, and the text never leaves your device. Downloads once, then cached. Needs a WebGPU browser (Chrome/Edge; recent Safari). Local models are far weaker than the cloud options: expect to edit the result.',
   },
 ]
 
@@ -358,9 +339,23 @@ export function canSearchWeb(provider: Provider, model: ModelOption | undefined)
 
 const CATALOG_KEY = (providerId: string) => `models_cache_${providerId}`
 
+/**
+ * Bump this whenever the curated catalog changes in a way users must receive.
+ *
+ * modelsFor prefers a cached catalog unconditionally, so without a version stamp a
+ * single ↻ Refresh press would opt that browser out of curation permanently — it would
+ * keep every model later removed for being unusable, and keep selecting them. The stamp
+ * is what lets a curation change actually reach the people who use the model picker most.
+ */
+const CATALOG_VERSION = 2
+
+/** Prices and line-ups drift. Past this, the curated list is the better answer. */
+const CATALOG_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
 export interface CachedCatalog {
   fetchedAt: number
   models: ModelOption[]
+  version?: number
 }
 
 export function loadCachedCatalog(providerId: string): CachedCatalog | null {
@@ -368,14 +363,18 @@ export function loadCachedCatalog(providerId: string): CachedCatalog | null {
     const raw = localStorage.getItem(CATALOG_KEY(providerId))
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed?.models) && parsed.models.length ? parsed : null
+    if (!Array.isArray(parsed?.models) || !parsed.models.length) return null
+    // Entries written before versioning, or by an older curation, are discarded
+    if (parsed.version !== CATALOG_VERSION) return null
+    if (typeof parsed.fetchedAt !== 'number' || Date.now() - parsed.fetchedAt > CATALOG_TTL_MS) return null
+    return parsed
   } catch {
     return null
   }
 }
 
 export function saveCachedCatalog(providerId: string, models: ModelOption[]): CachedCatalog {
-  const entry = { fetchedAt: Date.now(), models }
+  const entry = { fetchedAt: Date.now(), models, version: CATALOG_VERSION }
   try {
     localStorage.setItem(CATALOG_KEY(providerId), JSON.stringify(entry))
   } catch {
@@ -510,16 +509,27 @@ export function costOf(model: ModelOption | undefined, usage: Usage | null): num
 export const estimateTokens = (text: string) => Math.ceil(text.length / 4)
 
 /**
- * Pre-flight cost estimate for one brief + one detailed rebuttal.
- * Output is assumed to be a typical answer length plus, for reasoning models,
- * the hidden thinking they bill as output.
+ * Pre-flight estimate for the two eager calls a reply costs: the message and the
+ * honest check. The briefing is a third call, but it only runs if the user opens it,
+ * so it is deliberately excluded — the estimate should not charge for what may not happen.
+ *
+ * The system prompts dominate the input here (src/prompts.ts is ~1,200 words before the
+ * retrieved sources are appended), so they are counted explicitly rather than waved at.
  */
+// Measured by rendering the real prompts and applying estimateTokens, not guessed.
+const MESSAGE_SYSTEM_TOKENS = 1160 // messagePrompt with no sources attached
+const SOURCES_BLOCK_TOKENS = 850 // six results at search.ts's 400-char snippet cap
+const CHECK_SYSTEM_TOKENS = 490 // honestCheckPrompt
+
 export function estimateCost(model: ModelOption | undefined, argument: string): number | null {
   if (!model || model.unknownPrice) return null
-  const promptTokens = estimateTokens(argument) + 120 // + system prompt
-  const inputTokens = promptTokens * 2 // brief + detailed calls
-  const visibleOut = 120 + 550
-  const thinkingOut = model.reasoning ? 900 : 0
+  const argumentTokens = estimateTokens(argument)
+  const inputTokens =
+    argumentTokens + MESSAGE_SYSTEM_TOKENS + SOURCES_BLOCK_TOKENS + (argumentTokens + CHECK_SYSTEM_TOKENS)
+  // A sendable message plus a short private check
+  const visibleOut = 500 + 250
+  // Hidden thinking is billed as output and is spent on both calls
+  const thinkingOut = model.reasoning ? 1800 : 0
   return (inputTokens / 1e6) * model.inPrice + ((visibleOut + thinkingOut) / 1e6) * model.outPrice
 }
 
@@ -690,7 +700,7 @@ async function callAnthropic(args: GenerateArgs, attempt: number): Promise<Gener
   }
 }
 
-// --- OpenAI-compatible (OpenRouter, Groq, Mistral, DeepSeek, xAI, Together) --
+// --- OpenAI-compatible (OpenRouter, Groq, DeepSeek) -------------------------
 
 /** Provider-specific knobs that genuinely reduce reasoning spend. */
 function reasoningControls(provider: Provider, model: ModelOption, allowDisable: boolean): Record<string, unknown> {
@@ -701,15 +711,11 @@ function reasoningControls(provider: Provider, model: ModelOption, allowDisable:
     return { reasoning: { effort: 'none' } }
   }
   if (provider.id === 'groq') {
-    // gpt-oss cannot disable reasoning — "low" is its floor. Qwen accepts "none".
+    // gpt-oss cannot disable reasoning — "low" is its floor.
     if (model.id.startsWith('openai/gpt-oss')) return { reasoning_effort: 'low' }
-    if (model.id.startsWith('qwen')) return { reasoning_effort: 'none' }
     return {}
   }
-  if (provider.id === 'mistral' && /^mistral-(small|medium)/.test(model.id)) {
-    return { reasoning_effort: 'none' }
-  }
-  // DeepSeek/xAI/Together expose no reliable disable switch — budget headroom only.
+  // DeepSeek exposes no reliable disable switch — budget headroom only.
   return {}
 }
 
@@ -868,45 +874,6 @@ async function callGemini(args: GenerateArgs, attempt: number): Promise<Generate
   return { text, usage, citations }
 }
 
-// --- Cohere -----------------------------------------------------------------
-
-async function callCohere(args: GenerateArgs, attempt: number): Promise<GenerateResult> {
-  const { provider, model, apiKey, system, userContent, length } = args
-  const response = await fetch(provider.baseUrl!, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: model.id,
-      max_tokens: budgetFor(model, length, attempt),
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: userContent },
-      ],
-    }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  })
-
-  const data = await parseJsonSafe(response)
-  if (!response.ok) throw new Error(providerErrorMessage(data, response.status))
-
-  const usage: Usage = {
-    inputTokens: data?.usage?.tokens?.input_tokens ?? data?.usage?.billed_units?.input_tokens ?? 0,
-    outputTokens: data?.usage?.tokens?.output_tokens ?? data?.usage?.billed_units?.output_tokens ?? 0,
-  }
-
-  const text = (data?.message?.content ?? [])
-    .filter((block: any) => block?.type === 'text')
-    .map((block: any) => block.text)
-    .join('')
-    .trim()
-
-  if (!text) {
-    if (data?.finish_reason === 'MAX_TOKENS') throw new ReasoningStarvationError()
-    throw new Error('The model returned no text. Please try again.')
-  }
-  return { text, usage }
-}
-
 // --- WebLLM (in-browser) ----------------------------------------------------
 
 // The engine is a module-level singleton so the loaded model stays in memory
@@ -962,8 +929,6 @@ async function dispatch(args: GenerateArgs, attempt: number): Promise<GenerateRe
       return callAnthropic(args, attempt)
     case 'gemini':
       return callGemini(args, attempt)
-    case 'cohere':
-      return callCohere(args, attempt)
     case 'webllm':
       return callWebLLM(args)
     default:

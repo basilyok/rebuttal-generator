@@ -231,7 +231,7 @@ const markerPattern = (name: string) =>
 /**
  * Pull a delimited section out of a model response.
  *
- * Tolerant by design: models vary, and the local 1B option will often ignore the format
+ * Tolerant by design: models vary, and the small local models will often ignore the format
  * entirely. A missing section is normal, never an error.
  */
 export function section(text: string, name: string): string {
