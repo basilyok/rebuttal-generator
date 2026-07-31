@@ -35,16 +35,29 @@
       // in the capture phase to see it. On one, unregister every registration and
       // reload once; sessionStorage caps it at one attempt per tab so a genuine
       // outage degrades to a blank page instead of a reload loop.
+      //
+      // MUST be scoped to our own /assets/ build output, not "any module script
+      // on the page" — Cloudflare injects its own Web Analytics beacon as
+      // type="module" from static.cloudflareinsights.com, and that domain is on
+      // most tracker blocklists (it is what Edge's Tracking Prevention blocks by
+      // default for every user, out of the box). An unscoped check fires this
+      // recovery path on a blocked analytics call that has nothing to do with
+      // whether the app itself loaded.
+      const isOurBuildAsset = (el) => {
+        const url = el.src || el.href
+        if (!url) return false
+        try {
+          const u = new URL(url, location.href)
+          return u.origin === location.origin && u.pathname.startsWith('/assets/')
+        } catch {
+          return false
+        }
+      }
       if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
         window.addEventListener(
           'error',
           (event) => {
-            const el = event.target
-            const isCriticalAsset =
-              el instanceof HTMLScriptElement
-                ? el.type === 'module'
-                : el instanceof HTMLLinkElement && el.rel === 'stylesheet'
-            if (!isCriticalAsset) return
+            if (!isOurBuildAsset(event.target)) return
             if (sessionStorage.getItem('sw-recovery-attempted')) return
             sessionStorage.setItem('sw-recovery-attempted', '1')
             navigator.serviceWorker
