@@ -18,6 +18,45 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Self-heal from a service worker that corrupted the load of the app itself.
+      //
+      // This has to be a plain script that runs before the module tag below, not
+      // code inside the app — that is the entire point. The in-app "update
+      // available" banner (App.tsx) is what normally delivers a service-worker
+      // fix, but it is compiled into the very bundle this listens for. If a bad
+      // worker breaks that bundle's load, the banner that would fix it never gets
+      // a chance to run, and the tab is stuck until the user manually clears
+      // storage. This script is the one piece of recovery logic guaranteed to run
+      // regardless of whether the main app does.
+      //
+      // A failed <script type="module"> or stylesheet <link> fires a plain
+      // 'error' event on the element — it does not bubble, so this has to listen
+      // in the capture phase to see it. On one, unregister every registration and
+      // reload once; sessionStorage caps it at one attempt per tab so a genuine
+      // outage degrades to a blank page instead of a reload loop.
+      if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        window.addEventListener(
+          'error',
+          (event) => {
+            const el = event.target
+            const isCriticalAsset =
+              el instanceof HTMLScriptElement
+                ? el.type === 'module'
+                : el instanceof HTMLLinkElement && el.rel === 'stylesheet'
+            if (!isCriticalAsset) return
+            if (sessionStorage.getItem('sw-recovery-attempted')) return
+            sessionStorage.setItem('sw-recovery-attempted', '1')
+            navigator.serviceWorker
+              .getRegistrations()
+              .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+              .then(() => location.reload())
+              .catch(() => location.reload())
+          },
+          true
+        )
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       // Register service worker for PWA support (skip in local dev so the SW
