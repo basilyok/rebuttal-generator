@@ -1,10 +1,29 @@
 // AI provider registry, call adapters, and cost accounting.
 //
 // Every cloud provider here was empirically verified to allow CORS calls from
-// the browser (this is a client-side-only app — providers that block browser
-// CORS, like OpenAI's direct API, cannot be used; OpenAI models are available
-// via OpenRouter instead). "webllm" runs models fully in-browser via WebGPU —
-// free, no API key, private.
+// the browser. This is a client-side-only app: there is no backend to proxy
+// through, so a provider that does not send CORS headers cannot be offered at
+// all, however good its models are.
+//
+// OPENAI IS THE STANDING EXCEPTION, and the reason is subtle enough to be worth
+// recording so nobody re-litigates it from a half-test. api.openai.com DOES
+// answer browser requests and its preflight explicitly allows what we need:
+//
+//   OPTIONS /v1/chat/completions
+//     Access-Control-Allow-Origin:  https://rebuttal.m36x.com
+//     Access-Control-Allow-Headers: authorization,content-type
+//     Access-Control-Allow-Methods: GET, OPTIONS, POST
+//
+// The block is on the ACTUAL response, not the preflight: send the request with
+// no Authorization header and it comes back with `Access-Control-Allow-Origin: *`,
+// but add an Authorization header and that header disappears, so the browser
+// refuses to let us read the body. A keyed call can therefore never be read from
+// a page, which is exactly the point — it stops sites leaking users' OpenAI keys.
+// The visible symptom is a bare "TypeError: Failed to fetch" with a preflight that
+// looks fine, so testing OPTIONS alone will mislead you. GPT is reached through
+// OpenRouter instead (see that provider's entry).
+//
+// "webllm" runs models fully in-browser via WebGPU — free, no API key, private.
 //
 // REASONING MODELS: most current models emit hidden reasoning tokens that are
 // drawn from the same output budget as the visible answer, and are emitted
@@ -106,6 +125,15 @@ export const PROVIDERS: Provider[] = [
         blurb: 'The best balance here — holds the tone rules and the structure while thinking the argument through',
       },
       {
+        id: 'claude-opus-5',
+        label: 'Claude Opus 5 (deep reasoning)',
+        inPrice: 5,
+        outPrice: 25,
+        reasoning: true,
+        search: true,
+        blurb: 'Thinks a tangled argument through more carefully than Sonnet, at half Fable’s price',
+      },
+      {
         id: 'claude-fable-5',
         label: 'Claude Fable 5 (most capable)',
         inPrice: 10,
@@ -192,56 +220,167 @@ export const PROVIDERS: Provider[] = [
     modelsUrl: 'https://openrouter.ai/api/v1/models',
     models: [
       {
-        id: 'nvidia/nemotron-3-super-120b-a12b:free',
-        label: 'Nemotron 3 Super 120B (FREE)',
-        inPrice: 0,
-        outPrice: 0,
-        reasoning: true,
-        blurb: 'Genuinely free and large enough to follow the rules — costs nothing but can be rate-limited at busy times',
-      },
-      {
         id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
         label: 'Nemotron 3 Ultra 550B (FREE)',
         inPrice: 0,
         outPrice: 0,
         reasoning: true,
-        blurb: 'The most capable free model anywhere — slower, and rate-limited, but you pay nothing',
+        blurb: 'The most capable genuinely free model anywhere — slower and rate-limited, but you pay nothing',
       },
       {
-        id: 'qwen/qwen3.7-flash',
-        label: 'Qwen3.7 Flash (near-free)',
-        inPrice: 0.03,
-        outPrice: 0.13,
-        reasoning: true,
-        blurb: 'Costs a fraction of a cent per reply — the paid fallback when the free models are busy',
+        // Deliberately a SECOND free model on a different upstream. Free pools get
+        // throttled, and one free option is a single point of failure for the users
+        // least able to fall back to a paid one.
+        id: 'google/gemma-4-31b-it:free',
+        label: 'Gemma 4 31B (FREE — backup)',
+        inPrice: 0,
+        outPrice: 0,
+        blurb: 'A second free option on a different provider, for when the free Nemotron pool is busy',
       },
       {
         id: 'openai/gpt-5.6-luna',
         label: 'GPT-5.6 Luna (cheapest GPT)',
-        inPrice: 0.5,
-        outPrice: 3,
+        inPrice: 0.1,
+        outPrice: 0.6,
         reasoning: true,
-        blurb: 'GPT phrasing at a low price — natural, conversational register that rarely sounds like a template',
+        blurb: 'GPT phrasing for about a tenth of a cent a reply — the best value anywhere in this catalog',
+      },
+      {
+        // Route diversity, not price: every GPT entry here is moderated upstream, and
+        // this app exists to argue about contested things. This is the escape hatch.
+        id: 'minimax/minimax-m3',
+        label: 'MiniMax M3 (unmoderated)',
+        inPrice: 0.3,
+        outPrice: 1.2,
+        reasoning: true,
+        blurb: 'For a topic a moderation filter refuses — every GPT option here is moderated, this one is not',
       },
       {
         id: 'openai/gpt-5.6-terra',
         label: 'GPT-5.6 Terra',
-        inPrice: 1.25,
-        outPrice: 7.5,
+        inPrice: 1,
+        outPrice: 6,
         reasoning: true,
         blurb: 'The standard GPT — reliably readable prose and careful handling of a concession you have to answer',
       },
       {
-        id: 'x-ai/grok-4.5',
-        label: 'Grok 4.5',
+        id: 'openai/gpt-5.6-sol',
+        label: 'GPT-5.6 Sol (flagship GPT)',
+        inPrice: 5,
+        outPrice: 30,
+        reasoning: true,
+        blurb: 'OpenAI’s best — worth it when the reader is sharp and the disagreement is the hard kind',
+      },
+    ],
+    defaultModel: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    note: 'One free key unlocks the free models above and the only browser-reachable route to GPT — OpenAI’s own API cannot be called from a web page at all (see the note at the top of this file). Press ↻ Refresh to load OpenRouter’s full live catalog (360+ models) with current prices.',
+  },
+  {
+    id: 'xai',
+    label: 'xAI Grok (paid)',
+    kind: 'openai',
+    requiresKey: true,
+    keyUrl: 'https://console.x.ai',
+    keyPlaceholder: 'xai-…',
+    baseUrl: 'https://api.x.ai/v1/chat/completions',
+    modelsUrl: 'https://api.x.ai/v1/models',
+    models: [
+      {
+        id: 'grok-4.3',
+        label: 'Grok 4.3 (recommended)',
+        inPrice: 1.25,
+        outPrice: 2.5,
+        reasoning: true,
+        blurb: 'Half the price of 4.5 and the only Grok whose thinking can be switched off, so it is the cheap one too',
+      },
+      {
+        id: 'grok-4.20-0309-non-reasoning',
+        label: 'Grok 4.20 (no reasoning)',
+        inPrice: 1.25,
+        outPrice: 2.5,
+        blurb: 'xAI’s lowest-hallucination model, and it cannot spend anything on hidden thinking — good for strict rules',
+      },
+      {
+        id: 'grok-4.5',
+        label: 'Grok 4.5 (flagship)',
         inPrice: 2,
         outPrice: 6,
         reasoning: true,
-        blurb: 'Blunter than the others and less prone to hedging — useful for a reader who distrusts polish',
+        blurb: 'Blunter and less prone to hedging than the others — useful for a reader who distrusts polish',
       },
     ],
-    defaultModel: 'nvidia/nemotron-3-super-120b-a12b:free',
-    note: 'One free key unlocks the free models above and the only browser-reachable route to GPT. Press ↻ Refresh to load OpenRouter’s full live catalog (350+ models) with current prices.',
+    defaultModel: 'grok-4.3',
+    // Grok 4.5 cannot turn reasoning off — the docs say it defaults to "high" and
+    // "reasoning cannot be disabled" — so it silently bills hidden thinking on every
+    // reply. That is why 4.3 is the default rather than the flagship.
+    note: 'Grok 4.5 always thinks before answering and cannot be told not to, so it costs more per reply than its price suggests. Grok 4.3 is the same family for half the price with the thinking switched off.',
+  },
+  {
+    id: 'moonshot',
+    label: 'Moonshot Kimi (paid)',
+    kind: 'openai',
+    requiresKey: true,
+    keyUrl: 'https://platform.kimi.ai/console/api-keys',
+    keyPlaceholder: 'sk-…',
+    // .ai is the international platform; .cn (platform.kimi.com) is a separate product
+    // with separate accounts and CNY billing, and the two reject each other's keys.
+    baseUrl: 'https://api.moonshot.ai/v1/chat/completions',
+    modelsUrl: 'https://api.moonshot.ai/v1/models',
+    models: [
+      {
+        id: 'kimi-k2.6',
+        label: 'Kimi K2.6 (recommended)',
+        inPrice: 0.95,
+        outPrice: 4,
+        reasoning: true,
+        blurb: 'The best balance here, and its thinking can be turned off entirely — a strong reply for about a cent',
+      },
+      {
+        id: 'kimi-k3',
+        label: 'Kimi K3 (flagship)',
+        inPrice: 3,
+        outPrice: 15,
+        reasoning: true,
+        blurb: 'Moonshot’s most capable model — always thinks first, so it is slower and dearer than the price implies',
+      },
+    ],
+    defaultModel: 'kimi-k2.6',
+    note: 'Kimi K3 always thinks before answering and cannot be told not to; the app asks it to think as little as possible, but it still costs more per reply than K2.6.',
+  },
+  {
+    id: 'zai',
+    label: 'Z.ai GLM (paid, cheap)',
+    kind: 'openai',
+    requiresKey: true,
+    keyUrl: 'https://z.ai/manage-apikey/apikey-list',
+    keyPlaceholder: 'your Z.ai key',
+    // api.z.ai is the international platform; open.bigmodel.cn is the separate
+    // China-facing Zhipu product and will reject a z.ai key outright.
+    baseUrl: 'https://api.z.ai/api/paas/v4/chat/completions',
+    // No modelsUrl: Z.ai publishes no documented model-list endpoint, so ↻ Refresh is
+    // hidden for this provider and the two models below are the whole list. That is
+    // also why both are kept rather than just the flagship — here, cutting one really
+    // does remove access rather than just removing a recommendation.
+    models: [
+      {
+        id: 'glm-5.2',
+        label: 'GLM-5.2 (flagship)',
+        inPrice: 1.4,
+        outPrice: 4.4,
+        reasoning: true,
+        blurb: 'Frontier-class for a fraction of frontier prices, and its thinking depth can be turned down',
+      },
+      {
+        id: 'glm-4.7',
+        label: 'GLM-4.7 (cheaper)',
+        inPrice: 0.6,
+        outPrice: 2.2,
+        reasoning: true,
+        blurb: 'Cheaper on paper, but it always thinks and cannot be stopped, so the real gap is smaller than it looks',
+      },
+    ],
+    defaultModel: 'glm-5.2',
+    note: 'GLM-4.7 thinks on every reply and offers no way to switch that off, so its lower price is partly offset by hidden thinking tokens. GLM-5.2 is the better default despite the higher headline rate.',
   },
   {
     id: 'deepseek',
@@ -347,7 +486,7 @@ const CATALOG_KEY = (providerId: string) => `models_cache_${providerId}`
  * keep every model later removed for being unusable, and keep selecting them. The stamp
  * is what lets a curation change actually reach the people who use the model picker most.
  */
-const CATALOG_VERSION = 2
+const CATALOG_VERSION = 3
 
 /** Prices and line-ups drift. Past this, the curated list is the better answer. */
 const CATALOG_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -600,9 +739,36 @@ function dedupeCitations(citations: Citation[]): Citation[] {
 /** A request rejected because this model/account cannot use the search tool. */
 class SearchUnsupportedError extends Error {}
 
+/**
+ * The model spent its whole output budget on hidden thinking and returned nothing.
+ *
+ * It carries the usage of the attempt that failed, and that is the entire point: a
+ * starved attempt is not a free attempt. It is by definition the single most
+ * expensive outcome the budget allows — the provider billed every one of those
+ * thinking tokens — so dropping it makes the app's "actual cost" line under-report
+ * exactly the calls that cost the most. Anything that throws this must pass what
+ * was spent, and generateText folds it into the retry's total.
+ */
 class ReasoningStarvationError extends Error {
-  constructor() {
+  constructor(readonly usage: Usage | null = null) {
     super('starved')
+  }
+}
+
+/** Two billed attempts, one reported number. */
+function mergeUsage(first: Usage | null, second: Usage | null): Usage | null {
+  if (!first) return second
+  if (!second) return first
+  // Only trust a provider-reported cost when BOTH attempts reported one; otherwise
+  // fall back to computing from the summed tokens, which costOf does correctly.
+  const bothReported =
+    typeof first.reportedCostUsd === 'number' && typeof second.reportedCostUsd === 'number'
+  const reasoning = (first.reasoningTokens ?? 0) + (second.reasoningTokens ?? 0)
+  return {
+    inputTokens: first.inputTokens + second.inputTokens,
+    outputTokens: first.outputTokens + second.outputTokens,
+    reasoningTokens: reasoning || undefined,
+    reportedCostUsd: bothReported ? first.reportedCostUsd! + second.reportedCostUsd! : undefined,
   }
 }
 
@@ -690,7 +856,7 @@ async function callAnthropic(args: GenerateArgs, attempt: number): Promise<Gener
     if (data?.stop_reason === 'refusal') {
       throw new Error('The model declined to generate a rebuttal for this argument.')
     }
-    if (data?.stop_reason === 'max_tokens') throw new ReasoningStarvationError()
+    if (data?.stop_reason === 'max_tokens') throw new ReasoningStarvationError(usage)
     throw new Error('The model returned no text. Please try again.')
   }
   return {
@@ -714,6 +880,25 @@ function reasoningControls(provider: Provider, model: ModelOption, allowDisable:
     // gpt-oss cannot disable reasoning — "low" is its floor.
     if (model.id.startsWith('openai/gpt-oss')) return { reasoning_effort: 'low' }
     return {}
+  }
+  if (provider.id === 'xai') {
+    // A top-level string here, and per xAI's REST reference "Only supported by
+    // grok-4.3" — 4.5 rejects the field and always reasons at "high". Sending it
+    // to any other Grok is an error, not a no-op, so this must stay model-gated.
+    if (model.id.startsWith('grok-4.3')) return { reasoning_effort: 'none' }
+    return {}
+  }
+  if (provider.id === 'moonshot') {
+    // Two different, non-interchangeable fields on the same provider. K3 cannot be
+    // stopped from thinking at all ("low" is its floor, default is "max"); K2.6 can.
+    if (model.id.startsWith('kimi-k3')) return { reasoning_effort: 'low' }
+    return { thinking: { type: 'disabled' } }
+  }
+  if (provider.id === 'zai') {
+    // GLM-4.7 is documented to "think compulsorily", so there is nothing to send.
+    // reasoning_effort exists only on GLM-5.2 and above.
+    if (model.id.startsWith('glm-4')) return {}
+    return { thinking: { type: 'disabled' } }
   }
   // DeepSeek exposes no reliable disable switch — budget headroom only.
   return {}
@@ -760,8 +945,11 @@ async function callOpenAICompatible(args: GenerateArgs, attempt: number, allowDi
 
   if (!response.ok) {
     const message = providerErrorMessage(data, response.status)
-    // Some endpoints require reasoning and reject any attempt to disable it
-    if (allowDisable && response.status === 400 && /reasoning/i.test(message)) {
+    // Some endpoints require reasoning and reject any attempt to disable it. The
+    // field is spelled differently per provider — OpenRouter/xAI/Groq say
+    // "reasoning"/"reasoning_effort", Moonshot and Z.ai say "thinking" — so the
+    // match has to cover all of them or the retry silently stops firing for them.
+    if (allowDisable && response.status === 400 && /reasoning|thinking|effort/i.test(message)) {
       return callOpenAICompatible(args, attempt, false)
     }
     throw new Error(message)
@@ -787,7 +975,7 @@ async function callOpenAICompatible(args: GenerateArgs, attempt: number, allowDi
 
   if (!text) {
     // Hidden reasoning consumed the whole budget before any answer appeared
-    if (finishReason === 'length' || (usage.reasoningTokens ?? 0) > 0) throw new ReasoningStarvationError()
+    if (finishReason === 'length' || (usage.reasoningTokens ?? 0) > 0) throw new ReasoningStarvationError(usage)
     throw new Error('The model returned no text. Please try again or pick another model.')
   }
 
@@ -868,7 +1056,7 @@ async function callGemini(args: GenerateArgs, attempt: number): Promise<Generate
 
   if (!text) {
     const reason = candidate?.finishReason || data?.promptFeedback?.blockReason
-    if (reason === 'MAX_TOKENS') throw new ReasoningStarvationError()
+    if (reason === 'MAX_TOKENS') throw new ReasoningStarvationError(usage)
     throw new Error(reason ? `The model returned no text (${reason}).` : 'The model returned no text.')
   }
   return { text, usage, citations }
@@ -946,14 +1134,18 @@ export async function generateText(args: GenerateArgs): Promise<GenerateResult> 
       return dispatch({ ...args, webSearch: false }, 0)
     }
     if (!(err instanceof ReasoningStarvationError)) throw err
-    // The model spent its whole budget thinking. Retry once with double the room.
+    // The model spent its whole budget thinking. Retry once with double the room,
+    // carrying the failed attempt's tokens so the reported cost covers both calls.
     args.onStatus?.('Model needed more room to think — retrying with a larger budget…')
     try {
-      return await dispatch(args, 1)
+      const result = await dispatch(args, 1)
+      return { ...result, usage: mergeUsage(err.usage, result.usage) }
     } catch (retryErr) {
       if (retryErr instanceof ReasoningStarvationError) {
+        // Both attempts were billed and neither produced text, so there is no result
+        // to hang usage on. Say so rather than letting the meter imply it was free.
         throw new Error(
-          `${args.model.label} used its entire output budget on internal reasoning without answering. Try a model without the reasoning tag, or a shorter argument.`
+          `${args.model.label} used its entire output budget on internal reasoning without answering, twice. Both attempts were still billed by the provider. Try a model without the reasoning tag, or a shorter argument.`
         )
       }
       throw retryErr

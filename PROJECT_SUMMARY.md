@@ -6,7 +6,7 @@ governs how output is written — read it before touching `src/prompts.ts`.
 
 ## ✅ What's Been Created
 
-You now have a **fully-functional, deployable PWA** (Progressive Web App) that generates AI-powered rebuttals using Claude Haiku 4.5.
+You now have a **fully-functional, deployable PWA** (Progressive Web App) that generates AI-powered rebuttals with your choice of 24 models across 9 providers (Claude Sonnet 5 by default).
 
 ### 📦 Complete Features
 
@@ -23,10 +23,15 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
   verify, and their best case mapped to where your reply answers it
 - Web search runs *before* generation (Tavily, keyless) and the reply may cite only what
   was retrieved; invented URLs are stripped
-- 6 providers, 16 models — curated down to the ones that can actually hold this
-  app's long, constraint-heavy prompt: Claude, Gemini, Groq, OpenRouter (the only
-  browser route to GPT), DeepSeek, and a free no-key local in-browser option
-  (WebLLM/WebGPU). ↻ Refresh still loads any provider's full live catalog.
+- 9 providers, 24 models — the cloud models curated down to the ones that can
+  actually hold this app's long, constraint-heavy prompt: Claude, Gemini, Groq,
+  xAI Grok, Moonshot Kimi, Z.ai GLM, DeepSeek, OpenRouter (the only browser route
+  to GPT), plus a free no-key local in-browser option (WebLLM/WebGPU) that is a
+  deliberate exception to that bar and labelled as such in the UI. ↻ Refresh still loads any
+  provider's full live catalog, except on Z.ai which publishes no such endpoint.
+  OpenAI's own API is absent by necessity, not preference: it strips the CORS
+  header from any request carrying an `Authorization` header, so a web page can
+  never read a keyed response
 - AI settings collapse behind a summary line naming the model and what it is good at
 - Web-grounded sources with real citation links on Gemini, Claude and OpenRouter;
   models that cannot search say so instead of inventing URLs
@@ -51,8 +56,12 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 - Redeploy with `npm run build && npx wrangler pages deploy dist --project-name=m36x-rebuttal`
 
 ✅ **Security & Privacy**
-- API key stored only in browser local storage
-- No server-side storage
+- API keys stay in browser local storage; if you sign in, they are encrypted in the
+  browser first and the server stores only ciphertext it has no way to decrypt
+  (`functions/api/vault.js` holds `salt`, `iv`, `ciphertext` and nothing else)
+- The server never sees a provider key, a passphrase, or a decryption key. It does
+  store your language preference, and any rebuttal you explicitly publish as a
+  share link — the private briefing and the weak-link note are never published
 - No tracking or analytics
 - HTTPS-only (enforced on all deployments)
 
@@ -150,8 +159,9 @@ Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 
 ### Pricing
 - Free with no account at all: the local in-browser models (WebLLM)
-- Free with a free key: Gemini, Groq, and the OpenRouter Nemotron models
-- Paid: a fraction of a cent (Qwen3.7 Flash, GPT-OSS 120B, DeepSeek V4 Pro) up to
+- Free with a free key: Gemini, Groq, and the OpenRouter free models (Nemotron 3
+  Ultra, Gemma 4 31B)
+- Paid: a fifth of a cent (GPT-5.6 Luna, GPT-OSS 120B, DeepSeek V4 Pro) up to
   ~16¢ for the most capable option (Claude Fable 5); shown live before you generate
 
 ### Performance
@@ -262,7 +272,7 @@ included in `public/`. See `public/ICONS.md` to regenerate them.
 - **React 18** - UI framework
 - **TypeScript** - Type safety
 - **Vite** - Lightning-fast build tool
-- **6 AI providers, 16 curated models** - reply generation (BYO key, browser-direct)
+- **9 AI providers, 24 curated models** - reply generation (BYO key, browser-direct)
 - **Tavily** - keyless web search, so every model can cite real sources
 - **Web Speech API** - Voice recognition
 - **Service Workers** - PWA offline support

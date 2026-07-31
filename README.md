@@ -16,7 +16,7 @@ prompts.
 ## Features
 
 - 🎤 **Voice, Text, or URL Input**: Dictate the argument via the browser microphone (Web Speech API), type it, or paste a link to an article and let the app pull the text in
-- 🤖 **A short, curated model list**: six providers, sixteen models — every one of them able to hold this app's long, constraint-heavy prompt. Anthropic Claude, Google Gemini, Groq, OpenRouter (the only browser route to GPT), DeepSeek, or a model running locally in your browser with no API key at all (WebLLM/WebGPU)
+- 🤖 **A short, curated model list**: nine providers, twenty-four models — every *cloud* model here can hold this app's long, constraint-heavy prompt. Anthropic Claude, Google Gemini, Groq, xAI Grok, Moonshot Kimi, Z.ai GLM, DeepSeek, OpenRouter (the only browser route to GPT), or a model running locally in your browser with no API key at all (WebLLM/WebGPU — a deliberate exception to that bar, kept because it is the only option where nothing leaves your device)
 - 🔗 **Real sources on every model**: the app searches the web itself (Tavily, keyless — no account needed) and the reply may cite *only* what was actually retrieved. Any URL the model invents is stripped before you see it
 - ⚠️ **The weak link in your own position**, shown every time, before you send — if the other side is better supported, it says so
 - ⚖️ **Their best case, and where you answer it**: a private briefing that checks your reply actually addresses their strongest argument, and flags anything it leaves unanswered
@@ -32,24 +32,40 @@ prompts.
 
 - **Frontend**: React 18 + TypeScript
 - **Build Tool**: Vite
-- **AI**: 5 cloud providers via direct browser API calls (see below), plus in-browser inference via [WebLLM](https://webllm.mlc.ai/) (WebGPU)
+- **AI**: 8 cloud providers via direct browser API calls (see below), plus in-browser inference via [WebLLM](https://webllm.mlc.ai/) (WebGPU)
 - **Speech Recognition**: Web Speech API (native browser)
 
 ## Choosing an AI
 
 | Provider | Cost | API key? | Models |
 |----------|------|----------|--------|
-| OpenRouter | Free models + paid | Yes (free) | **Nemotron 3 Super 120B** and **Ultra 550B** (genuinely free), Qwen3.7 Flash, **GPT-5.6 Luna / Terra**, Grok 4.5 |
+| OpenRouter | Free models + paid | Yes (free) | **Nemotron 3 Ultra 550B** and **Gemma 4 31B** (genuinely free), **GPT-5.6 Luna / Terra / Sol** — the only browser route to GPT — plus MiniMax M3 |
 | Google Gemini | Free tier + paid | Yes (free) | Gemini 3.1 Flash-Lite, Gemini 3.6 Flash — free tier on both |
 | Groq | Free tier | Yes (free) | Llama 3.3 70B, GPT-OSS 120B — the fastest responses here |
-| Anthropic Claude | Paid | Yes | Claude Haiku 4.5 / **Sonnet 5** / Fable 5 |
+| Anthropic Claude | Paid | Yes | Claude Haiku 4.5 / **Sonnet 5** / Opus 5 / Fable 5 |
+| xAI Grok | Paid | Yes | **Grok 4.3**, Grok 4.20 (no hidden thinking), Grok 4.5 |
+| Moonshot Kimi | Paid | Yes | **Kimi K2.6**, Kimi K3 |
+| Z.ai GLM | Paid (cheap) | Yes | **GLM-5.2**, GLM-4.7 |
 | DeepSeek | Paid (very cheap) | Yes | DeepSeek V4 Pro — frontier reasoning at ~1/10 the price |
 | Local in-browser (WebLLM) | **Free** | **No** | Qwen 2.5 7B, Llama 3.2 3B on your own GPU via WebGPU; downloads once, nothing leaves your device |
 
-Every provider here was verified to support direct browser (CORS) calls — this
-app has no backend. OpenAI's own API blocks browser calls, which is why GPT
-models are offered through OpenRouter instead. API keys are stored per-provider
-in your browser's local storage and sent only to that provider.
+Every provider here was verified to support direct browser (CORS) calls, because
+this app has no backend to proxy through. API keys are stored per-provider in
+your browser's local storage and sent only to that provider.
+
+**Why OpenAI is not in that list.** It is not an oversight, and it is not quite
+true to say OpenAI "blocks browser calls" — the reality is more specific, and
+worth writing down so nobody re-tests it badly. `api.openai.com` answers browser
+requests, and its CORS preflight explicitly permits what we need
+(`Access-Control-Allow-Headers: authorization,content-type`, methods
+`GET, OPTIONS, POST`). The block is on the *actual* response: send a request with
+no `Authorization` header and it returns `Access-Control-Allow-Origin: *`; add
+one and that header vanishes, so the browser will not let the page read the
+reply. Any call carrying your key is therefore unreadable from a web page — which
+is deliberate on OpenAI's part, and stops sites leaking users' keys. Because the
+preflight looks healthy, testing `OPTIONS` alone will tell you it works; only the
+real request shows otherwise. GPT is reached through OpenRouter instead, where
+the full Luna / Terra / Sol range is available.
 
 ### Why the list is short
 
@@ -69,7 +85,7 @@ justify entries no longer do: native web search is irrelevant now that Tavily
 grounds every provider, and duplicate routes to the same model are not choice.
 
 **The curated list is a recommendation, not a limit.** ↻ Refresh loads any
-provider's full live catalog — 350+ models on OpenRouter alone — so nothing is
+provider's full live catalog — 360+ models on OpenRouter alone — so nothing is
 actually out of reach.
 
 ### Cost estimates
@@ -91,13 +107,32 @@ tokens before the visible answer, drawn from the same output budget. A budget
 that is too small is consumed entirely by thinking, and the API returns empty
 content with a `length` finish reason. The app handles this by giving reasoning
 models a much larger budget, asking each provider to minimise reasoning where
-its API allows it (OpenRouter `reasoning.effort`, Groq `reasoning_effort`,
-Gemini `thinkingConfig`), and automatically retrying once with double the budget
-if a response still comes back empty. If a model still fails this way, the
-non-reasoning options sidestep it entirely: **Claude Haiku 4.5**, **Groq Llama
-3.3 70B**, and both local in-browser models answer directly with no hidden
-thinking. They are not the cheapest — several reasoning models here cost less —
-but they are the most predictable.
+its API allows it, and automatically retrying once with double the budget if a
+response still comes back empty.
+
+Every provider spells that request differently, and several models refuse it
+outright, so the app tracks it per model in `reasoningControls()`:
+
+| Provider | How reasoning is reduced | Models that refuse to stop thinking |
+|---|---|---|
+| OpenRouter | `reasoning.effort: "none"` | — |
+| Groq | `reasoning_effort: "low"` on GPT-OSS | GPT-OSS 120B (floor is "low") |
+| Gemini | `thinkingConfig` | Gemini 3.x (floor is "minimal") |
+| xAI Grok | `reasoning_effort: "none"` — **accepted only by Grok 4.3** | Grok 4.5 (always "high") |
+| Moonshot Kimi | `thinking: {type: "disabled"}` on K2.6 | Kimi K3 (floor is "low") |
+| Z.ai GLM | `thinking: {type: "disabled"}` on GLM-5.2 | GLM-4.7 ("thinks compulsorily") |
+| DeepSeek | no switch exists — budget headroom only | DeepSeek V4 Pro |
+
+Sending the wrong one is an error rather than a no-op — `reasoning_effort` on any
+Grok other than 4.3 is rejected — which is why these are gated per model and not
+per provider. Where a model cannot be quietened, its real cost runs above the
+headline rate, and the catalog note for that provider says so.
+
+If a model still fails this way, the non-reasoning options sidestep it entirely:
+**Claude Haiku 4.5**, **Groq Llama 3.3 70B**, **Grok 4.20**, **Gemma 4 31B** and
+both local in-browser models answer directly with no hidden thinking. They are
+not the cheapest — several reasoning models here cost less — but they are the
+most predictable.
 
 ## Rebutting an article from a URL
 
@@ -161,9 +196,10 @@ settings. Social platforms and forums are excluded from results: a LinkedIn post
 evidence that will persuade anyone.
 
 Because the app does its own searching, **every provider can cite sources now** — including
-Groq, DeepSeek and the free local in-browser model, none of which can search on their own.
-If Tavily is unavailable, models with native search (Gemini, Claude, OpenRouter) fall back
-to it; otherwise the reply is generated without sources and the badge says so plainly.
+Groq, DeepSeek, Kimi, GLM, Grok and the free local in-browser model, none of which the app
+asks to search on their own. If Tavily is unavailable, models with native search (Gemini,
+Claude, OpenRouter) fall back to it; otherwise the reply is generated without sources and
+the badge says so plainly.
 
 This is also why native search is no longer a reason to keep a model in the curated list:
 it only ever runs as a fallback.
@@ -188,10 +224,13 @@ New models ship constantly. Three ways this stays current, in order of effort:
    provider's live model list at runtime — no code change, no redeploy. The
    result is cached in local storage and the dropdown shows how many models it
    holds and when it was updated. For **OpenRouter this needs no API key at
-   all** and returns live per-token pricing for 350+ models, so it is the
+   all** and returns live per-token pricing for 360+ models, so it is the
    fastest way to reach a brand-new model from any major lab. For other
    providers it uses your stored key and lists their current model IDs
-   (pricing shows as unknown for models not in the built-in catalog).
+   (pricing shows as unknown for models not in the built-in catalog). The button
+   is hidden for providers that publish no model-list endpoint — currently
+   **Z.ai**, whose two curated models are therefore the whole list rather than a
+   recommendation, which is why both are kept even though one is near-redundant.
 2. **Use OpenRouter as the catch-all.** It proxies OpenAI, Anthropic, Google,
    xAI, Meta, Moonshot, Qwen and others, so new releases usually appear there
    first and refresh picks them up automatically.
@@ -423,8 +462,9 @@ Costs depend on the provider and model you pick, and the app shows them live —
 see [Cost estimates](#cost-estimates). The local in-browser option is entirely
 free. Free tiers (Gemini, Groq, and the OpenRouter free models) cost nothing
 within their limits. On paid providers a reply ranges from a fraction of a cent
-(Qwen3.7 Flash, GPT-OSS 120B, DeepSeek V4 Pro) through ~3¢ (Claude Sonnet 5,
-GPT-5.6 Terra) to ~16¢ on the most capable model here (Claude Fable 5).
+(GPT-5.6 Luna, GPT-OSS 120B, DeepSeek V4 Pro) through ~1–2¢ (GPT-5.6 Terra,
+GLM-5.2, Kimi K2.6) and ~3¢ (Claude Sonnet 5) to ~16¢ on the most capable model
+here (Claude Fable 5).
 
 ## Progressive Web App (PWA)
 
