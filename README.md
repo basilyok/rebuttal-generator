@@ -261,6 +261,21 @@ npx wrangler pages secret put GOOGLE_CLIENT_ID --project-name=m36x-rebuttal
 npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name=m36x-rebuttal
 ```
 
+4. **Redeploy.** Pages binds environment variables at deploy time, so a secret
+   added afterwards is invisible to the deployment already serving traffic —
+   `/api/auth/me` keeps reporting `configured: false` and the sign-in button
+   never appears, with nothing in the logs to explain why. Publishing the same
+   commit again is enough:
+
+```bash
+npm run build && npx wrangler pages deploy dist --project-name=m36x-rebuttal --branch=main
+```
+
+   For a couple of minutes afterwards a small share of requests still land on the
+   previous deployment, so `configured` flaps between `true` and `false` before
+   settling. That is propagation, not a fault — wait it out rather than
+   redeploying again.
+
 Meta and Apple are not wired up. The session layer is provider-agnostic
 (`functions/_lib/session.js` namespaces user ids by provider), so adding them is
 mechanical — but Apple in particular needs a paid Apple Developer account and a
