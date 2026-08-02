@@ -43,7 +43,7 @@
     {
       "id": 55,
       "subject": "Plan Task 7: History UI (panel, hooks, sign-out wipe)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [54],
       "description": "**Goal:** HistoryPanel component; save on every generation; pull+merge+push on vault unlock; sign-out clears local entries; restore repopulates transcript+reply; deploy Phase B.\n\n**Files:** src/HistoryPanel.tsx, src/App.tsx, src/index.css, 12 locale files (8 keys).\n\n**Verify:** browser: generate->entry, restore, delete, sign-out empties IndexedDB rebuttal-history.\n\nFull steps: plan Task 7.\n\n```json:metadata\n{\"files\": [\"src/HistoryPanel.tsx\", \"src/App.tsx\", \"src/index.css\", \"src/i18n/locales/en.ts\"], \"verifyCommand\": \"npm run build\", \"acceptanceCriteria\": [\"every generation saved\", \"restore works\", \"sign-out wipes device copy\", \"signed-out local history works\", \"12 locales\"]}\n```"
     },
@@ -68,5 +68,5 @@
       "description": "**Goal:** Docs (share URLs, history, metrics stance, index.html stale description), deploy, production verification: OG unfurl live + UA-invariant in prod, old ?s= works, no watermark in messages, BYOK makes zero generation calls to our API.\n\n**Files:** README.md, PROJECT_SUMMARY.md, DEPLOYMENT_GUIDE.md, index.html.\n\n**Verify:** prod curl OG tags; diff chrome-UA vs Twitterbot-UA responses -> identical; npm test all green.\n\nFull steps: plan Task 10.\n\n```json:metadata\n{\"files\": [\"README.md\", \"PROJECT_SUMMARY.md\", \"DEPLOYMENT_GUIDE.md\", \"index.html\"], \"verifyCommand\": \"npm test\", \"acceptanceCriteria\": [\"prod unfurl works\", \"UA-invariance in prod\", \"all invariants re-verified\", \"docs complete\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-08-02T17:30:00Z"
+  "lastUpdated": "2026-08-02T18:00:00Z"
 }

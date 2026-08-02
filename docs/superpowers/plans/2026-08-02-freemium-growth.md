@@ -1699,18 +1699,18 @@ git commit -m "Add vault-encrypted history: local-first store and ciphertext-onl
 - Modify: all 12 `src/i18n/locales/*.ts` (8 keys)
 
 **Acceptance Criteria:**
-- [ ] Every successful generation (BYOK and Instant) appears in the panel immediately
-- [ ] Restore repopulates the transcript and the full reply (message, strategy, weak-link, citations)
-- [ ] Per-entry delete and clear-all work locally and push the change when the vault is unlocked
-- [ ] Sign-out clears the local history store (verify IndexedDB `rebuttal-history` is empty after)
-- [ ] Signed-out users still get local history; the panel shows the honest note that sync needs sign-in + vault
-- [ ] `npm run build` passes; strings resolve in all 12 locales
+- [x] Every successful generation (BYOK and Instant) appears in the panel immediately
+- [x] Restore repopulates the transcript and the full reply (message, strategy, weak-link, citations)
+- [x] Per-entry delete and clear-all work locally and push the change when the vault is unlocked
+- [x] Sign-out clears the local history store (verify IndexedDB `rebuttal-history` is empty after)
+- [x] Signed-out users still get local history; the panel shows the honest note that sync needs sign-in + vault
+- [x] `npm run build` passes; strings resolve in all 12 locales
 
 **Verify:** browser flow in Step 5.
 
 **Steps:**
 
-- [ ] **Step 1: The component**
+- [x] **Step 1: The component**
 
 `src/HistoryPanel.tsx`:
 
@@ -1762,7 +1762,7 @@ export default function HistoryPanel({ t, language, entries, synced, onRestore, 
 }
 ```
 
-- [ ] **Step 2: App wiring**
+- [x] **Step 2: App wiring**
 
 In `src/App.tsx`:
 
@@ -1879,7 +1879,7 @@ Load once on mount: `useEffect(() => { listEntries().then(setHistoryEntries) }, 
         )}
 ```
 
-- [ ] **Step 3: Styles**
+- [x] **Step 3: Styles**
 
 `src/index.css`:
 
@@ -1903,7 +1903,7 @@ Load once on mount: `useEffect(() => { listEntries().then(setHistoryEntries) }, 
 
 (Logical properties — `text-align: start` — keep RTL working, matching the codebase convention at index.css:892-897.)
 
-- [ ] **Step 4: Strings ×12 locales**
+- [x] **Step 4: Strings ×12 locales**
 
 `en.ts` (translate in the other 11):
 
@@ -1919,7 +1919,7 @@ Load once on mount: `useEffect(() => { listEntries().then(setHistoryEntries) }, 
   'history.clearConfirm': 'Delete all saved replies? The synced copy is cleared too. This cannot be undone.',
 ```
 
-- [ ] **Step 5: Verify in the browser, deploy, commit**
+- [x] **Step 5: Verify in the browser, deploy, commit**
 
 `npm run build`; `npx wrangler pages dev dist`; generate (echo seam or BYOK) → entry appears; restore an entry → transcript + reply repopulate; delete → gone; sign-out (if signed in locally) → panel empties and IndexedDB `rebuttal-history` is cleared (DevTools → Application). Deploy + spot-check production, then:
 
