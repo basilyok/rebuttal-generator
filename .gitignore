@@ -27,6 +27,10 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.dev.vars
+
+# Git worktrees for isolated task execution
+.worktrees
 
 # Machine-local Claude Code settings
 .claude/settings.local.json
