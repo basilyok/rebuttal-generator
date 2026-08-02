@@ -16,14 +16,14 @@
     {
       "id": 51,
       "subject": "Plan Task 3: /api/generate proxy with availability ladder",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [49, 50],
       "description": "**Goal:** Pages Function: structured fields only, same-origin gate, Turnstile verify, DO quota (device cookie / session), paid-first -> free -> paid ladder, envelope enforced (one retry then 502).\n\n**Files:** Create functions/_lib/instant.js, functions/api/generate.ts, tests/generate.test.mjs; modify wrangler.toml ([[services]] LIMITER); .dev.vars (INSTANT_TEST_ECHO seam, gitignored).\n\n**Verify:** limiter dev (8787) + `npx wrangler pages dev dist` (8788), then `node --test tests/generate.test.mjs` -> 5 pass, zero OpenRouter spend.\n\nFull steps: plan Task 3.\n\n```json:metadata\n{\"files\": [\"functions/_lib/instant.js\", \"functions/api/generate.ts\", \"wrangler.toml\", \"tests/generate.test.mjs\"], \"verifyCommand\": \"node --test tests/generate.test.mjs\", \"acceptanceCriteria\": [\"403 no origin / 413 oversize / 400 malformed\", \"4th anon call 429 before upstream\", \"first-ever reply paid model\", \"no envelope after retry -> 502 never raw\", \"501 without OPENROUTER_PROXY_KEY\"]}\n```"
     },
     {
       "id": 52,
       "subject": "Plan Task 4: Client Instant mode UI",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [51],
       "description": "**Goal:** No-key Generate flows through /api/generate; quota counter after first reply; honest exhaustion panel (sign-in + BYOK); Turnstile invisible; BYOK untouched.\n\n**Files:** Create src/instant.ts, src/turnstile.ts; modify src/App.tsx (guard :605-612 -> instant branch), src/index.css, all 12 src/i18n/locales/*.ts (10 keys).\n\n**Verify:** npm run build; browser at pages dev: keyless generate renders reply+weak-link, counter, exhaustion panel after cap.\n\nFull steps: plan Task 4.\n\n```json:metadata\n{\"files\": [\"src/instant.ts\", \"src/turnstile.ts\", \"src/App.tsx\", \"src/index.css\", \"src/i18n/locales/en.ts\"], \"verifyCommand\": \"npm run build\", \"acceptanceCriteria\": [\"keyless generate works\", \"no counter before first generation\", \"429 renders product-state panel not error\", \"BYOK path unchanged\", \"strings in 12 locales\"]}\n```"
     },
@@ -68,5 +68,5 @@
       "description": "**Goal:** Docs (share URLs, history, metrics stance, index.html stale description), deploy, production verification: OG unfurl live + UA-invariant in prod, old ?s= works, no watermark in messages, BYOK makes zero generation calls to our API.\n\n**Files:** README.md, PROJECT_SUMMARY.md, DEPLOYMENT_GUIDE.md, index.html.\n\n**Verify:** prod curl OG tags; diff chrome-UA vs Twitterbot-UA responses -> identical; npm test all green.\n\nFull steps: plan Task 10.\n\n```json:metadata\n{\"files\": [\"README.md\", \"PROJECT_SUMMARY.md\", \"DEPLOYMENT_GUIDE.md\", \"index.html\"], \"verifyCommand\": \"npm test\", \"acceptanceCriteria\": [\"prod unfurl works\", \"UA-invariance in prod\", \"all invariants re-verified\", \"docs complete\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-08-02T15:15:00Z"
+  "lastUpdated": "2026-08-02T17:00:00Z"
 }

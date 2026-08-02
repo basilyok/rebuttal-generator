@@ -537,19 +537,19 @@ git commit -m "Add the instant one-call envelope and demote audience trust on un
 **Context you need:** `functions/_lib/session.js` exports `getSession(request, env)` → `{sessionId, userId, user} | null` (cookie `rb_session`, KV `ACCOUNTS`), `jsonResponse(data, status)`, and the key builders. The same-origin gate pattern already exists in `functions/api/share.js:32-45`. The user record has NO entitlements field yet — this task reads `session.user.entitlements?.instantCap` defensively so the paid tier can flip on later by writing that field.
 
 **Acceptance Criteria:**
-- [ ] Requests without a browser same-origin signal → 403; oversize argument → 413; malformed body → 400
-- [ ] Anonymous quota keys off an `rb_device` HttpOnly cookie (set on first response); signed-in quota keys off the session's userId with the higher cap
-- [ ] 4th anonymous call in a day → 429 with `{resetAt, signedIn: false}` and NO upstream call
-- [ ] A key's first-ever reply uses the paid model; later replies try the free model and fall back to paid on 429/5xx/empty
-- [ ] A response with no MESSAGE envelope after one retry → 502, and the raw text is never returned
-- [ ] With `TURNSTILE_SECRET` set, a missing/invalid token → 403 `{code: 'turnstile'}`; with it unset (local dev), the check is skipped
-- [ ] Missing `OPENROUTER_PROXY_KEY` → 501 (Instant mode unconfigured — BYOK unaffected)
+- [x] Requests without a browser same-origin signal → 403; oversize argument → 413; malformed body → 400
+- [x] Anonymous quota keys off an `rb_device` HttpOnly cookie (set on first response); signed-in quota keys off the session's userId with the higher cap
+- [x] 4th anonymous call in a day → 429 with `{resetAt, signedIn: false}` and NO upstream call
+- [x] A key's first-ever reply uses the paid model; later replies try the free model and fall back to paid on 429/5xx/empty
+- [x] A response with no MESSAGE envelope after one retry → 502, and the raw text is never returned
+- [x] With `TURNSTILE_SECRET` set, a missing/invalid token → 403 `{code: 'turnstile'}`; with it unset (local dev), the check is skipped
+- [x] Missing `OPENROUTER_PROXY_KEY` → 501 (Instant mode unconfigured — BYOK unaffected)
 
 **Verify:** terminal 1: `cd limiter && npx wrangler dev --port 8787`; terminal 2: `npx wrangler pages dev dist` (wrangler's local dev registry connects the LIMITER service binding between the two sessions); terminal 3: `node --test tests/generate.test.mjs` → all pass. Tests use the `INSTANT_TEST_ECHO` seam (below) so no real OpenRouter spend occurs.
 
 **Steps:**
 
-- [ ] **Step 1: The config module — caps as config, not constants**
+- [x] **Step 1: The config module — caps as config, not constants**
 
 `functions/_lib/instant.js`:
 
@@ -572,7 +572,7 @@ export const INSTANT = {
 }
 ```
 
-- [ ] **Step 2: Add the service binding to the root `wrangler.toml`**
+- [x] **Step 2: Add the service binding to the root `wrangler.toml`**
 
 Append:
 
@@ -584,7 +584,7 @@ binding = "LIMITER"
 service = "m36x-limiter"
 ```
 
-- [ ] **Step 3: Write the failing tests**
+- [x] **Step 3: Write the failing tests**
 
 `tests/generate.test.mjs`:
 
@@ -668,12 +668,12 @@ test('citations are validated field-by-field', async () => {
 })
 ```
 
-- [ ] **Step 4: Run tests to verify they fail**
+- [x] **Step 4: Run tests to verify they fail**
 
 Run: `node --test tests/generate.test.mjs` (with both dev servers up)
 Expected: FAIL — `/api/generate` 404s (function does not exist yet).
 
-- [ ] **Step 5: Implement `functions/api/generate.ts`**
+- [x] **Step 5: Implement `functions/api/generate.ts`**
 
 ```ts
 // Instant mode: the one endpoint where OUR key pays for the reply. Everything
@@ -932,7 +932,7 @@ export async function onRequestPost(context: { request: Request; env: Env; waitU
 
 Note: `jsonResponse` in `functions/_lib/session.js:35-40` must accept a third `headers` argument — it already does (`jsonResponse(data, status = 200, headers = {})`). If its signature differs, extend it there rather than duplicating the helper.
 
-- [ ] **Step 6: Create `.dev.vars` for local testing (gitignored)**
+- [x] **Step 6: Create `.dev.vars` for local testing (gitignored)**
 
 ```
 OPENROUTER_PROXY_KEY=dev-placeholder
@@ -941,13 +941,13 @@ INSTANT_TEST_ECHO=1
 
 Confirm `.dev.vars` is in `.gitignore`; add it if not. **Never commit this file.**
 
-- [ ] **Step 7: Build, run both dev servers, verify tests pass**
+- [x] **Step 7: Build, run both dev servers, verify tests pass**
 
 Run: `npm run build` (generate.ts imports src/prompts — tsc must stay green), then with limiter dev (8787) and `npx wrangler pages dev dist` (8788) up:
 `node --test tests/generate.test.mjs`
 Expected: `# pass 5`, `# fail 0`. Also confirm in the pages-dev log that no request ever reached openrouter.ai (the echo seam short-circuits).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add functions/_lib/instant.js functions/api/generate.ts wrangler.toml tests/generate.test.mjs .gitignore
@@ -968,18 +968,18 @@ git commit -m "Add the Instant-mode proxy: structured fields, quota, Turnstile, 
 **Context you need:** `generateReply` (App.tsx:595-733) currently returns early at :605-612 when `provider.requiresKey && !apiKey`. The Tavily search step (:655-670) and `parseMessage`/`section` parsing (:701-707) are reusable as-is. `reply` state is set once via `setReply({...})` (:709-718) — the Instant path populates the same shape, with `weakLink` from `section(raw, 'WEAKLINK')` and `toVerify: []`. Sign-in state: `auth.user` (App.tsx:216). The i18n pattern: add each key to `src/i18n/locales/en.ts` plus the 11 translations; missing keys fall back to English automatically (`i18n/index.ts:88,103`).
 
 **Acceptance Criteria:**
-- [ ] With no key saved, Generate produces a real reply via `/api/generate`; strategy, message, chips, and the weak-link note all render
-- [ ] No counter is visible before the first generation; after it, "N free replies left today" shows
-- [ ] A 429 renders the `.instant-done` panel: sign-in button when signed out, BYOK settings link always, reset time in the user's locale — and it is not styled as an error
-- [ ] Turnstile stays invisible for a normal user (`appearance: 'interactive-only'`); with `TURNSTILE_SITE_KEY` empty the widget is skipped entirely
-- [ ] BYOK path is byte-for-byte unaffected (a saved key short-circuits all of this)
-- [ ] All new strings resolve in all 12 locales (`npm run build` + spot-check `?lang` switching)
+- [x] With no key saved, Generate produces a real reply via `/api/generate`; strategy, message, chips, and the weak-link note all render
+- [x] No counter is visible before the first generation; after it, "N free replies left today" shows
+- [x] A 429 renders the `.instant-done` panel: sign-in button when signed out, BYOK settings link always, reset time in the user's locale — and it is not styled as an error
+- [x] Turnstile stays invisible for a normal user (`appearance: 'interactive-only'`); with `TURNSTILE_SITE_KEY` empty the widget is skipped entirely
+- [x] BYOK path is byte-for-byte unaffected (a saved key short-circuits all of this)
+- [x] All new strings resolve in all 12 locales (`npm run build` + spot-check `?lang` switching)
 
 **Verify:** `npm run build`; then with the three local servers from Task 3 up, open `http://127.0.0.1:8788`, remove any saved key, generate → reply renders, counter shows "2 free replies left today"; two more replies → exhausted panel with reset time.
 
 **Steps:**
 
-- [ ] **Step 1: The fetch wrapper with typed errors**
+- [x] **Step 1: The fetch wrapper with typed errors**
 
 `src/instant.ts`:
 
@@ -1036,7 +1036,7 @@ export async function generateInstant(args: {
 }
 ```
 
-- [ ] **Step 2: The Turnstile loader**
+- [x] **Step 2: The Turnstile loader**
 
 `src/turnstile.ts`:
 
@@ -1108,7 +1108,7 @@ export async function getTurnstileToken(deviceHint: string): Promise<string> {
 }
 ```
 
-- [ ] **Step 3: Wire the Instant branch into `generateReply`**
+- [x] **Step 3: Wire the Instant branch into `generateReply`**
 
 In `src/App.tsx`, add state near the other generation state (after line ~200):
 
@@ -1175,7 +1175,7 @@ In the surrounding `catch` (:723-728), add before the generic branch:
 
 Also note: the briefing expander is powered by a BYOK model call (`toggleBriefing`, :739-766). On an Instant reply there is no key — guard `toggleBriefing`'s entry with `if (provider.requiresKey && !apiKey) return` so the expander header simply does not render for instant replies: wrap the briefing JSX block (:1562-1614) in `{!instantForReply && (...)}` where `instantForReply` is a boolean stored alongside the reply (add `instant?: boolean` to the reply state object, set `true` in the branch above).
 
-- [ ] **Step 4: The counter and the exhausted panel**
+- [x] **Step 4: The counter and the exhausted panel**
 
 After the submit-button block (below :1478, above the error div at :1480):
 
@@ -1247,7 +1247,7 @@ After the submit-button block (below :1478, above the error div at :1480):
 }
 ```
 
-- [ ] **Step 5: The strings — all 12 locales**
+- [x] **Step 5: The strings — all 12 locales**
 
 Add to `src/i18n/locales/en.ts` (new `// --- instant ---` section; then translate the same 10 keys in es, fr, de, pt-BR, it, ja, ko, zh-Hans, ar, hi, el — keep `{n}`/`{time}` placeholders verbatim):
 
@@ -1267,11 +1267,11 @@ Add to `src/i18n/locales/en.ts` (new `// --- instant ---` section; then translat
 
 (Use `instant.leftOne` when `remaining === 1`: `t(instantQuota.remaining === 1 ? 'instant.leftOne' : 'instant.left', { n: instantQuota.remaining })`.)
 
-- [ ] **Step 6: Verify in the browser**
+- [x] **Step 6: Verify in the browser**
 
 `npm run build`, restart `npx wrangler pages dev dist` (still with limiter dev + `.dev.vars` echo seam). In the browser at `127.0.0.1:8788`: clear localStorage keys `api_key_*`, generate → echo reply renders with strategy/message/weak-link; counter reads "2 free replies left today"; two more generations → `.instant-done` panel with a reset time and both escape hatches; add any API key → BYOK path unchanged.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/instant.ts src/turnstile.ts src/App.tsx src/index.css src/i18n/locales/
