@@ -20,6 +20,11 @@ declare global {
 let scriptPromise: Promise<void> | null = null
 let widgetId: string | null = null
 let container: HTMLElement | null = null
+// The resolver for whichever getTurnstileToken() call is currently in
+// flight. The widget is rendered exactly once; its callback (fixed at render
+// time) always forwards here, so reset()-driven re-challenges on later calls
+// still reach the right caller.
+let pendingResolve: ((token: string) => void) | null = null
 
 function loadScript(): Promise<void> {
   if (!scriptPromise) {
@@ -50,20 +55,31 @@ export async function getTurnstileToken(deviceHint: string): Promise<string> {
     document.body.appendChild(container)
   }
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve(''), 20_000) // never block a reply on the checker
+    const timeout = setTimeout(() => finish(''), 20_000) // never block a reply on the checker
     const finish = (token: string) => {
       clearTimeout(timeout)
+      pendingResolve = null
       resolve(token)
     }
+    pendingResolve = finish
+
     if (widgetId !== null) {
+      // Cloudflare's documented pattern: reset() alone runs a fresh challenge
+      // and re-invokes the callback fixed at render time (below) with a new
+      // token — no re-render needed. Rendering again into the same,
+      // never-cleared container is undocumented and orphans an iframe per
+      // call, so it must not happen here. One tradeoff: cData is fixed at
+      // the first render and cannot be updated per reset(), so later calls'
+      // deviceHint is ignored — acceptable since it is only diagnostic.
       window.turnstile!.reset(widgetId)
+      return
     }
     widgetId = window.turnstile!.render(container!, {
       sitekey: TURNSTILE_SITE_KEY,
       appearance: 'interactive-only',
       cData: deviceHint.slice(0, 255),
-      callback: finish,
-      'error-callback': () => finish(''),
+      callback: (token: string) => pendingResolve?.(token),
+      'error-callback': () => pendingResolve?.(''),
     })
   })
 }

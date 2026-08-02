@@ -766,8 +766,17 @@ export default function App() {
         setError(t('instant.turnstile'))
       } else if (err instanceof DOMException && err.name === 'TimeoutError') {
         setError(t('error.timeout'))
+      } else if (instant) {
+        // Every failure on this path — a server-side error() string or a raw
+        // fetch rejection (e.g. "Failed to fetch") — is `instanceof Error`, so
+        // checking that first (as the branch below does) would always win and
+        // the hand-translated instant.error string would never show for a
+        // non-English reader. Show the translated string always; keep the raw
+        // detail alongside for anyone who needs to diagnose it.
+        const detail = err instanceof Error ? err.message : ''
+        setError(detail ? `${t('instant.error')} (${detail})` : t('instant.error'))
       } else {
-        setError(err instanceof Error ? err.message : instant ? t('instant.error') : t('error.generic'))
+        setError(err instanceof Error ? err.message : t('error.generic'))
       }
     } finally {
       setIsLoading(false)

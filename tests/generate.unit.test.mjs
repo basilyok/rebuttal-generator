@@ -51,3 +51,22 @@ test('missing MESSAGE envelope after one retry -> 502, and the raw text is never
   assert.equal(data.text, undefined)
   assert.equal(typeof data.error, 'string')
 })
+
+test('burst limiter is a distinct 429 from quota exhaustion: no resetAt/signedIn', async () => {
+  // The per-IP burst brake (overRateLimit) only runs when INSTANT_TEST_ECHO is
+  // unset, and is checked before OPENROUTER_PROXY_KEY, so neither needs to be
+  // set here for the brake to trip. This locks in the response shape the
+  // client (src/instant.ts) relies on to tell "wait a moment and retry" apart
+  // from "free replies are done for today": only the latter carries resetAt.
+  const env = {}
+  let limited
+  for (let i = 0; i < 10 && !limited; i++) {
+    const res = await call(env, VALID)
+    if (res.status === 429) limited = res
+  }
+  assert.ok(limited, 'expected the burst limiter to trip within 10 requests/minute')
+  const data = await limited.json()
+  assert.equal(data.resetAt, undefined)
+  assert.equal(data.signedIn, undefined)
+  assert.equal(typeof data.error, 'string')
+})
