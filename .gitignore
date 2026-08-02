@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local wrangler dev state (miniflare SQLite, bundle temp files) — regenerated
+# per-machine by `wrangler dev`, never something to commit.
+.wrangler
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
