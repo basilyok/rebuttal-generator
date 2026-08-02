@@ -357,17 +357,17 @@ git commit -m "Add the m36x-limiter Worker: atomic quota counting in a SQLite Du
 **Context you need:** `src/prompts.ts` is environment-pure (only a type-only import from `./providers` and pure-data `./i18n/persuasion`) — it will be imported by the Pages Function in Task 3 unchanged. The envelope markers live in `MARKERS` (line 270: `['STRATEGY','CONTEXT','MESSAGE','WEAKLINK','CHECK','THEIRCASE','ANSWERED']`) — `WEAKLINK` is already a known marker, so `section(raw, 'WEAKLINK')` works on the merged response with no parser change. The line being demoted is prompts.ts:150: `` `WHO WILL READ THIS (from the sender, authoritative — trust it over your own inference): ${audience.trim()}` ``.
 
 **Acceptance Criteria:**
-- [ ] `contextBlock` output is unchanged for every existing caller (default stays trusted)
-- [ ] With `audienceTrusted: false`, the audience line reads as an unverified hint and the "trust it over your own inference" wording is absent
-- [ ] `instantPrompt(context, citations)` contains the three message sections AND `<<<WEAKLINK>>>`, includes `sourcesBlock` when citations exist, and writes the weak-link in `briefingLanguage`
-- [ ] `hasMessageEnvelope` is true for `<<<MESSAGE>>>`, `**MESSAGE**`, and `MESSAGE:` variants (same tolerance as `markerPattern`), false for prose without any marker
-- [ ] `npm run build` still passes (`tsc`)
+- [x] `contextBlock` output is unchanged for every existing caller (default stays trusted)
+- [x] With `audienceTrusted: false`, the audience line reads as an unverified hint and the "trust it over your own inference" wording is absent
+- [x] `instantPrompt(context, citations)` contains the three message sections AND `<<<WEAKLINK>>>`, includes `sourcesBlock` when citations exist, and writes the weak-link in `briefingLanguage`
+- [x] `hasMessageEnvelope` is true for `<<<MESSAGE>>>`, `**MESSAGE**`, and `MESSAGE:` variants (same tolerance as `markerPattern`), false for prose without any marker
+- [x] `npm run build` still passes (`tsc`)
 
 **Verify:** `node --import tsx --test tests/prompts.test.ts` → all pass; `npm run build` → exits 0.
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/prompts.test.ts`:
 
@@ -432,12 +432,12 @@ test('a merged response parses with the existing parsers', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test tests/prompts.test.ts`
 Expected: FAIL — `instantPrompt`, `hasMessageEnvelope` not exported; `audienceTrusted` not a known property.
 
-- [ ] **Step 3: Implement in `src/prompts.ts`**
+- [x] **Step 3: Implement in `src/prompts.ts`**
 
 (a) Add to `PromptContext` (after the `briefingLanguage` member, prompts.ts:122-127):
 
@@ -510,12 +510,12 @@ export function instantPrompt(context: PromptContext, citations: Citation[] = []
 export const hasMessageEnvelope = (raw: string): boolean => markerPattern('MESSAGE').test(raw)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `node --import tsx --test tests/prompts.test.ts`
 Expected: PASS (6/6). Also run `npm run build` → exits 0 (no existing caller breaks, since `audienceTrusted` is optional).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/prompts.ts tests/prompts.test.ts

@@ -10,7 +10,7 @@
     {
       "id": 50,
       "subject": "Plan Task 2: Prompt changes (demoted trust + instant envelope)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** src/prompts.ts gains audienceTrusted demotion, instantPrompt (message + WEAKLINK in one envelope), hasMessageEnvelope.\n\n**Files:** Modify src/prompts.ts; create tests/prompts.test.ts.\n\n**Verify:** `node --import tsx --test tests/prompts.test.ts` -> 6 pass; `npm run build` green.\n\nFull steps: plan Task 2.\n\n```json:metadata\n{\"files\": [\"src/prompts.ts\", \"tests/prompts.test.ts\"], \"verifyCommand\": \"node --import tsx --test tests/prompts.test.ts\", \"acceptanceCriteria\": [\"default contextBlock unchanged\", \"audienceTrusted:false demotes hint\", \"instantPrompt has 4 sections, no CHECK\", \"hasMessageEnvelope tolerant variants\"]}\n```"
     },
     {
@@ -68,5 +68,5 @@
       "description": "**Goal:** Docs (share URLs, history, metrics stance, index.html stale description), deploy, production verification: OG unfurl live + UA-invariant in prod, old ?s= works, no watermark in messages, BYOK makes zero generation calls to our API.\n\n**Files:** README.md, PROJECT_SUMMARY.md, DEPLOYMENT_GUIDE.md, index.html.\n\n**Verify:** prod curl OG tags; diff chrome-UA vs Twitterbot-UA responses -> identical; npm test all green.\n\nFull steps: plan Task 10.\n\n```json:metadata\n{\"files\": [\"README.md\", \"PROJECT_SUMMARY.md\", \"DEPLOYMENT_GUIDE.md\", \"index.html\"], \"verifyCommand\": \"npm test\", \"acceptanceCriteria\": [\"prod unfurl works\", \"UA-invariance in prod\", \"all invariants re-verified\", \"docs complete\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-08-02T14:45:00Z"
+  "lastUpdated": "2026-08-02T15:15:00Z"
 }
