@@ -220,6 +220,17 @@ export const PROVIDERS: Provider[] = [
     modelsUrl: 'https://openrouter.ai/api/v1/models',
     models: [
       {
+        // The default: best fast-and-cheap model on the whole route. Frontier-class,
+        // thinking switchable off, and OpenRouter's routing prices it at a fifth of
+        // Z.ai's own platform ($1.40/$4.40 direct).
+        id: 'z-ai/glm-5.2',
+        label: 'GLM-5.2 (recommended — fast & cheap)',
+        inPrice: 0.28,
+        outPrice: 0.89,
+        reasoning: true,
+        blurb: 'Frontier-class for a fraction of everyone’s price, and fast with thinking off — the default here',
+      },
+      {
         id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
         label: 'Nemotron 3 Ultra 550B (FREE)',
         inPrice: 0,
@@ -256,14 +267,6 @@ export const PROVIDERS: Provider[] = [
         blurb: 'For a topic a moderation filter refuses — every GPT option here is moderated, this one is not',
       },
       {
-        id: 'openai/gpt-5.6-terra',
-        label: 'GPT-5.6 Terra',
-        inPrice: 1,
-        outPrice: 6,
-        reasoning: true,
-        blurb: 'The standard GPT — reliably readable prose and careful handling of a concession you have to answer',
-      },
-      {
         id: 'openai/gpt-5.6-sol',
         label: 'GPT-5.6 Sol (flagship GPT)',
         inPrice: 5,
@@ -272,22 +275,19 @@ export const PROVIDERS: Provider[] = [
         blurb: 'OpenAI’s best — worth it when the reader is sharp and the disagreement is the hard kind',
       },
       // --- Native-catalog mirrors ---------------------------------------------
-      // Everything below duplicates a model offered natively elsewhere in this file.
+      // Entries below duplicate models offered natively elsewhere in this file.
       // That is deliberate, and an exception to the no-redundancy rule at the top:
-      // one OpenRouter key is the single easiest door into BYOK, so it carries the
-      // whole native menu rather than forcing a second signup per vendor. Prices are
-      // OpenRouter's live routed rates (api/v1/models, checked 2026-08-02), not the
-      // vendors' list prices — GLM and Kimi are markedly cheaper here than direct.
-      // Per-model thinking quirks (K3, GLM-4.7 and Grok 4.5 cannot stop reasoning)
-      // ride on the generic `reasoning: {effort}` control plus the rejection retry,
-      // so they need no special-casing on this route.
-      {
-        id: 'anthropic/claude-haiku-4.5',
-        label: 'Claude Haiku 4.5 (fast & cheap)',
-        inPrice: 1,
-        outPrice: 5,
-        blurb: 'Same model and price as going to Anthropic directly, without the second key',
-      },
+      // one OpenRouter key is the single easiest door into BYOK, so every native
+      // provider is represented here by a PAIR — its top model and its best capable
+      // fast-and-cheap model — rather than forcing a second signup per vendor.
+      // (A full 16-model mirror shipped briefly and was cut the same day as too
+      // many choices; where one model is both top and cheapest — GLM-5.2 at the
+      // head of this list, DeepSeek below — the pair collapses to one entry.) Prices are OpenRouter's
+      // live routed rates (api/v1/models, checked 2026-08-02), not the vendors'
+      // list prices — GLM and Kimi are markedly cheaper here than direct.
+      // Per-model thinking quirks (K3 and Grok 4.5 cannot stop reasoning) ride on
+      // the generic `reasoning: {effort}` control plus the rejection retry, so
+      // they need no special-casing on this route.
       {
         id: 'anthropic/claude-sonnet-5',
         label: 'Claude Sonnet 5',
@@ -295,14 +295,6 @@ export const PROVIDERS: Provider[] = [
         outPrice: 10,
         reasoning: true,
         blurb: 'The catalog’s overall recommendation, at the direct price on this key',
-      },
-      {
-        id: 'anthropic/claude-opus-5',
-        label: 'Claude Opus 5 (deep reasoning)',
-        inPrice: 5,
-        outPrice: 25,
-        reasoning: true,
-        blurb: 'Anthropic’s deep-reasoning tier at the direct price',
       },
       {
         id: 'anthropic/claude-fable-5',
@@ -337,13 +329,6 @@ export const PROVIDERS: Provider[] = [
         blurb: 'The recommended Grok at the direct price, thinking switchable as usual',
       },
       {
-        id: 'x-ai/grok-4.20',
-        label: 'Grok 4.20 (no reasoning)',
-        inPrice: 1.25,
-        outPrice: 2.5,
-        blurb: 'xAI’s lowest-hallucination model with no hidden thinking to pay for',
-      },
-      {
         id: 'x-ai/grok-4.5',
         label: 'Grok 4.5',
         inPrice: 2,
@@ -368,22 +353,6 @@ export const PROVIDERS: Provider[] = [
         blurb: 'Moonshot’s flagship — always thinks first, so dearer per reply than the price implies',
       },
       {
-        id: 'z-ai/glm-5.2',
-        label: 'GLM-5.2',
-        inPrice: 0.28,
-        outPrice: 0.89,
-        reasoning: true,
-        blurb: 'A fifth of Z.ai’s direct price ($1.40/$4.40) — the standout bargain among these mirrors',
-      },
-      {
-        id: 'z-ai/glm-4.7',
-        label: 'GLM-4.7',
-        inPrice: 0.4,
-        outPrice: 1.75,
-        reasoning: true,
-        blurb: 'Cheaper than direct, but it always thinks, so the real cost gap to GLM-5.2 is small',
-      },
-      {
         id: 'deepseek/deepseek-v4-pro',
         label: 'DeepSeek V4 Pro',
         inPrice: 0.435,
@@ -391,24 +360,9 @@ export const PROVIDERS: Provider[] = [
         reasoning: true,
         blurb: 'Frontier-level reasoning for a tenth of frontier prices, same rate as direct',
       },
-      {
-        id: 'meta-llama/llama-3.3-70b-instruct',
-        label: 'Llama 3.3 70B',
-        inPrice: 0.13,
-        outPrice: 0.4,
-        blurb: 'Cheaper than the Groq-hosted entry, but without Groq’s near-instant speed',
-      },
-      {
-        id: 'openai/gpt-oss-120b',
-        label: 'GPT-OSS 120B',
-        inPrice: 0.037,
-        outPrice: 0.17,
-        reasoning: true,
-        blurb: 'The open-weight GPT for pennies — Groq’s copy answers faster at a similar price',
-      },
     ],
-    defaultModel: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-    note: 'One free key unlocks the free models above, the only browser-reachable route to GPT (OpenAI’s own API cannot be called from a web page — see the note at the top of this file), and a mirror of every model the other providers here offer, so one signup genuinely covers everything. Press ↻ Refresh to load OpenRouter’s full live catalog (360+ models) with current prices.',
+    defaultModel: 'z-ai/glm-5.2',
+    note: 'One key covers the field: the only browser-reachable route to GPT (OpenAI’s own API cannot be called from a web page — see the note at the top of this file), plus each provider’s top model and its best fast-and-cheap one. The default GLM-5.2 costs a fraction of a cent per reply but needs credit on the account; the two FREE models work with none. Press ↻ Refresh to load OpenRouter’s full live catalog (360+ models) with current prices.',
   },
   {
     id: 'xai',
@@ -621,7 +575,7 @@ const CATALOG_KEY = (providerId: string) => `models_cache_${providerId}`
  * keep every model later removed for being unusable, and keep selecting them. The stamp
  * is what lets a curation change actually reach the people who use the model picker most.
  */
-const CATALOG_VERSION = 4
+const CATALOG_VERSION = 5
 
 /** Prices and line-ups drift. Past this, the curated list is the better answer. */
 const CATALOG_TTL_MS = 30 * 24 * 60 * 60 * 1000
