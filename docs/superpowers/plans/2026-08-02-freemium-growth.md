@@ -1365,17 +1365,17 @@ git push
 **Context you need:** `functions/api/vault.js` is the template — clone its guard pattern (`requireAccounts` → `getSession` → 401), its base64 `isBlob` validation, and its `{salt, iv, ciphertext, version, updatedAt}` record, changing only the KV key prefix and the size cap. In `src/vault.ts`, `sealWith(key, bundle, salt)` (:191-206) and `decryptWith(key, blob)` (:141-160) are module-private and typed to `KeyBundle` — the new exports generalize them to any JSON value. The device key lives in IndexedDB `rebuttal-vault`/`keys` under id `'vault-key'` via `cachedKey()` (:100-101); `forgetDeviceKey()` (:107) already runs on sign-out.
 
 **Acceptance Criteria:**
-- [ ] `GET/PUT/DELETE /api/history` behave exactly like `/api/vault` (401 signed out, 501 unconfigured, field-validated PUT) with `MAX_CIPHERTEXT_CHARS = 200_000`
-- [ ] `sealJson`/`openJson` round-trip an arbitrary object; a fresh 12-byte IV every seal; tampered ciphertext throws, never returns garbage
-- [ ] `mergeEntries(local, remote)` unions by id, newest-first, caps at 100 — and is a pure function
-- [ ] Local store works signed out; nothing in `src/history.ts` ever sends plaintext to any endpoint
-- [ ] `npm run build` passes
+- [x] `GET/PUT/DELETE /api/history` behave exactly like `/api/vault` (401 signed out, 501 unconfigured, field-validated PUT) with `MAX_CIPHERTEXT_CHARS = 200_000`
+- [x] `sealJson`/`openJson` round-trip an arbitrary object; a fresh 12-byte IV every seal; tampered ciphertext throws, never returns garbage
+- [x] `mergeEntries(local, remote)` unions by id, newest-first, caps at 100 — and is a pure function
+- [x] Local store works signed out; nothing in `src/history.ts` ever sends plaintext to any endpoint
+- [x] `npm run build` passes
 
 **Verify:** `node --import tsx --test tests/history.test.ts` → pass (crypto + merge, in Node's WebCrypto); then with `npx wrangler pages dev dist`: `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8788/api/history` → `401` (or `501` if ACCOUNTS is unbound locally — both prove the guard runs).
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/history.test.ts`:
 
@@ -1435,12 +1435,12 @@ test('mergeEntries unions by id, newest first, capped at 100', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test tests/history.test.ts`
 Expected: FAIL — `sealJson`, `openJson`, `mergeEntries` not exported.
 
-- [ ] **Step 3: Server side**
+- [x] **Step 3: Server side**
 
 In `functions/_lib/session.js`, next to `vaultKey` (:19):
 
@@ -1515,7 +1515,7 @@ export async function onRequestDelete(context) {
 
 (Check vault.js:20-21 for the exact `isBlob` it uses and keep the two in lockstep; if `requireAccounts` returns a Response vs null contract differs from shown, mirror vault.js exactly.)
 
-- [ ] **Step 4: Generalize the crypto in `src/vault.ts`**
+- [x] **Step 4: Generalize the crypto in `src/vault.ts`**
 
 Add near the existing private helpers (after `sealWith`, ~:206), reusing `toBase64`/`fromBase64` (:56-62) and the `VaultBlob` type:
 
@@ -1549,7 +1549,7 @@ export async function openJson<T = unknown>(key: CryptoKey, blob: VaultBlob): Pr
 
 Also export the existing `cachedKey` if it is not already exported (history needs the device key): check :100-101; if private, add `export` — it returns `Promise<CryptoKey | null>`.
 
-- [ ] **Step 5: The history module**
+- [x] **Step 5: The history module**
 
 `src/history.ts`:
 
@@ -1675,11 +1675,11 @@ export async function pullAndMergeHistory(): Promise<HistoryEntry[] | null> {
 }
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `node --import tsx --test tests/history.test.ts` → PASS. `npm run build` → exits 0. Then `npx wrangler pages dev dist` and `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8788/api/history` → `401` or `501`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add functions/_lib/session.js functions/api/history.js src/vault.ts src/history.ts tests/history.test.ts
