@@ -6,6 +6,8 @@
 //
 // API keys never reach this endpoint: the client sends only the finished text.
 
+import { isSameOriginBrowserRequest } from '../_lib/gate.js'
+
 const MAX_BYTES = 100_000
 const MAX_FIELD = 40_000
 /** Shared links expire after a year so abandoned content does not live forever. */
@@ -23,26 +25,9 @@ const json = (body, status = 200) =>
     },
   })
 
-// Publishing is gated to requests our own pages make. Browsers attach at least one
-// of these headers to every fetch and none of them can be forged *from a browser*,
-// so this shuts out other websites using this endpoint as their storage API. A
-// non-browser client can still fake the headers — this is a door closed to drive-by
-// abuse, not authentication; real per-user quotas arrive with the rate-limiter
-// Durable Object (see the monetization design).
-function isSameOriginBrowserRequest(request) {
-  const self = new URL(request.url).origin
-  const origin = request.headers.get('Origin')
-  if (origin) return origin === self
-  const site = request.headers.get('Sec-Fetch-Site')
-  if (site) return site === 'same-origin'
-  const referer = request.headers.get('Referer')
-  if (!referer) return false
-  try {
-    return new URL(referer).origin === self
-  } catch {
-    return false
-  }
-}
+// Publishing is gated to requests our own pages make — see functions/_lib/gate.js
+// for what this catches and does not catch. Real per-user quotas arrive with the
+// rate-limiter Durable Object (see the monetization design).
 
 // Best-effort flood brake: per-isolate and per-colo, so a determined distributed
 // attacker walks around it — but it caps what any single address can do to the KV

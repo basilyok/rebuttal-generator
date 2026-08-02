@@ -9,6 +9,7 @@ import { instantPrompt, hasMessageEnvelope, type PromptContext } from '../../src
 import type { Citation } from '../../src/providers'
 import { getSession, jsonResponse } from '../_lib/session.js'
 import { INSTANT } from '../_lib/instant.js'
+import { isSameOriginBrowserRequest } from '../_lib/gate.js'
 
 // Structural types on purpose — the repo does not depend on
 // @cloudflare/workers-types, and these two methods are all we use.
@@ -16,6 +17,11 @@ interface Env {
   OPENROUTER_PROXY_KEY?: string
   TURNSTILE_SECRET?: string
   INSTANT_TEST_ECHO?: string
+  // Test-only companion to INSTANT_TEST_ECHO: makes the canned echo response
+  // omit the MESSAGE envelope, so the retry-then-502 enforcement path can be
+  // exercised without a real, non-deterministic upstream call. Never set in
+  // production, and inert unless INSTANT_TEST_ECHO is also set.
+  INSTANT_TEST_ECHO_NO_ENVELOPE?: string
   LIMITER?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> }
   ACCOUNTS?: { get(key: string): Promise<string | null> }
 }
@@ -23,20 +29,32 @@ interface Env {
 const DEVICE_COOKIE = 'rb_device'
 const LANG = /^[a-z]{2,3}(-[A-Za-z0-9]+)?$/
 
-// Same gate as functions/api/share.js:32-45 — browser-set headers only.
-function isSameOriginBrowserRequest(request: Request): boolean {
-  const self = new URL(request.url).origin
-  const origin = request.headers.get('Origin')
-  if (origin) return origin === self
-  const site = request.headers.get('Sec-Fetch-Site')
-  if (site) return site === 'same-origin'
-  const referer = request.headers.get('Referer')
-  if (!referer) return false
-  try {
-    return new URL(referer).origin === self
-  } catch {
-    return false
+// Best-effort flood brake, same shape as functions/api/share.js and
+// functions/api/article.js: per-isolate and per-colo, so a distributed
+// attacker walks around it, but it bounds what any single address can do.
+// This endpoint needs it more than either of those: with TURNSTILE_SECRET
+// unset (an anticipated deployment mode, not a misconfiguration — see the
+// acceptance criteria) the only quota identity an anonymous caller carries is
+// the rb_device cookie IT supplies. A caller that simply omits the Cookie
+// header gets a fresh crypto.randomUUID() every request, so consume() reports
+// `first: true` every time — meaning every such call routes to the PAID
+// model. The cap here is stricter than share.js's 6/60s because this
+// endpoint is the one that spends real money.
+const RATE_WINDOW_MS = 60_000
+const RATE_MAX = 5
+const recentHits = new Map<string, number[]>()
+function overRateLimit(request: Request): boolean {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
+  const now = Date.now()
+  const hits = (recentHits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS)
+  hits.push(now)
+  recentHits.set(ip, hits)
+  if (recentHits.size > 5000) {
+    for (const [key, stamps] of recentHits) {
+      if (now - stamps[stamps.length - 1] >= RATE_WINDOW_MS) recentHits.delete(key)
+    }
   }
+  return hits.length > RATE_MAX
 }
 
 function readDeviceId(request: Request): string | null {
@@ -88,6 +106,11 @@ async function consume(env: Env, key: string, cap: number) {
     // Missing binding = misconfigured deploy. Fail open ON PURPOSE: the
     // provisioned key's OpenRouter-side daily limit still bounds the damage,
     // and refusing everyone would hand an outage to every legitimate visitor.
+    // `first: false` (not true) here specifically: during an outage we cannot
+    // tell who is genuinely new, and guessing wrong in the true direction
+    // would route every caller to the PAID model for as long as the binding
+    // stays down. Guessing false is the safe direction — worst case is a
+    // legitimately-new caller gets the free model instead of paid once.
     return { allowed: true, remaining: cap - 1, first: false, resetAt: '' }
   }
   const res = await env.LIMITER.fetch('https://limiter/consume', {
@@ -95,6 +118,9 @@ async function consume(env: Env, key: string, cap: number) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key, cap }),
   })
+  // Same reasoning as above: an erroring limiter must not be read as "brand
+  // new" — `first: false` avoids a paid-model stampede for the outage's
+  // duration.
   if (!res.ok) return { allowed: true, remaining: cap - 1, first: false, resetAt: '' }
   return (await res.json()) as { allowed: boolean; remaining: number; first: boolean; resetAt: string }
 }
@@ -112,6 +138,12 @@ function metric(ctx: { waitUntil(p: Promise<unknown>): void }, env: Env, name: s
 
 async function callUpstream(env: Env, model: string, system: string, userContent: string) {
   if (env.INSTANT_TEST_ECHO) {
+    if (env.INSTANT_TEST_ECHO_NO_ENVELOPE) {
+      // Test-only seam: a deterministic, envelope-free reply so the
+      // retry-then-502 enforcement path is exercised without a real,
+      // non-deterministic upstream call. Never set in production.
+      return { ok: true as const, status: 200, text: 'Plain text with no envelope markers at all.' }
+    }
     // Test seam: full pipeline, zero spend. Never set in production.
     return {
       ok: true as const,
@@ -153,6 +185,15 @@ export async function onRequestPost(context: { request: Request; env: Env; waitU
   const { request, env } = context
   if (!isSameOriginBrowserRequest(request)) {
     return jsonResponse({ error: 'This endpoint only serves the Rebuttal Generator app.' }, 403)
+  }
+  // Skipped only under the echo test seam: the fixed integration suite calls
+  // this endpoint far more times per minute than any legitimate caller would,
+  // against a long-lived dev server, and INSTANT_TEST_ECHO already guarantees
+  // zero real spend regardless. Production never sets it, so real traffic
+  // always passes through this brake.
+  if (!env.INSTANT_TEST_ECHO && overRateLimit(request)) {
+    metric(context, env, 'instant_rate_limited')
+    return jsonResponse({ error: 'Too many requests — wait a minute and try again.' }, 429)
   }
   if (!env.OPENROUTER_PROXY_KEY) {
     return jsonResponse({ error: 'Instant mode is not configured on this deployment.' }, 501)

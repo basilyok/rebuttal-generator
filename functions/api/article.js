@@ -8,6 +8,8 @@
 // This endpoint only ever receives a public article URL. API keys stay in the
 // browser and never pass through here.
 
+import { isSameOriginBrowserRequest } from '../_lib/gate.js'
+
 const MAX_CHARS = 20_000
 const MIN_WORDS = 120
 const FETCH_TIMEOUT_MS = 20_000
@@ -70,24 +72,9 @@ const countWords = (text) => (text.trim().match(/\S+/g) || []).length
 // Extraction is gated to requests our own pages make: one call here can fan out
 // into four upstream fetches (source, two archive lookups, snapshot) with 15-20s
 // timeouts, which makes an open endpoint a free egress amplifier for anyone else's
-// scraping. Browsers attach at least one of these headers to every fetch and none
-// can be forged *from a browser*; a non-browser client can still fake them, so this
-// closes the drive-by door rather than authenticating anyone — real quotas arrive
-// with the rate-limiter Durable Object (see the monetization design).
-function isSameOriginBrowserRequest(request) {
-  const self = new URL(request.url).origin
-  const origin = request.headers.get('Origin')
-  if (origin) return origin === self
-  const site = request.headers.get('Sec-Fetch-Site')
-  if (site) return site === 'same-origin'
-  const referer = request.headers.get('Referer')
-  if (!referer) return false
-  try {
-    return new URL(referer).origin === self
-  } catch {
-    return false
-  }
-}
+// scraping. See functions/_lib/gate.js for what the gate catches and does not catch
+// — real quotas arrive with the rate-limiter Durable Object (see the monetization
+// design).
 
 // Best-effort flood brake: per-isolate and per-colo, so it caps a single address,
 // not a botnet. Higher ceiling than the share endpoint because reading several
