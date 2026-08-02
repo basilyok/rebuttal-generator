@@ -98,7 +98,8 @@ async function idb<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => 
 }
 
 const cacheKey = (key: CryptoKey) => idb<void>('readwrite', (store) => store.put(key, KEY_ID))
-const cachedKey = () => idb<CryptoKey>('readonly', (store) => store.get(KEY_ID))
+/** Exported for other vault-key consumers (history) that need the cached device key. */
+export const cachedKey = () => idb<CryptoKey>('readonly', (store) => store.get(KEY_ID))
 
 /**
  * Drop the derived key from this device. Called on sign-out — otherwise "signing
@@ -203,6 +204,43 @@ async function sealWith(key: CryptoKey, bundle: KeyBundle, salt: Uint8Array): Pr
     ciphertext: toBase64(new Uint8Array(ciphertext)),
     version: VAULT_VERSION,
   }
+}
+
+/**
+ * Generic AES-GCM JSON sealing for other vault-key consumers (history). Same
+ * key, same blob shape, fresh 12-byte IV per call — IV reuse under GCM is
+ * catastrophic, so the IV is ALWAYS generated here, never passed in.
+ *
+ * Unlike seal()/sealWith(), this is not bound to KeyBundle or to deriving a
+ * key from a passphrase: callers hand in whatever CryptoKey they already have
+ * (from cachedKey()) and whatever JSON-serialisable value they want sealed.
+ * The salt field is carried for VaultBlob shape-compatibility only; it plays
+ * no role in decryption here since the key is supplied directly, not derived.
+ */
+export async function sealJson(key: CryptoKey, value: unknown): Promise<VaultBlob> {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const plaintext = new TextEncoder().encode(JSON.stringify(value))
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: iv as unknown as BufferSource },
+    key,
+    plaintext as unknown as BufferSource
+  )
+  return {
+    salt: toBase64(crypto.getRandomValues(new Uint8Array(16))),
+    iv: toBase64(iv),
+    ciphertext: toBase64(new Uint8Array(ciphertext)),
+    version: VAULT_VERSION,
+  }
+}
+
+/** Inverse of sealJson(). Throws (never returns garbage) if the key is wrong or the blob was tampered with. */
+export async function openJson<T = unknown>(key: CryptoKey, blob: VaultBlob): Promise<T> {
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: fromBase64(blob.iv) as unknown as BufferSource },
+    key,
+    fromBase64(blob.ciphertext) as unknown as BufferSource
+  )
+  return JSON.parse(new TextDecoder().decode(plaintext)) as T
 }
 
 // --- server transport -------------------------------------------------------
