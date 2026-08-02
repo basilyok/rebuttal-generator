@@ -212,6 +212,19 @@ const fr = {
   'instant.turnstile': 'La vérification a échoué — rechargez la page et réessayez.',
   'instant.error': "Le mode instantané n'est pas disponible pour le moment — réessayez bientôt, ou utilisez votre propre clé API.",
   'instant.badge': 'Mode instantané',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'Historique',
+  'history.hide': "Masquer l'historique",
+  'history.empty':
+    "Aucune réponse enregistrée pour l'instant — chaque réponse que vous générez est enregistrée ici, sur cet appareil.",
+  'history.localOnly':
+    'Enregistré uniquement sur cet appareil. Connectez-vous et déverrouillez votre coffre pour le synchroniser, chiffré, sur tous vos appareils.',
+  'history.synced': 'Chiffré et synchronisé avec votre compte. Seuls vos appareils peuvent le lire.',
+  'history.delete': 'Supprimer cette entrée',
+  'history.clear': "Effacer tout l'historique",
+  'history.clearConfirm':
+    'Supprimer toutes les réponses enregistrées ? La copie synchronisée est effacée aussi. Cette action est irréversible.',
 }
 
 export default fr

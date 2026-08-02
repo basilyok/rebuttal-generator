@@ -220,6 +220,17 @@ const de = {
   'instant.turnstile': 'Überprüfung fehlgeschlagen — lad die Seite neu und versuch es noch einmal.',
   'instant.error': 'Der Sofortmodus ist gerade nicht verfügbar — versuch es gleich noch einmal, oder nutze deinen eigenen API-Schlüssel.',
   'instant.badge': 'Sofortmodus',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'Verlauf',
+  'history.hide': 'Verlauf ausblenden',
+  'history.empty': 'Noch keine gespeicherten Antworten — jede Antwort, die du erstellst, wird hier auf diesem Gerät gespeichert.',
+  'history.localOnly':
+    'Nur auf diesem Gerät gespeichert. Melde dich an und entsperre deinen Schlüsseltresor, um sie verschlüsselt auf allen Geräten zu synchronisieren.',
+  'history.synced': 'Verschlüsselt und mit deinem Konto synchronisiert. Nur deine Geräte können sie lesen.',
+  'history.delete': 'Diesen Eintrag löschen',
+  'history.clear': 'Gesamten Verlauf löschen',
+  'history.clearConfirm': 'Alle gespeicherten Antworten löschen? Die synchronisierte Kopie wird ebenfalls gelöscht. Das lässt sich nicht rückgängig machen.',
 }
 
 export default de

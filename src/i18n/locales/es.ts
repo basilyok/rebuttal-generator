@@ -217,6 +217,17 @@ const es = {
   'instant.turnstile': 'La verificación falló: recarga la página e inténtalo de nuevo.',
   'instant.error': 'El modo instantáneo no está disponible ahora mismo: inténtalo de nuevo en un momento, o usa tu propia clave API.',
   'instant.badge': 'Modo instantáneo',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'Historial',
+  'history.hide': 'Ocultar el historial',
+  'history.empty': 'Todavía no hay respuestas guardadas — cada respuesta que generas se guarda aquí, en este dispositivo.',
+  'history.localOnly':
+    'Guardado solo en este dispositivo. Inicia sesión y desbloquea tu bóveda para sincronizarlo, cifrado, en todos tus dispositivos.',
+  'history.synced': 'Cifrado y sincronizado con tu cuenta. Solo tus dispositivos pueden leerlo.',
+  'history.delete': 'Borrar esta entrada',
+  'history.clear': 'Borrar todo el historial',
+  'history.clearConfirm': '¿Borrar todas las respuestas guardadas? La copia sincronizada también se borra. Esto no se puede deshacer.',
 }
 
 export default es

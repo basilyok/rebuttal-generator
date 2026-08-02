@@ -215,6 +215,17 @@ const ko = {
   'instant.turnstile': '확인에 실패했어요 — 페이지를 새로고침하고 다시 시도해 주세요.',
   'instant.error': '지금은 즉시 답장 기능을 쓸 수 없어요 — 잠시 후 다시 시도하거나, 내 API 키를 써 보세요.',
   'instant.badge': '즉시 답장',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': '기록',
+  'history.hide': '기록 숨기기',
+  'history.empty': '아직 저장된 답장이 없어요 — 답장을 만들 때마다 여기, 이 기기에 저장돼요.',
+  'history.localOnly':
+    '이 기기에만 저장돼요. 로그인하고 보관함 잠금을 해제하면 암호화된 채로 여러 기기에 동기화돼요.',
+  'history.synced': '암호화해서 계정에 동기화했어요. 내 기기에서만 읽을 수 있어요.',
+  'history.delete': '이 항목 삭제',
+  'history.clear': '기록 전체 지우기',
+  'history.clearConfirm': '저장된 답장을 모두 지울까요? 동기화된 사본도 함께 지워져요. 되돌릴 수 없어요.',
 }
 
 export default ko

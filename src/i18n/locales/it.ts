@@ -218,6 +218,17 @@ const it = {
   'instant.turnstile': 'Verifica non riuscita — ricarica la pagina e riprova.',
   'instant.error': 'La modalità istantanea non è disponibile in questo momento — riprova tra poco, oppure usa la tua chiave API.',
   'instant.badge': 'Modalità istantanea',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'Cronologia',
+  'history.hide': 'Nascondi cronologia',
+  'history.empty': 'Ancora nessuna risposta salvata — ogni risposta che generi viene salvata qui, su questo dispositivo.',
+  'history.localOnly':
+    'Salvata solo su questo dispositivo. Accedi e sblocca la tua cassaforte per sincronizzarla, cifrata, su ogni dispositivo.',
+  'history.synced': 'Cifrata e sincronizzata con il tuo account. Solo i tuoi dispositivi possono leggerla.',
+  'history.delete': 'Elimina questa voce',
+  'history.clear': 'Cancella tutta la cronologia',
+  'history.clearConfirm': 'Eliminare tutte le risposte salvate? Viene cancellata anche la copia sincronizzata. Non si può annullare.',
 }
 
 export default it

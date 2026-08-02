@@ -213,6 +213,17 @@ const pt_BR = {
   'instant.turnstile': 'A verificação falhou — recarregue a página e tente de novo.',
   'instant.error': 'O modo instantâneo está indisponível agora — tente de novo em instantes, ou use sua própria chave de API.',
   'instant.badge': 'Modo instantâneo',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'Histórico',
+  'history.hide': 'Ocultar histórico',
+  'history.empty': 'Ainda não há respostas salvas — toda resposta que você gerar fica salva aqui, neste dispositivo.',
+  'history.localOnly':
+    'Salvo só neste dispositivo. Entre e desbloqueie seu cofre para sincronizar, de forma criptografada, entre os dispositivos.',
+  'history.synced': 'Criptografado e sincronizado com sua conta. Só os seus dispositivos conseguem ler.',
+  'history.delete': 'Apagar este item',
+  'history.clear': 'Apagar todo o histórico',
+  'history.clearConfirm': 'Apagar todas as respostas salvas? A cópia sincronizada também é apagada. Isso não pode ser desfeito.',
 }
 
 export default pt_BR
