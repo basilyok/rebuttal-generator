@@ -79,17 +79,17 @@
 - Modify: `package.json` (add `test` script + `tsx` devDependency — used from Task 2 onward)
 
 **Acceptance Criteria:**
-- [ ] `POST /consume {key, cap}` increments atomically and returns `{allowed, remaining, count, first, resetAt}`; the (cap+1)th call on a UTC day returns `allowed: false`
-- [ ] `first` is true only on the very first consume EVER for a key (across days), false after
-- [ ] Counters reset at UTC midnight (next-day consume starts at 1); rows older than 2 days are pruned
-- [ ] `POST /metric {name}` and `GET /metrics` accumulate and report daily integers
-- [ ] `workers_dev = false` (no public URL) and unknown routes return 404
+- [x] `POST /consume {key, cap}` increments atomically and returns `{allowed, remaining, count, first, resetAt}`; the (cap+1)th call on a UTC day returns `allowed: false`
+- [x] `first` is true only on the very first consume EVER for a key (across days), false after
+- [x] Counters reset at UTC midnight (next-day consume starts at 1); rows older than 2 days are pruned
+- [x] `POST /metric {name}` and `GET /metrics` accumulate and report daily integers
+- [x] `workers_dev = false` (no public URL) and unknown routes return 404
 
 **Verify:** terminal 1: `cd limiter && npx wrangler dev --port 8787` — then `node --test tests/limiter.test.mjs` → all pass.
 
 **Steps:**
 
-- [ ] **Step 1: Write the Worker config**
+- [x] **Step 1: Write the Worker config**
 
 `limiter/wrangler.toml`:
 
@@ -112,7 +112,7 @@ tag = "v1"
 new_sqlite_classes = ["Limiter"]
 ```
 
-- [ ] **Step 2: Write the DO + Worker**
+- [x] **Step 2: Write the DO + Worker**
 
 `limiter/src/index.js`:
 
@@ -241,7 +241,7 @@ export default {
 }
 ```
 
-- [ ] **Step 3: Add the test runner to the repo**
+- [x] **Step 3: Add the test runner to the repo**
 
 In `package.json`, add to `scripts`:
 
@@ -257,7 +257,7 @@ and to `devDependencies`:
 
 Run: `npm install` → lockfile updates, no errors. (`tsx` lets `node --test` execute the `.test.ts` files that arrive in Task 2; this task's own test is plain `.mjs` and doesn't need it, but the script and dependency land once, here.)
 
-- [ ] **Step 4: Write the failing test**
+- [x] **Step 4: Write the failing test**
 
 `tests/limiter.test.mjs`:
 
@@ -328,18 +328,18 @@ test('bad input is rejected', async () => {
 })
 ```
 
-- [ ] **Step 5: Run test to verify it fails (no server)**
+- [x] **Step 5: Run test to verify it fails (no server)**
 
 Run: `node --test tests/limiter.test.mjs`
 Expected: FAIL — `fetch failed` / ECONNREFUSED (nothing listening yet proves the test really talks to the Worker).
 
-- [ ] **Step 6: Start the Worker and verify tests pass**
+- [x] **Step 6: Start the Worker and verify tests pass**
 
 Terminal 1: `cd limiter && npx wrangler dev --port 8787`
 Terminal 2: `node --test tests/limiter.test.mjs`
 Expected: `# pass 5`, `# fail 0`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add limiter/ tests/limiter.test.mjs package.json package-lock.json
