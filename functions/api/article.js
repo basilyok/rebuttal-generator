@@ -67,6 +67,48 @@ const json = (body, status = 200) =>
 
 const countWords = (text) => (text.trim().match(/\S+/g) || []).length
 
+// Extraction is gated to requests our own pages make: one call here can fan out
+// into four upstream fetches (source, two archive lookups, snapshot) with 15-20s
+// timeouts, which makes an open endpoint a free egress amplifier for anyone else's
+// scraping. Browsers attach at least one of these headers to every fetch and none
+// can be forged *from a browser*; a non-browser client can still fake them, so this
+// closes the drive-by door rather than authenticating anyone — real quotas arrive
+// with the rate-limiter Durable Object (see the monetization design).
+function isSameOriginBrowserRequest(request) {
+  const self = new URL(request.url).origin
+  const origin = request.headers.get('Origin')
+  if (origin) return origin === self
+  const site = request.headers.get('Sec-Fetch-Site')
+  if (site) return site === 'same-origin'
+  const referer = request.headers.get('Referer')
+  if (!referer) return false
+  try {
+    return new URL(referer).origin === self
+  } catch {
+    return false
+  }
+}
+
+// Best-effort flood brake: per-isolate and per-colo, so it caps a single address,
+// not a botnet. Higher ceiling than the share endpoint because reading several
+// articles in a row is a normal way to use the app.
+const RATE_WINDOW_MS = 60_000
+const RATE_MAX = 10
+const recentHits = new Map()
+function overRateLimit(request) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
+  const now = Date.now()
+  const hits = (recentHits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS)
+  hits.push(now)
+  recentHits.set(ip, hits)
+  if (recentHits.size > 5000) {
+    for (const [key, stamps] of recentHits) {
+      if (now - stamps[stamps.length - 1] >= RATE_WINDOW_MS) recentHits.delete(key)
+    }
+  }
+  return hits.length > RATE_MAX
+}
+
 /** Reject anything that is not a public http(s) address. */
 function validateUrl(input) {
   let parsed
@@ -258,6 +300,13 @@ async function findArchivedCopy(url, diag) {
 }
 
 export async function onRequestGet(context) {
+  if (!isSameOriginBrowserRequest(context.request)) {
+    return json({ error: 'This endpoint only serves the Rebuttal Generator app.' }, 403)
+  }
+  if (overRateLimit(context.request)) {
+    return json({ error: 'Too many article requests at once — wait a minute and try again.' }, 429)
+  }
+
   const params = new URL(context.request.url).searchParams
   const target = params.get('url')
   const debug = params.get('debug') === '1'
