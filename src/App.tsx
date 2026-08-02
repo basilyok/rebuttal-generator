@@ -29,6 +29,7 @@ import {
   parseMessage,
   parseCheck,
   parseTheirCase,
+  section,
   type PromptContext,
 } from './prompts'
 import {
@@ -58,6 +59,8 @@ import {
 } from './i18n'
 import { detectLanguage, isRtl, displayLanguageName } from './lang'
 import { fetchAuthState, signIn, signOut, saveLanguagePreference, authErrorMessage, SIGNED_OUT, type AuthState } from './auth'
+import { generateInstant, InstantQuotaError, InstantTurnstileError } from './instant'
+import { getTurnstileToken } from './turnstile'
 import {
   fetchVault,
   saveVault,
@@ -90,6 +93,8 @@ interface Reply {
   toVerify?: string[]
   theirCase?: string
   answered?: string[]
+  /** True when this reply came from Instant mode (no key, our server paid) */
+  instant?: boolean
 }
 
 const keyStorageId = (providerId: string) => `api_key_${providerId}`
@@ -201,6 +206,10 @@ export default function App() {
   const [shareCopied, setShareCopied] = useState(false)
   const [useSources, setUseSources] = useState(true)
   const [audience, setAudience] = useState('')
+
+  // --- Instant mode: no key, our server pays, spend bounded by daily quota ---
+  const [instantQuota, setInstantQuota] = useState<{ remaining: number; cap: number } | null>(null)
+  const [instantDone, setInstantDone] = useState<{ resetAt: string; signedIn: boolean } | null>(null)
 
   // --- language ------------------------------------------------------------
   // Typed as string, not the Language union: values also arrive from the account
@@ -602,14 +611,8 @@ export default function App() {
       setError(t('error.needModel'))
       return
     }
-    if (provider.requiresKey && !apiKey) {
-      setError(`Please set your ${provider.label.replace(/ \(.*\)$/, '')} API key`)
-      setShowApiKeyInput(true)
-      // The key form lives inside the collapsed settings — open it or the error
-      // points at something the user cannot see
-      setShowSettings(true)
-      return
-    }
+    // No key on file: Instant mode picks up the reply instead of dead-ending here.
+    const instant = provider.requiresKey && !apiKey
 
     setIsLoading(true)
     setError('')
@@ -619,6 +622,10 @@ export default function App() {
     setIsBriefingOpen(false)
     setBriefingError('')
     setShowClaims(false)
+    setInstantDone(null)
+    // A BYOK run makes any earlier Instant quota/exhaustion state stale — a
+    // key on file means neither applies anymore.
+    if (!instant) setInstantQuota(null)
 
     // Article text is delimited so the model can tell content from instructions.
     // Neutralise any closing tag in the page content itself, or it could break
@@ -673,6 +680,38 @@ export default function App() {
       const modelSearch = useSources && !citations.length && canSearchWeb(provider, model)
       lastRequestRef.current = { userContent, promptContext, citations, modelSearch }
 
+      if (instant) {
+        // Instant mode: no key, our server pays. One upstream call — the
+        // honest check arrives folded into the same envelope (see instantPrompt).
+        setProviderStatus(t('instant.working'))
+        const token = await getTurnstileToken(localStorage.getItem('ai_provider') || 'anon')
+        const instantReply = await generateInstant({
+          argument,
+          recipientLine: audience || undefined,
+          replyLanguage: promptContext.replyLanguage,
+          briefingLanguage: promptContext.briefingLanguage,
+          citations,
+          turnstileToken: token || undefined,
+        })
+        const parsed = parseMessage(instantReply.text)
+        const verified = stripUnverifiedUrls(parsed.message, citations)
+        setReply({
+          message: verified.text,
+          strategy: parsed.strategy,
+          context: parsed.context,
+          citations: verified.used,
+          strippedUrls: verified.strippedUrls,
+          unusedCitations: [],
+          weakLink: section(instantReply.text, 'WEAKLINK'),
+          toVerify: [],
+          instant: true,
+        })
+        setInstantQuota({ remaining: instantReply.remaining, cap: instantReply.cap })
+        setInstantDone(null)
+        if (searchNote) setError(searchNote)
+        return
+      }
+
       setProviderStatus(t('generate.writing'))
       const call = (system: string, webSearch = false) =>
         generateText({
@@ -721,10 +760,14 @@ export default function App() {
       addUsage(messageResult.usage)
       addUsage(checkResult.usage)
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'TimeoutError') {
+      if (err instanceof InstantQuotaError) {
+        setInstantDone({ resetAt: err.resetAt, signedIn: err.signedIn })
+      } else if (err instanceof InstantTurnstileError) {
+        setError(t('instant.turnstile'))
+      } else if (err instanceof DOMException && err.name === 'TimeoutError') {
         setError(t('error.timeout'))
       } else {
-        setError(err instanceof Error ? err.message : t('error.generic'))
+        setError(err instanceof Error ? err.message : instant ? t('instant.error') : t('error.generic'))
       }
     } finally {
       setIsLoading(false)
@@ -737,6 +780,10 @@ export default function App() {
    * sendable. Generated on first expand, so replies nobody inspects cost nothing extra.
    */
   const toggleBriefing = async () => {
+    // No key paid for an Instant reply, and there is nothing to steelman it
+    // against on our own dime — the panel itself stays hidden for these
+    // replies, but guard here too in case this is ever reached another way.
+    if (reply?.instant) return
     const opening = !isBriefingOpen
     setIsBriefingOpen(opening)
     const context = lastRequestRef.current
@@ -1477,6 +1524,40 @@ export default function App() {
         {isLoading ? t('generate.srStatus') : ''}
       </span>
 
+      {instantQuota && !instantDone && (
+        <p className="instant-quota">
+          {t(instantQuota.remaining === 1 ? 'instant.leftOne' : 'instant.left', { n: instantQuota.remaining })}
+        </p>
+      )}
+
+      {instantDone && (
+        <div className="instant-done">
+          <h3>{t('instant.done.title')}</h3>
+          <p>
+            {t('instant.done.body', {
+              time: instantDone.resetAt
+                ? new Date(instantDone.resetAt).toLocaleTimeString(language, { hour: 'numeric', minute: '2-digit' })
+                : '',
+            })}
+          </p>
+          {!auth.user && auth.configured && (
+            <button className="button button-primary" onClick={() => signIn('google')}>
+              {t('instant.done.signIn')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setShowSettings(true)
+              setShowApiKeyInput(true)
+            }}
+          >
+            {t('instant.done.byok')}
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="error" role="alert">
           ⚠️ {error}
@@ -1559,59 +1640,66 @@ export default function App() {
             </div>
           )}
 
-          <button
-            type="button"
-            className="expander-header briefing-header"
-            onClick={toggleBriefing}
-            aria-expanded={isBriefingOpen}
-            aria-controls="briefing-panel"
-            disabled={briefingLoading}
-          >
-            <span className={`expander-arrow ${isBriefingOpen ? 'open' : ''}`}>▼</span>
-            <span className="expander-text">
-              {t('briefing.title')}
-              {briefingLoading && <span className="spinner steelman-spinner"></span>}
-            </span>
-            <span className="briefing-tag">{t('briefing.tag')}</span>
-          </button>
+          {/* Instant replies had no key paying for a second call, so there is nothing
+              behind this expander — hide it rather than offer something that would
+              silently do nothing. */}
+          {!reply.instant && (
+            <>
+              <button
+                type="button"
+                className="expander-header briefing-header"
+                onClick={toggleBriefing}
+                aria-expanded={isBriefingOpen}
+                aria-controls="briefing-panel"
+                disabled={briefingLoading}
+              >
+                <span className={`expander-arrow ${isBriefingOpen ? 'open' : ''}`}>▼</span>
+                <span className="expander-text">
+                  {t('briefing.title')}
+                  {briefingLoading && <span className="spinner steelman-spinner"></span>}
+                </span>
+                <span className="briefing-tag">{t('briefing.tag')}</span>
+              </button>
 
-          <div
-            id="briefing-panel"
-            className={`collapsible ${isBriefingOpen ? '' : 'collapsed'}`}
-            aria-hidden={!isBriefingOpen}
-          >
-            <div className="collapsible-clip">
-              <div className="rebuttal-detailed-content steelman-content">
-                {briefingError ? (
-                  <span className="steelman-error">⚠️ {briefingError}</span>
-                ) : reply.theirCase ? (
-                  <>
-                    <RichText text={reply.theirCase} />
-                    {reply.answered?.length ? (
+              <div
+                id="briefing-panel"
+                className={`collapsible ${isBriefingOpen ? '' : 'collapsed'}`}
+                aria-hidden={!isBriefingOpen}
+              >
+                <div className="collapsible-clip">
+                  <div className="rebuttal-detailed-content steelman-content">
+                    {briefingError ? (
+                      <span className="steelman-error">⚠️ {briefingError}</span>
+                    ) : reply.theirCase ? (
                       <>
-                        <div className="sources-title">{t('briefing.answered')}</div>
-                        <ul className="sources-list answered-list">
-                          {reply.answered.map((line, i) => (
-                            <li key={i} className={/unanswered/i.test(line) ? 'unanswered' : undefined}>
-                              {line}
-                            </li>
-                          ))}
-                        </ul>
+                        <RichText text={reply.theirCase} />
+                        {reply.answered?.length ? (
+                          <>
+                            <div className="sources-title">{t('briefing.answered')}</div>
+                            <ul className="sources-list answered-list">
+                              {reply.answered.map((line, i) => (
+                                <li key={i} className={/unanswered/i.test(line) ? 'unanswered' : undefined}>
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        ) : null}
+                        {reply.unusedCitations.length > 0 && (
+                          <>
+                            <div className="sources-title">{t('briefing.unused')}</div>
+                            <SourceList citations={reply.unusedCitations} title={t('reply.sourcesTitle')} />
+                          </>
+                        )}
                       </>
-                    ) : null}
-                    {reply.unusedCitations.length > 0 && (
-                      <>
-                        <div className="sources-title">{t('briefing.unused')}</div>
-                        <SourceList citations={reply.unusedCitations} title={t('reply.sourcesTitle')} />
-                      </>
+                    ) : (
+                      <span className="token-detail">{t('briefing.building')}</span>
                     )}
-                  </>
-                ) : (
-                  <span className="token-detail">{t('briefing.building')}</span>
-                )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
 
           <div className="share-row">
             {shareUrl ? (
