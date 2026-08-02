@@ -16,7 +16,7 @@ prompts.
 ## Features
 
 - 🎤 **Voice, Text, or URL Input**: Dictate the argument via the browser microphone (Web Speech API), type it, or paste a link to an article and let the app pull the text in
-- 🤖 **A short, curated model list**: nine providers, twenty-four models — every *cloud* model here can hold this app's long, constraint-heavy prompt. Anthropic Claude, Google Gemini, Groq, xAI Grok, Moonshot Kimi, Z.ai GLM, DeepSeek, OpenRouter (the only browser route to GPT), or a model running locally in your browser with no API key at all (WebLLM/WebGPU — a deliberate exception to that bar, kept because it is the only option where nothing leaves your device)
+- 🤖 **A short, curated model list**: nine providers, forty models — every *cloud* model here can hold this app's long, constraint-heavy prompt. Anthropic Claude, Google Gemini, Groq, xAI Grok, Moonshot Kimi, Z.ai GLM, DeepSeek, OpenRouter (the only browser route to GPT), or a model running locally in your browser with no API key at all (WebLLM/WebGPU — a deliberate exception to that bar, kept because it is the only option where nothing leaves your device)
 - 🔗 **Real sources on every model**: the app searches the web itself (Tavily, keyless — no account needed) and the reply may cite *only* what was actually retrieved. Any URL the model invents is stripped before you see it
 - ⚠️ **The weak link in your own position**, shown every time, before you send — if the other side is better supported, it says so
 - ⚖️ **Their best case, and where you answer it**: a private briefing that checks your reply actually addresses their strongest argument, and flags anything it leaves unanswered
@@ -39,7 +39,7 @@ prompts.
 
 | Provider | Cost | API key? | Models |
 |----------|------|----------|--------|
-| OpenRouter | Free models + paid | Yes (free) | **Nemotron 3 Ultra 550B** and **Gemma 4 31B** (genuinely free), **GPT-5.6 Luna / Terra / Sol** — the only browser route to GPT — plus MiniMax M3 |
+| OpenRouter | Free models + paid | Yes (free) | **Nemotron 3 Ultra 550B** and **Gemma 4 31B** (genuinely free), **GPT-5.6 Luna / Terra / Sol** — the only browser route to GPT — plus MiniMax M3, **and a mirror of every model below**, so one OpenRouter key covers the whole catalog (GLM and Kimi are even cheaper here than direct) |
 | Google Gemini | Free tier + paid | Yes (free) | Gemini 3.1 Flash-Lite, Gemini 3.6 Flash — free tier on both |
 | Groq | Free tier | Yes (free) | Llama 3.3 70B, GPT-OSS 120B — the fastest responses here |
 | Anthropic Claude | Paid | Yes | Claude Haiku 4.5 / **Sonnet 5** / Opus 5 / Fable 5 |

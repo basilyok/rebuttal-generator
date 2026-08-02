@@ -6,7 +6,7 @@ governs how output is written — read it before touching `src/prompts.ts`.
 
 ## ✅ What's Been Created
 
-You now have a **fully-functional, deployable PWA** (Progressive Web App) that generates AI-powered rebuttals with your choice of 24 models across 9 providers (Claude Sonnet 5 by default).
+You now have a **fully-functional, deployable PWA** (Progressive Web App) that generates AI-powered rebuttals with your choice of 40 models across 9 providers (Claude Sonnet 5 by default).
 
 ### 📦 Complete Features
 
@@ -23,10 +23,11 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
   verify, and their best case mapped to where your reply answers it
 - Web search runs *before* generation (Tavily, keyless) and the reply may cite only what
   was retrieved; invented URLs are stripped
-- 9 providers, 24 models — the cloud models curated down to the ones that can
+- 9 providers, 40 models — the cloud models curated down to the ones that can
   actually hold this app's long, constraint-heavy prompt: Claude, Gemini, Groq,
   xAI Grok, Moonshot Kimi, Z.ai GLM, DeepSeek, OpenRouter (the only browser route
-  to GPT), plus a free no-key local in-browser option (WebLLM/WebGPU) that is a
+  to GPT, and a mirror of every native model so one key covers the whole
+  catalog), plus a free no-key local in-browser option (WebLLM/WebGPU) that is a
   deliberate exception to that bar and labelled as such in the UI. ↻ Refresh still loads any
   provider's full live catalog, except on Z.ai which publishes no such endpoint.
   OpenAI's own API is absent by necessity, not preference: it strips the CORS
