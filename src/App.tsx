@@ -75,6 +75,16 @@ import {
   type VaultBlob,
 } from './vault'
 import { AccountBar, VaultDialog, type VaultUiState } from './AccountBar'
+import HistoryPanel from './HistoryPanel'
+import {
+  listEntries,
+  saveEntry,
+  deleteEntry,
+  clearAllEntries,
+  pushHistory,
+  pullAndMergeHistory,
+  type HistoryEntry,
+} from './history'
 
 /**
  * One generated reply. `message` is the only part that is ever sent to anyone —
@@ -245,6 +255,10 @@ export default function App() {
   const [isFetchingArticle, setIsFetchingArticle] = useState(false)
   const [articleStatus, setArticleStatus] = useState('')
 
+  // --- history: local-first, encrypted-sync second (see src/history.ts) ---
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([])
+  const [showHistory, setShowHistory] = useState(false)
+
   const provider = getProvider(providerId)
   const model = useMemo(() => models.find((m) => m.id === modelId), [models, modelId])
 
@@ -276,6 +290,12 @@ export default function App() {
       cancelled = true
     }
   }, [language])
+
+  // Local history is available immediately, signed in or not — it lives in this
+  // device's IndexedDB regardless of account state (see src/history.ts).
+  useEffect(() => {
+    listEntries().then(setHistoryEntries)
+  }, [])
 
   // Sign-in state, plus the account's saved language. A preference stored on the
   // account wins over this device's locale — that is what "maintained across logins"
@@ -330,6 +350,13 @@ export default function App() {
           setTavilyDraft(loadTavilyKey())
           setShowApiKeyInput(getProvider(providerId).requiresKey && !loadStoredKey(providerId))
           setVaultState('unlocked')
+          void pullAndMergeHistory().then((merged) => {
+            if (cancelled || !merged) return
+            setHistoryEntries(merged)
+            // Sign-in uploads the device backlog: entries generated while signed
+            // out are already in the merge, so pushing it completes the sync.
+            void pushHistory(merged)
+          })
         } else {
           setVaultState('locked')
         }
@@ -555,6 +582,34 @@ export default function App() {
     setArticle(null)
   }
 
+  /** Repopulate the transcript and reply from a saved history entry. */
+  const restoreFromHistory = (entry: HistoryEntry) => {
+    finalTranscriptRef.current = entry.argument
+    setTranscript(entry.argument)
+    setArticle(null)
+    setError('')
+    setShareUrl('')
+    setShowClaims(false)
+    setIsBriefingOpen(false)
+    setLastRun(null)
+    setInstantDone(null)
+    setReply({
+      message: entry.message,
+      strategy: entry.strategy || '',
+      context: null,
+      citations: entry.citations || [],
+      strippedUrls: [],
+      unusedCitations: [],
+      weakLink: entry.weakLink || '',
+      toVerify: [],
+      // A restored reply has no lastRequestRef (that briefing context was never
+      // saved), same as an Instant reply — so it hides the BYOK-only briefing
+      // expander the same way Instant does.
+      instant: true,
+    })
+    setShowHistory(false)
+  }
+
   const handleFetchArticle = async () => {
     setIsFetchingArticle(true)
     setError('')
@@ -599,6 +654,31 @@ export default function App() {
         : { usage, cost }
     )
     if (cost) setSessionCost((current) => current + cost)
+  }
+
+  /**
+   * Save a successful generation to local history, then sync it if the vault is
+   * unlocked. Called from both the Instant and BYOK reply paths — every
+   * successful generation, regardless of which one produced it.
+   */
+  const recordHistory = (message: string, strategy: string, weakLink: string, citationsUsed: Citation[]) => {
+    const entry: HistoryEntry = {
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      argument: transcript.trim(),
+      message,
+      strategy,
+      weakLink,
+      citations: citationsUsed,
+      modelLabel: model?.label,
+      articleTitle: article?.title,
+      articleUrl: article?.url,
+    }
+    saveEntry(entry).then(async () => {
+      const all = await listEntries()
+      setHistoryEntries(all)
+      if (vaultState === 'unlocked') void pushHistory(all) // one KV write per save, ciphertext only
+    })
   }
 
   const generateReply = async () => {
@@ -706,6 +786,7 @@ export default function App() {
           toVerify: [],
           instant: true,
         })
+        recordHistory(verified.text, parsed.strategy, section(instantReply.text, 'WEAKLINK'), verified.used)
         setInstantQuota({ remaining: instantReply.remaining, cap: instantReply.cap })
         setInstantDone(null)
         if (searchNote) setError(searchNote)
@@ -755,6 +836,7 @@ export default function App() {
         weakLink: check.weakLink,
         toVerify: check.toVerify,
       })
+      recordHistory(verified.text, parsed.strategy, check.weakLink, verified.used)
       if (searchNote) setError(searchNote)
 
       addUsage(messageResult.usage)
@@ -881,6 +963,11 @@ export default function App() {
     // Drop the derived key too. Without this, "sign out" on a shared machine would
     // leave the next person able to decrypt the vault by simply signing back in.
     await forgetDeviceKey()
+    // Wipe the device's history copy as well — entries AND key both leave this
+    // device on sign-out. The server keeps the ciphertext; the next sign-in on
+    // this (or any) device pulls it back down once the vault is unlocked again.
+    await clearAllEntries()
+    setHistoryEntries([])
     setAuth((current) => ({ ...current, user: null }))
     setVaultState('none')
     setVaultBlob(null)
@@ -919,6 +1006,13 @@ export default function App() {
         await saveVault(sealed)
         setVaultBlob(sealed)
         setVaultState('unlocked')
+        void pullAndMergeHistory().then((merged) => {
+          if (!merged) return
+          setHistoryEntries(merged)
+          // Sign-in uploads the device backlog: entries generated while signed
+          // out are already in the merge, so pushing it completes the sync.
+          void pushHistory(merged)
+        })
       } else if (vaultBlob) {
         const bundle = await unlock(vaultBlob, passphrase)
         applyKeyBundle(bundle)
@@ -926,6 +1020,13 @@ export default function App() {
         setTavilyDraft(loadTavilyKey())
         setShowApiKeyInput(provider.requiresKey && !loadStoredKey(providerId))
         setVaultState('unlocked')
+        void pullAndMergeHistory().then((merged) => {
+          if (!merged) return
+          setHistoryEntries(merged)
+          // Sign-in uploads the device backlog: entries generated while signed
+          // out are already in the merge, so pushing it completes the sync.
+          void pushHistory(merged)
+        })
       }
       setVaultPrompt(null)
     } catch (err) {
@@ -1322,6 +1423,37 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      <button type="button" className="link-button history-toggle" onClick={() => setShowHistory((v) => !v)}>
+        {showHistory ? t('history.hide') : t('history.show')}
+      </button>
+      {showHistory && (
+        <HistoryPanel
+          t={t}
+          language={language}
+          entries={historyEntries}
+          synced={vaultState === 'unlocked'}
+          onRestore={restoreFromHistory}
+          onDelete={(id) => {
+            deleteEntry(id).then(async () => {
+              const all = await listEntries()
+              setHistoryEntries(all)
+              // Push immediately, not debounced: a per-entry delete on this device
+              // could otherwise be resurrected by a stale local list pushed from
+              // another device before this delete's push lands (see history.ts).
+              if (vaultState === 'unlocked') void pushHistory(all)
+            })
+          }}
+          onClear={() => {
+            if (!window.confirm(t('history.clearConfirm'))) return
+            clearAllEntries().then(() => {
+              setHistoryEntries([])
+              // Push immediately — same delete-resurrection risk as per-entry delete.
+              if (vaultState === 'unlocked') void pushHistory([])
+            })
+          }}
+        />
+      )}
 
       <div className="input-section">
         <div className="label-row">

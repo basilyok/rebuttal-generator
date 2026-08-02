@@ -216,6 +216,16 @@ const en: Record<string, string> = {
   'instant.turnstile': 'Verification failed — reload the page and try again.',
   'instant.error': 'Instant mode is unavailable right now — try again shortly, or use your own API key.',
   'instant.badge': 'Instant mode',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'History',
+  'history.hide': 'Hide history',
+  'history.empty': 'No saved replies yet — every reply you generate is saved here, on this device.',
+  'history.localOnly': 'Saved on this device only. Sign in and unlock your vault to sync it, encrypted, across devices.',
+  'history.synced': 'Encrypted and synced to your account. Only your devices can read it.',
+  'history.delete': 'Delete this entry',
+  'history.clear': 'Clear all history',
+  'history.clearConfirm': 'Delete all saved replies? The synced copy is cleared too. This cannot be undone.',
 }
 
 export default en
