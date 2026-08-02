@@ -199,6 +199,19 @@ const fr = {
   'error.micDenied': "L'accès au microphone a été refusé. Autorisez le microphone pour ce site, puis réessayez.",
   'error.micMissing': "Aucun microphone n'a été détecté. Vérifiez qu'un microphone est branché, puis réessayez.",
   'error.speechNetwork': 'Le service de reconnaissance vocale a rencontré une erreur réseau. Vérifiez votre connexion, puis réessayez.',
+
+  // --- instant mode ------------------------------------------------------------
+  'instant.working': 'Rédaction de votre réponse (sans clé)…',
+  'instant.left': "{n} réponses gratuites restantes aujourd'hui",
+  'instant.leftOne': "1 réponse gratuite restante aujourd'hui",
+  'instant.done.title': "Plus de réponses gratuites pour aujourd'hui",
+  'instant.done.body':
+    'Elles reviennent à {time}. Connectez-vous pour en recevoir plus chaque jour, ou ajoutez votre propre clé API pour des réponses illimitées qui ne passent jamais par nos serveurs.',
+  'instant.done.signIn': 'Se connecter avec Google',
+  'instant.done.byok': 'Utiliser plutôt ma propre clé API',
+  'instant.turnstile': 'La vérification a échoué — rechargez la page et réessayez.',
+  'instant.error': "Le mode instantané n'est pas disponible pour le moment — réessayez bientôt, ou utilisez votre propre clé API.",
+  'instant.badge': 'Mode instantané',
 }
 
 export default fr

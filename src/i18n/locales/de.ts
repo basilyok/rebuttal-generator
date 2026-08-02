@@ -207,6 +207,19 @@ const de = {
   'error.micDenied': 'Der Zugriff aufs Mikrofon wurde abgelehnt. Erlaub ihn für diese Seite und versuch es noch einmal.',
   'error.micMissing': 'Es wurde kein Mikrofon gefunden. Prüf, ob eines angeschlossen ist, und versuch es noch einmal.',
   'error.speechNetwork': 'Beim Spracherkennungsdienst gab es einen Netzwerkfehler. Prüf deine Verbindung und versuch es noch einmal.',
+
+  // --- instant mode ----------------------------------------------------------
+  'instant.working': 'Deine Antwort wird geschrieben (kein Schlüssel nötig)…',
+  'instant.left': 'Noch {n} kostenlose Antworten heute',
+  'instant.leftOne': 'Noch 1 kostenlose Antwort heute',
+  'instant.done.title': 'Die kostenlosen Antworten sind für heute aufgebraucht',
+  'instant.done.body':
+    'Sie kommen um {time} zurück. Melde dich an, dann hast du ein größeres Tageskontingent, oder füg deinen eigenen API-Schlüssel hinzu für unbegrenzte Antworten, die nie über unsere Server laufen.',
+  'instant.done.signIn': 'Mit Google anmelden',
+  'instant.done.byok': 'Stattdessen meinen eigenen API-Schlüssel verwenden',
+  'instant.turnstile': 'Überprüfung fehlgeschlagen — lad die Seite neu und versuch es noch einmal.',
+  'instant.error': 'Der Sofortmodus ist gerade nicht verfügbar — versuch es gleich noch einmal, oder nutze deinen eigenen API-Schlüssel.',
+  'instant.badge': 'Sofortmodus',
 }
 
 export default de
