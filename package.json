@@ -7,7 +7,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "start": "vite",
-    "test": "node --import tsx --test tests/"
+    "test": "node --import tsx --test \"tests/*.test.{mjs,ts}\""
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.84",
