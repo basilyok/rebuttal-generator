@@ -56,8 +56,8 @@ export async function onRequestGet(context) {
     `<meta property="og:url" content="${escapeHtml(pageUrl.toString())}" />`,
     `<meta property="og:site_name" content="Rebuttal Generator" />`,
     `<meta name="twitter:card" content="summary" />`,
-    // Locale of the CONTENT, present only on shares published after the language
-    // field ships (Step 3b below) — older records simply omit it.
+    // Locale of the CONTENT. Older share records predate this field and simply
+    // omit it, so og:locale is left off rather than guessed.
     ...(typeof record.language === 'string' && /^[a-z]{2,3}(-[A-Za-z0-9]+)?$/.test(record.language)
       ? [`<meta property="og:locale" content="${escapeHtml(record.language.replace('-', '_'))}" />`]
       : []),
