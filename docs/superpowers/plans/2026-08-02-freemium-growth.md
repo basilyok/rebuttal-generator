@@ -1290,16 +1290,16 @@ git commit -m "Add client Instant mode: keyless replies, quota counter, honest e
 - Modify: `src/turnstile.ts` (paste the real sitekey)
 
 **Acceptance Criteria:**
-- [ ] All operator steps below are done by the USER (keys and secrets are never typed by the agent — hand over the exact commands and wait)
-- [ ] README no longer claims text never reaches this app's servers; it says: only in Instant mode, only the argument text, never API keys
-- [ ] Production: keyless generate returns a reply; 4th anonymous reply → the exhaustion panel; `curl` without Origin → 403; BYOK still browser-direct (verify in devtools: no `/api/generate` call when a key is saved)
-- [ ] Docs cover: limiter deploy, both secrets, Turnstile site creation, the provisioned key's daily limit
+- [x] All operator steps below are done by the USER (keys and secrets are never typed by the agent — hand over the exact commands and wait)
+- [x] README no longer claims text never reaches this app's servers; it says: only in Instant mode, only the argument text, never API keys
+- [x] Production: keyless generate returns a reply; 4th anonymous reply → the exhaustion panel; `curl` without Origin → 403; BYOK still browser-direct (verify in devtools: no `/api/generate` call when a key is saved)
+- [x] Docs cover: limiter deploy, both secrets, Turnstile site creation, the provisioned key's daily limit
 
 **Verify:** production checks in Step 4.
 
 **Steps:**
 
-- [ ] **Step 1: Operator setup (hand these to the user — do not run the secret-bearing ones yourself)**
+- [x] **Step 1: Operator setup (hand these to the user — do not run the secret-bearing ones yourself)**
 
 ```bash
 cd limiter && npx wrangler deploy
@@ -1310,7 +1310,7 @@ Then the user, interactively:
 2. **Turnstile:** Cloudflare dashboard → Turnstile → Add site (domain `rebuttal.m36x.com`, widget type **Managed**). Copy the sitekey into `TURNSTILE_SITE_KEY` in `src/turnstile.ts` (public, committable), then `npx wrangler pages secret put TURNSTILE_SECRET --project-name=m36x-rebuttal` with the secret key.
 3. Secrets bind at deploy time — the Step 3 deploy below must happen AFTER the secrets are set (this bit us before: d97801d).
 
-- [ ] **Step 2: Rewrite the privacy claims**
+- [x] **Step 2: Rewrite the privacy claims**
 
 In `README.md`, find the claim that text is never sent to this app's own servers (near line 27, and the privacy section near line 434) and replace with wording equivalent to:
 
@@ -1325,21 +1325,21 @@ your own key turns Instant mode off entirely.
 
 Update `DEPLOYMENT_GUIDE.md` with: `cd limiter && npx wrangler deploy` (first, so the service binding resolves), both `secret put` commands, the Turnstile site step, and the note that ACCOUNTS KV creation is documented in wrangler.toml comments. Update `PROJECT_SUMMARY.md`'s architecture list with the limiter Worker and `/api/generate`.
 
-- [ ] **Step 3: Deploy and verify in production**
+- [x] **Step 3: Deploy and verify in production**
 
 ```bash
 npm run build
 npx wrangler pages deploy dist --project-name=m36x-rebuttal --commit-dirty=true
 ```
 
-- [ ] **Step 4: Production verification**
+- [x] **Step 4: Production verification**
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" -X POST https://rebuttal.m36x.com/api/generate -H "Content-Type: application/json" -d "{\"argument\":\"test\"}"
 ```
 Expected: `403` (no browser origin). Then in a private browser window on rebuttal.m36x.com with no saved keys: one real generate (this spends ~$0.002 — the paid first reply) → reply renders with the weak-link note; the counter appears; confirm in DevTools → Network that with a saved key no request to `/api/generate` is made. Confirm the Turnstile widget did not visibly appear.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```bash
 git add README.md PROJECT_SUMMARY.md DEPLOYMENT_GUIDE.md src/turnstile.ts
