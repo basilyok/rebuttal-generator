@@ -1947,18 +1947,18 @@ git push
 **Context you need:** `public/404.html` exists, so Cloudflare Pages serves a 404 (not the SPA shell) for unknown paths — `/s/<id>` therefore MUST be a function route; functions take precedence over static assets. `env.ASSETS.fetch()` is implicitly available in Pages Functions (unused so far in this repo). The share record in `SHARES` KV has `{argument, message?, brief?/detailed? (legacy), citations?, articleTitle?, articleUrl?, createdAt?}` — the briefing and weak-link are NOT in the record, so the unfurl structurally cannot leak them. `index.html`'s head has `<title>` (line 17) and `<meta name="description">` (line 6) and no og: tags at all. `sw.js` treats `/s/*` as network-first navigations and only falls back to the cached shell when offline — no SW change needed. The client detects shares via `sharedIdFromLocation()` (share.ts:86-89, `?s=` only today) and renders the shared view (App.tsx:1027-1083) which already has the `share.writeYourOwn` CTA.
 
 **Acceptance Criteria:**
-- [ ] `GET /s/<valid-id>` → 200, the app shell with: rewritten `<title>`, rewritten meta description, `og:title`, `og:description` (first ~140 chars of the message, HTML-escaped), `og:type`, `og:url`, `og:site_name`, `twitter:card`
-- [ ] Responses are byte-identical for a browser UA and a crawler UA (asserted in the test)
-- [ ] Unknown/expired id → 404 with the 404.html body (noindex)
-- [ ] The SPA on `/s/<id>` renders the shared view (path-based detection), and legacy `?s=` links still render
-- [ ] New shares copy `/s/<id>` URLs; `Cache-Control: public, max-age=300` on success
-- [ ] Nothing from the record beyond title/message-prefix reaches the meta; all injected values are HTML-escaped
+- [x] `GET /s/<valid-id>` → 200, the app shell with: rewritten `<title>`, rewritten meta description, `og:title`, `og:description` (first ~140 chars of the message, HTML-escaped), `og:type`, `og:url`, `og:site_name`, `twitter:card`
+- [x] Responses are byte-identical for a browser UA and a crawler UA (asserted in the test)
+- [x] Unknown/expired id → 404 with the 404.html body (noindex)
+- [x] The SPA on `/s/<id>` renders the shared view (path-based detection), and legacy `?s=` links still render
+- [x] New shares copy `/s/<id>` URLs; `Cache-Control: public, max-age=300` on success
+- [x] Nothing from the record beyond title/message-prefix reaches the meta; all injected values are HTML-escaped
 
 **Verify:** `node --test tests/share-page.test.mjs` against `npx wrangler pages dev dist` (create a share first via curl in the test itself).
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/share-page.test.mjs`:
 
@@ -2024,12 +2024,12 @@ test('malformed id is a 404, not an error', async () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --test tests/share-page.test.mjs`
 Expected: FAIL — `/s/<id>` returns the static 404 page with no OG meta.
 
-- [ ] **Step 3: Implement `functions/s/[id].js`**
+- [x] **Step 3: Implement `functions/s/[id].js`**
 
 ```js
 // The share page: the app shell with THIS share's Open Graph meta injected.
@@ -2137,7 +2137,7 @@ export async function onRequestGet(context) {
 }
 ```
 
-- [ ] **Step 3b: Carry the content language into the share record**
+- [x] **Step 3b: Carry the content language into the share record**
 
 Three one-line changes so `og:locale` has data:
 
@@ -2150,7 +2150,7 @@ Three one-line changes so `og:locale` has data:
 2. `src/share.ts` — add `language?: string` to `SharedRebuttal` (:16-30) and to the `publishResult` payload type.
 3. `src/App.tsx` `handleShare` (:473-497) — pass `language: lastRequestRef.current?.promptContext.replyLanguage` in the `publishResult({...})` call.
 
-- [ ] **Step 4: Client-side path handling in `src/share.ts`**
+- [x] **Step 4: Client-side path handling in `src/share.ts`**
 
 Replace `shareUrlFor` (:83) and extend `sharedIdFromLocation` (:86-89) / `clearSharedIdFromLocation` (:92-96):
 
@@ -2179,11 +2179,11 @@ export function clearSharedIdFromLocation(): void {
 
 (Keep the existing exact function names — App.tsx:458-465 and :467-471 call them; no App changes needed for detection.)
 
-- [ ] **Step 5: Run tests, build, verify the client**
+- [x] **Step 5: Run tests, build, verify the client**
 
 `npm run build`; restart `npx wrangler pages dev dist`; `node --test tests/share-page.test.mjs` → PASS (4/4). In the browser: publish a share (echo/BYOK reply → share row), copy link → it is `/s/<id>`; open it in a private window → shared view renders; open a legacy `/?s=<id>` URL → still renders.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add functions/s/ functions/api/share.js src/share.ts src/App.tsx tests/share-page.test.mjs
