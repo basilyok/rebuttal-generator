@@ -129,9 +129,11 @@ they are not all independent of one another. The two Google values are one unit:
 sign-in needs both halves *and* the `ACCOUNTS` binding, and either half alone
 does nothing. `OPERATOR_EMAIL` depends on that same unit, because the only thing
 that mints a session is the OAuth callback: set it on a deployment without
-sign-in and `/api/metrics` returns a permanent `404`, not a readback. The other
-two stand alone. Each is set the same way, and **every one of them binds at
-deploy time**, so adding one to a live project does nothing until you redeploy.
+sign-in and `/api/metrics` never returns a readback — a permanent `404` when the
+`ACCOUNTS` binding is there but the OAuth pair is not, and `501` when `ACCOUNTS`
+itself is missing, since that check runs first. The other two stand alone. Each
+is set the same way, and **every one of them binds at deploy time**, so adding
+one to a live project does nothing until you redeploy.
 
 ```bash
 npx wrangler pages secret put <NAME> --project-name=m36x-rebuttal

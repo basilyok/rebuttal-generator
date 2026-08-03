@@ -263,6 +263,15 @@ give it to can read it, and so can anyone they forward it to. Links expire after
 a year. Your API key is never sent to the sharing service; the endpoint stores
 only known fields, so nothing else in the payload can be persisted.
 
+One thing the recipient should know too, since they never agreed to anything:
+**every fetch of a `/s/<id>` page increments an anonymous counter** on this
+app's server (`share_view`) — a person opening the link, or a platform fetching
+it to build the preview — and dismissing the shared view to write your own
+increments a second one (`share_cta`). Each is a name, a date and a tally: no
+id, no referrer, no user agent, nothing about who opened it or what it said.
+That is the whole of what the share funnel records; see
+[Privacy & Security](#privacy--security).
+
 ## Your reply history
 
 Every reply you generate is saved on this device automatically — signed in or
@@ -331,9 +340,10 @@ New models ship constantly. Three ways this stays current, in order of effort:
 ## Accounts, and how your API keys are stored
 
 Signing in is **optional**. Without it the app behaves exactly as it always has:
-keys live in this browser's local storage and never leave it. Signing in adds two
-things — your keys follow you to a new device, and your language choice sticks to
-your account instead of to one browser.
+keys live in this browser's local storage and never leave it. Signing in adds
+three things — your keys follow you to a new device, your reply history syncs as
+ciphertext once the vault is unlocked, and your language choice sticks to your
+account instead of to one browser.
 
 ### The keys are encrypted before they leave your browser
 
@@ -549,9 +559,21 @@ Where your argument text actually goes, in full:
   stores a blob it cannot read. Signed out, your history never leaves the device.
 
 Audio never leaves the browser's own speech recognition. There is no third-party
-analytics and no tracking; the only things this app's servers count are the
-Instant-mode quotas and aggregate totals described above — ids and numbers,
-never content.
+analytics and no tracking. What this app's servers count, exhaustively:
+
+- **The Instant-mode quota**, as described above: an opaque id (a random device
+  id, or your account id when signed in) and a number.
+- **Aggregate event totals**, each stored as a name, a date and a tally and
+  nothing else — no id, no referrer, no user agent, no payload, so no two of
+  them can be joined back into a person. Two are about Instant mode (a reply
+  was served; the daily cap was hit — plus internal retries when the upstream
+  model misbehaves). Two are about the share funnel: **a share page was
+  viewed**, and someone on a share page **clicked "write your own"**.
+
+That share-page count is worth calling out because it is the one thing here you
+do not trigger yourself: it is incremented by the *recipient* opening the link
+you sent, whether or not they have ever used this app. It still records only
+that one more view happened that day. Ids and numbers, never content.
 
 ## Troubleshooting
 
