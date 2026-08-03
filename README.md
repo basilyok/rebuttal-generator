@@ -59,9 +59,11 @@ The honest fine print:
 - **A Cloudflare Turnstile check** runs invisibly in the background to keep
   bots from draining the free pool. Most people never see it.
 
-Saving any provider key switches Instant mode off completely — every call then
-goes browser-direct to that provider, with no daily cap, and your text stops
-touching this app's servers at all.
+Saving a key for the provider you have selected switches Instant mode off for
+that provider — those calls go browser-direct, with no daily cap, and your text
+stops touching this app's servers. The gate is per provider: switch to a
+provider you have no key saved for and Instant mode picks the reply up again,
+server hop included.
 
 ## Choosing an AI
 
@@ -459,8 +461,8 @@ storage, one entry per provider. Your argument text stays in the browser too,
 with one explicit exception: **Instant mode** (the free, keyless taste) sends
 the argument text — and the handful of structured fields around it, nothing
 more — to this app's `/api/generate` function so our key can pay for the
-reply. No account required, nothing you send is stored, and adding your own
-key turns Instant mode off entirely.
+reply. No account required, nothing you send is stored, and saving a key for
+the provider you have selected turns Instant mode off for that provider.
 
 Where your argument text actually goes, in full:
 
@@ -469,13 +471,16 @@ Where your argument text actually goes, in full:
 - **Tavily**, as the evidence-search query, on every generation where sourcing is
   left on. Turn off "Find real evidence to cite" and no search request is made.
 - **This app's `/api/generate` function, in Instant mode only** — that is, only
-  while no API key is saved. The browser sends the argument, the optional
-  recipient line, the language choices and the retrieved citations; the server
-  builds the prompt and calls OpenRouter on this app's own key. Nothing from
-  the request is logged or persisted. The daily quota counter (a separate,
-  private Worker) stores an opaque random id and a count — never text — plus
-  anonymous aggregate totals such as how many Instant replies were served that
-  day. A saved key routes around this endpoint completely.
+  while no API key is saved for the provider you have selected. The browser
+  sends the argument, the optional recipient line, the language choices and
+  the retrieved citations; the server builds the prompt and calls OpenRouter
+  on this app's own key. Nothing from the request is logged or persisted. The
+  daily quota counter (a separate, private Worker) stores an opaque id — a
+  random device id when anonymous, your account id when signed in — and a
+  count, never text, plus anonymous aggregate totals such as how many Instant
+  replies were served that day. A key saved for the selected provider routes
+  around this endpoint; pick a provider with no saved key and your text goes
+  through it again.
 - **This app's `/api/article` function**, but only in URL mode, and only the URL —
   never your typed text. It fetches the page server-side because the browser cannot.
 - **This app's `/api/share` function**, only if you click "Get a shareable link".
@@ -551,9 +556,10 @@ npx wrangler pages deploy dist --project-name=m36x-rebuttal
 See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for details, caching rules
 (`public/_headers`), and troubleshooting. The `dist/` output is fully static,
 so any static host (Netlify, Vercel, S3+CloudFront, GitHub Pages…) also works —
-though BYOK generation is the only thing that survives the move: the Pages
-Functions (article extraction, sharing, sign-in, Instant mode) are
-Cloudflare-side.
+everything browser-side survives the move: BYOK generation, the local
+in-browser (WebLLM) model, and the browser-direct Tavily search. What does not
+is the Pages Functions (article extraction, sharing, sign-in, Instant mode) and
+the limiter Worker, which are Cloudflare-side.
 
 ## Environment Variables
 

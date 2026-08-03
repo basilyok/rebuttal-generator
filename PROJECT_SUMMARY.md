@@ -61,8 +61,9 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
   leaves the server
 - Spend is bounded twice: the limiter's caps, and the provisioned key's own
   daily spend limit enforced on OpenRouter's side
-- Any saved API key bypasses Instant mode entirely — BYOK calls stay
-  browser-direct and never touch `/api/generate`
+- A key saved for the selected provider bypasses Instant mode — those BYOK
+  calls stay browser-direct and never touch `/api/generate`; selecting a
+  provider with no saved key routes through Instant mode again
 
 ✅ **PWA (Progressive Web App)**
 - Install on desktop (Chrome, Edge, Safari)
@@ -84,8 +85,8 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
   store your language preference, and any rebuttal you explicitly publish as a
   share link — the private briefing and the weak-link note are never published
 - Argument text reaches this app's servers in exactly one case: Instant mode
-  (no key saved) sends it to `/api/generate` so the operator's key can pay for
-  the reply. Nothing from the request is logged or persisted; the limiter
+  (no key saved for the selected provider) sends it to `/api/generate` so the
+  operator's key can pay for the reply. Nothing from the request is logged or persisted; the limiter
   stores an opaque quota key and a count, never text
 - No third-party analytics or tracking; the limiter keeps only anonymous
   aggregate counters (e.g. how many Instant replies were served per day)
@@ -161,7 +162,7 @@ Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 1. **User speaks, types, or pastes a URL** → Web Speech API, the textarea, or `/api/article` extraction
 2. **User picks an AI** → provider + model dropdowns (`src/providers.ts` holds the curated registry and call adapters; read the CURATION RULE before adding models)
 3. **The app searches first** → Tavily (keyless) returns a fixed citation set; the reply may cite only from it
-4. **User clicks generate** → two parallel calls: the message and the honest check (sequential for local models). With no key saved, Instant mode instead POSTs the structured fields to `/api/generate`, which builds the prompt server-side and calls OpenRouter on the operator's key, with the daily quota checked in the limiter Worker first
+4. **User clicks generate** → two parallel calls: the message and the honest check (sequential for local models). With no key saved for the selected provider, Instant mode instead POSTs the structured fields to `/api/generate`, which builds the prompt server-side and calls OpenRouter on the operator's key, with the daily quota checked in the limiter Worker first
 5. **Results display** → one sendable message plus the weak link; the briefing is a third call, made only if opened
 6. **PWA magic** → Service worker caches assets for instant reopens
 
@@ -213,7 +214,7 @@ Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 ### Data Privacy
 - Argument text goes to: the chosen AI provider, and Tavily as the search query
   (unless sourcing is switched off). With the local in-browser model it goes nowhere
-- In Instant mode only (no key saved), argument text goes to `/api/generate`,
+- In Instant mode only (no key saved for the selected provider), argument text goes to `/api/generate`,
   which forwards it to OpenRouter on the operator's key. Nothing is persisted;
   the quota counter holds an opaque id and a count
 - `/api/article` receives the URL only, in URL mode — never typed text
