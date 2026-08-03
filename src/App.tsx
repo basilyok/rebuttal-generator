@@ -501,6 +501,12 @@ export default function App() {
   }, [])
 
   const dismissShared = () => {
+    // Aggregate loop-conversion signal — a name, nothing else
+    try {
+      navigator.sendBeacon('/api/metric', new Blob([JSON.stringify({ name: 'share_cta' })], { type: 'application/json' }))
+    } catch {
+      /* metrics must never break navigation */
+    }
     setShared(null)
     setSharedError('')
     clearSharedIdFromLocation()

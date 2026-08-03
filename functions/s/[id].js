@@ -73,6 +73,18 @@ export async function onRequestGet(context) {
       : []),
   ].join('\n    ')
 
+  // Fire-and-forget funnel signal — a name, nothing else. Never let a metrics
+  // failure (or a missing binding) affect the page being served.
+  if (context.env.LIMITER) {
+    context.waitUntil(
+      context.env.LIMITER.fetch('https://limiter/metric', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'share_view' }),
+      }).catch(() => {})
+    )
+  }
+
   const shell = await context.env.ASSETS.fetch(new URL('/index.html', context.request.url))
   const rewritten = new HTMLRewriter()
     .on('title', {
