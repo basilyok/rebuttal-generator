@@ -11,7 +11,7 @@ decision below follows from that, and every future change should be judged again
 
 ---
 
-## The ten rules
+## The eleven rules
 
 **1. Evidence is the active ingredient; tone is only the delivery system.**
 Never drop a strong, sourced piece of counter-evidence to sound more agreeable. Warmth
@@ -53,6 +53,13 @@ invites a volley. Do not answer two sentences with an essay.
 No invented personal experience, no claimed group membership, no "I used to think that
 too" unless the user said it was true. They send this under their own name.
 
+**11. Argue inside the reader's values, sized to the venue.**
+Diagnose the value doing the work under their words — safety, fairness, loyalty, order,
+sanctity, freedom — and build the case in that frame, sincerely. Evidence is the payload;
+the reader's own values are the frame that makes it land. Two strong points beat five,
+and a reply nobody finishes persuades nobody: a comment gets a comment, a text gets a
+text, only an essay may earn an essay.
+
 ---
 
 ## Two standing rules
@@ -79,6 +86,7 @@ These are not stylistic preferences. Each maps to a finding that replicates:
 | 6, 9 | Yeomans, Minson, Collins, Chen & Dorison 2020: a machine-learned profile of receptive language — acknowledge, emphasise agreement, hedge, reframe positive. Negation-heavy and lecture-marked text scores as unreceptive. |
 | 7 | Rains 2013 meta-analysis: controlling language produces reactance and measurable boomerang effects. Note this is the backfire effect that *does* replicate — the *factual* backfire effect largely failed to (Wood & Porter). Correcting someone is fine; bossing them is not. |
 | 8 | Critcher & Dunning: affirmation reduces defensive processing only when it precedes or accompanies the threat. |
+| 11 | Feinberg & Willer 2013–2019: reframing an argument into the *audience's* moral foundations outperforms arguing from one's own (d ≈ 0.2–0.4), yet only ~9–14% of people do it spontaneously. Kahan et al. 2012/2017: on identity-entangled beliefs, stacking facts polarises rather than persuades — facts work as payload inside a frame the reader's values already make relevant (Wood & Porter 2019). Tan et al. 2016 (r/ChangeMyView, ~11.5k delta-labeled threads): winners hedge, match the OP's style while bringing new content, and prune weak points — readers average arguments rather than add them. Carpenter 2013 meta-analysis (42 studies): an explicit "the choice is yours" roughly doubles compliance odds. Freling et al. 2020: concrete cases carry hot, self-relevant topics; numbers carry cold, analytical ones. |
 
 ---
 

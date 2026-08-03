@@ -43,45 +43,74 @@ take them seriously enough to answer in their own words.${note ? `\n${note}` : '
 /** The behavioural rules, phrased as prompt constraints. */
 const RULES = `HOW TO WRITE IT
 
+Before drafting, work out three things from their message alone.
+
+First, what they actually care about: the value doing the work underneath their words.
+The vocabulary gives it away — harm and protection, fairness and what people deserve,
+loyalty to us and ours, respect and order and tradition, purity and contamination,
+freedom from being told what to do. People are moved by arguments built inside their OWN
+value frame and almost never by arguments imported from yours: if they argued safety,
+answer in safety; if they argued freedom, answer in freedom. The reframe must be sincere —
+find what you can honestly affirm in their value and argue from there, because a costume
+over your real reasoning reads instantly as pandering.
+
+Second, where this reply will be read, and what a native reply looks like there. A
+comment thread gets a comment, a text message gets a text, only an essay may earn an
+essay. A reply too long to finish persuades nobody, whatever it contains.
+
+Third, how they write — sentence length, formality, how disagreement is softened where
+they are — and match that surface while bringing genuinely NEW substance and framing.
+Echo how they speak, never what they already said.
+
 Open by restating their specific claim and the reason THEY gave for it, closely enough
 that they would say "yes, that is what I meant." Quote or closely paraphrase their own
 words. Never narrate what they feel, fear, or are worried about — you do not know, and
 guessing reads as presumptuous. Restate what they wrote, not what you imagine is behind it.
 
-Then name one concrete thing you genuinely agree with — a shared goal, value, or accepted
-premise. It must be specific enough that it could not be pasted into a reply to a
-different person. Generic warmth reads as a manipulation tell.
+Then name one concrete thing you genuinely agree with — best of all, the value itself:
+the thing they care about that you can honestly say you care about too. It must be
+specific enough that it could not be pasted into a reply to a different person. Generic
+warmth reads as a manipulation tell.
 
 Then give them an off-ramp, BEFORE you disagree. Locate the error in the information
 environment rather than in them: "given what was being reported at the time, that was the
 reasonable read — what changed is…". This must come before the disagreement, not as an
 apology at the end.
 
-Then narrow the disagreement and own it: "where I read it differently is…". State what is
-and is not in dispute.
+Then narrow the disagreement and own it: "where I read it differently is…". Prefer "I"
+over "you" — a claim you own is easier to accept than a charge they must answer. State
+what is and is not in dispute.
 
-Then the substance, and make it the longest part. Specific, checkable evidence aimed at
-the load-bearing premise THEY stated: named studies, dated events, actual numbers, named
-institutions, the real mechanism. Where possible use sources this particular reader would
-already find credible rather than sources that merely agree with you. Introduce a new
-frame, case, or mechanism rather than re-fighting inside their vocabulary.
+Then make the case, inside THEIR value frame, sized to the venue. One or two strong
+points, never a stack — readers average rather than add, so a weak argument placed beside
+a strong one dilutes it. Anchor the case in the most concrete, checkable material you
+have: a named study, a dated event, an actual number, the real mechanism. When the topic
+touches their own life, make the strongest point something they can picture happening to
+someone real — drawn from the material or sources at hand, never invented; when they
+argue like an analyst, lead with the number and let the concrete case illustrate it.
+Use sources this particular reader would already find credible rather than sources that
+merely agree with you. Introduce a new frame, case, or mechanism rather than re-fighting
+inside their vocabulary.
 
 Then answer every point you conceded earlier. A concession you leave standing makes the
 message worse than one that never conceded at all. Each acknowledged point must end up
 refuted, shown not to be decisive, or explicitly accepted as a real cost that does not
 flip the conclusion.
 
-Then state your conclusion in plain words. Do not make them reconstruct your thesis.
+Then state your conclusion in plain words, hedged the honest way — own it ("I think",
+"as I read it") without diluting it. Do not make them reconstruct your thesis.
 
 Close with one small, specific thing you are asking them to consider — not capitulation —
-and restore their freedom to disagree. At most one sincere question. Do not demand a reply.
+and hand the decision back to them in so many words: the choice is theirs, and saying so
+measurably lowers the cost of taking your side. At most one sincere question. Do not
+demand a reply.
 
 HARD CONSTRAINTS
 
 - Every factual claim must be true, specific, and checkable in under a minute. If you are
   not confident, omit it or say plainly that you are unsure. One checkable error gives the
   reader licence to dismiss everything else you wrote.
-- Never invent a study, statistic, quote, source, or URL.
+- Never invent a study, statistic, quote, source, person, case, or URL.
 - Never invent experience for the sender. No "I used to think that too", no claimed
   profession or group membership, no personal anecdote — they send this under their own
   name and cannot vouch for a story you made up.
@@ -91,8 +120,9 @@ HARD CONSTRAINTS
 - Avoid stacking explicit reasoning markers ("the reason is", "therefore", "because") —
   measurably, they read as lecturing.
 - Plain prose only. No markdown, no headings, no bullet points, no numbered lists, no bold.
-- Match their register and length. Do not answer two sentences with an essay, or an essay
-  with two sentences.
+- Size the message to where it will be read and to them. Do not answer two sentences with
+  an essay, or an essay with two sentences — and when in doubt, go shorter: a reply they
+  finish beats a reply that is complete.
 - Write only the message. No preamble, no sign-off like "Hope this helps", no meta-commentary.`
 
 /** Envelope the model fills in. Parsing is tolerant, so imperfect compliance is fine. */
@@ -164,10 +194,10 @@ function contextBlock(context: PromptContext): string {
   if (venue) lines.push(`The argument was published on: ${venue}`)
   lines.push(
     audience?.trim()
-      ? 'Use that description to choose register, length, and which sources this reader would credit.'
+      ? 'Use that description to choose register, length, and which sources this reader would credit — and size the reply to what actually gets read in that setting.'
       : `Infer as much as you can about who wrote this and where, from the ${
           isArticle ? 'article' : 'text'
-        } itself — their register, vocabulary, apparent audience, and what kind of source they would find credible. Write for that person specifically.`
+        } itself — their register, vocabulary, apparent audience, what kind of source they would find credible, and what a native reply looks like where this was said: its natural length and form. Write for that person specifically, at that size.`
   )
   return lines.join('\n')
 }
