@@ -522,6 +522,7 @@ export default function App() {
         providerLabel: provider.label,
         articleUrl: article?.url,
         articleTitle: article?.title,
+        language: lastRequestRef.current?.promptContext.replyLanguage,
       })
       setShareUrl(shareUrlFor(id))
       setShareCopied(false)
