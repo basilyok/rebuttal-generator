@@ -10,6 +10,16 @@
 const ID_PATTERN = /^[A-Za-z0-9]{6,32}$/
 const DESCRIPTION_CHARS = 140
 
+// This route is served by a Pages Function, so it falls outside public/_headers'
+// static-asset layer entirely — Cloudflare does not apply _headers rules to
+// Function responses. Every HTML response this route returns must carry the
+// same baseline security headers as the rest of the site's `/*` rule.
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Frame-Options': 'DENY',
+}
+
 const escapeHtml = (value) =>
   value
     .replace(/&/g, '&amp;')
@@ -26,7 +36,7 @@ async function notFound(context) {
   const page = await context.env.ASSETS.fetch(new URL('/404.html', context.request.url))
   return new Response(page.body, {
     status: 404,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...SECURITY_HEADERS },
   })
 }
 
@@ -87,6 +97,7 @@ export async function onRequestGet(context) {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300',
+      ...SECURITY_HEADERS,
     },
   })
 }

@@ -121,7 +121,7 @@ export async function onRequestPost(context) {
     providerLabel: asText(payload?.providerLabel, 200),
     articleUrl: /^https?:\/\//i.test(payload?.articleUrl || '') ? asText(payload.articleUrl, 2000) : undefined,
     articleTitle: asText(payload?.articleTitle, 500),
-    language: /^[a-z]{2,3}(-[A-Za-z0-9]+)?$/.test(payload?.language || '') ? payload.language : undefined,
+    language: /^[a-z]{2,3}(-[A-Za-z0-9]+)?$/.test(payload?.language || '') ? asText(payload.language, 20) : undefined,
     createdAt: new Date().toISOString(),
   }
 
