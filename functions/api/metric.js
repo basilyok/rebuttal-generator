@@ -1,6 +1,10 @@
 // Aggregate-only event counting. A metric is a NAME and nothing else — no ids,
-// no payload, no user agent, no referrer stored. The allowlist is the whole
-// schema; anything not on it is a client bug, not a new metric.
+// no payload, no user agent, no referrer stored.
+//
+// This allowlist covers only names the BROWSER may POST here. Server-internal
+// metrics (generate.ts's instant_* calls, [id].js's share_view) go straight to
+// LIMITER over the service binding and are never gated by this file — this Set
+// is not the full metric namespace, just the client-reachable subset of it.
 import { jsonResponse } from '../_lib/session.js'
 import { isSameOriginBrowserRequest } from '../_lib/gate.js'
 
