@@ -2327,14 +2327,14 @@ git commit -m "Count the funnel in daily aggregates: metric bridge, CTA beacon, 
 - Modify: `PROJECT_SUMMARY.md`, `DEPLOYMENT_GUIDE.md` (OPERATOR_EMAIL secret; the full secret list in one place)
 
 **Acceptance Criteria:**
-- [ ] Production: a fresh share unfurls (curl shows OG tags on rebuttal.m36x.com), old `?s=` links render, history syncs for a signed-in+unlocked account, Instant mode live
-- [ ] The UA-invariance check passes IN PRODUCTION (chrome vs Twitterbot UA → identical bytes)
-- [ ] `npm test` green (all five test files), `npm run build` green
-- [ ] Every spec invariant re-verified (checklist in Step 3)
+- [x] Production: a fresh share unfurls (curl shows OG tags on rebuttal.m36x.com), old `?s=` links render, history syncs for a signed-in+unlocked account, Instant mode live
+- [x] The UA-invariance check passes IN PRODUCTION (chrome vs Twitterbot UA → identical bytes)
+- [x] `npm test` green (all five test files), `npm run build` green
+- [x] Every spec invariant re-verified (checklist in Step 3)
 
 **Steps:**
 
-- [ ] **Step 1: Docs**
+- [x] **Step 1: Docs**
 
 README: add a "Share pages" paragraph (canonical `/s/<id>`, per-share unfurls, legacy `?s=` supported), a "History" paragraph (local-first, vault-encrypted sync, lost-key-loses-synced-history stated plainly), and the metrics stance (aggregate daily integers, no third-party analytics). Update index.html line 6's description. DEPLOYMENT_GUIDE: consolidated secrets table — `OPENROUTER_PROXY_KEY`, `TURNSTILE_SECRET`, `OPERATOR_EMAIL` (+ the pre-existing Google OAuth pair), and the two-step deploy (`limiter/` first, Pages second).
 
