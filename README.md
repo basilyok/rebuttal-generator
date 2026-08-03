@@ -283,8 +283,9 @@ sync are both capped at those newest 100.
 
 An entry keeps the argument, the reply, its sources and the weak-link note that
 came with it, so restoring one gives you back the whole picture. The weak-link
-note is still never *published*: it goes to your own history sealed as
-ciphertext, and never into a share link or the message you send.
+note is still never *published*: it goes to your own history — plaintext in this
+browser's IndexedDB, sealed as ciphertext if you sync it — and never into a share
+link or the message you send.
 
 Two consequences, stated plainly rather than buried:
 

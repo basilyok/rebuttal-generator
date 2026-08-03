@@ -100,11 +100,16 @@ npx wrangler pages deploy
 
 ## Operator Metrics (one-time, optional)
 
-The limiter keeps aggregate counters — a name and a daily integer, nothing else
-(`share_view`, `instant_reply`, …; no ids, no payload, no user agent, no
-referrer). `GET /api/metrics` reads them back, and it is gated on being signed
-in **as the operator**: set `OPERATOR_EMAIL` to the Google-account email you
-sign in with.
+The limiter's `metrics` table keeps aggregate counters — a name and a daily
+integer, nothing else (`share_view`, `instant_reply`, …; no ids, no payload, no
+user agent, no referrer). The same Durable Object separately holds the quota
+counters, which are keyed by the opaque quota id (the anonymous `rb_device`
+cookie, or the account id when signed in) — an id and a number, never content.
+`GET /api/metrics` reads the aggregate table back, and it is gated on being
+signed in **as the operator**: set `OPERATOR_EMAIL` to the Google-account email
+you sign in with. That presupposes sign-in works at all — the OAuth pair below
+plus the `ACCOUNTS` binding — since the OAuth callback is the only thing that
+mints a session.
 
 ```bash
 npx wrangler pages secret put OPERATOR_EMAIL --project-name=m36x-rebuttal
@@ -119,9 +124,14 @@ bind-at-deploy-time reason as the others.
 
 ## Secrets This Deployment Uses
 
-All five are optional and independent — with none of them set the app runs as
-plain BYOK. Each is set the same way, and **every one of them binds at deploy
-time**, so adding one to a live project does nothing until you redeploy.
+All five are optional — with none of them set the app runs as plain BYOK — but
+they are not all independent of one another. The two Google values are one unit:
+sign-in needs both halves *and* the `ACCOUNTS` binding, and either half alone
+does nothing. `OPERATOR_EMAIL` depends on that same unit, because the only thing
+that mints a session is the OAuth callback: set it on a deployment without
+sign-in and `/api/metrics` returns a permanent `404`, not a readback. The other
+two stand alone. Each is set the same way, and **every one of them binds at
+deploy time**, so adding one to a live project does nothing until you redeploy.
 
 ```bash
 npx wrangler pages secret put <NAME> --project-name=m36x-rebuttal
@@ -131,7 +141,7 @@ npx wrangler pages secret put <NAME> --project-name=m36x-rebuttal
 |---|---|---|
 | `OPENROUTER_PROXY_KEY` | Instant mode: `/api/generate` spends this provisioned OpenRouter key so keyless visitors get free replies | `/api/generate` returns `501`; the app is plain BYOK and nothing else breaks |
 | `TURNSTILE_SECRET` | Server-side Turnstile verification on `/api/generate`, keeping bots off the free pool | Verification is skipped, not failed — Instant mode still works, unguarded. This is the intended local-dev state |
-| `OPERATOR_EMAIL` | `GET /api/metrics` for that one signed-in Google account | The endpoint returns `501` for everyone; the counters keep incrementing, they are just unreadable |
+| `OPERATOR_EMAIL` | `GET /api/metrics` for that one signed-in Google account — so it needs the sign-in pair below and `ACCOUNTS` to be usable at all | The endpoint returns `501` for everyone; the counters keep incrementing, they are just unreadable |
 | `GOOGLE_CLIENT_ID` | Sign-in (the OAuth authorize request, and the `aud` check on the returned token) | Sign-in stays hidden: `/api/auth/me` reports `configured: false` and the button never renders — so no vault, no history sync, no cross-device language preference |
 | `GOOGLE_CLIENT_SECRET` | The OAuth code-for-token exchange in the callback | Same as above — both halves of the pair are required together |
 

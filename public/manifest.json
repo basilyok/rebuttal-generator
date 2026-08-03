@@ -1,7 +1,7 @@
 {
   "name": "Rebuttal Generator",
   "short_name": "Rebuttal",
-  "description": "Generate intelligent rebuttals to arguments using Claude AI",
+  "description": "Write the reply that actually changes their mind",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
