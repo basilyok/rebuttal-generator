@@ -17,6 +17,7 @@ prompts.
 
 - 🎤 **Voice, Text, or URL Input**: Dictate the argument via the browser microphone (Web Speech API), type it, or paste a link to an article and let the app pull the text in
 - 🤖 **A short, curated model list**: nine providers, thirty-three models — every *cloud* model here can hold this app's long, constraint-heavy prompt. Anthropic Claude, Google Gemini, Groq, xAI Grok, Moonshot Kimi, Z.ai GLM, DeepSeek, OpenRouter (the only browser route to GPT), or a model running locally in your browser with no API key at all (WebLLM/WebGPU — a deliberate exception to that bar, kept because it is the only option where nothing leaves your device)
+- 🎁 **Instant mode**: no key yet? You still get 3 free replies a day (6 signed in), paid for by this app's own OpenRouter key — enough to find out whether it is worth setting up a key of your own. See [Instant mode](#instant-mode--try-it-with-no-key)
 - 🔗 **Real sources on every model**: the app searches the web itself (Tavily, keyless — no account needed) and the reply may cite *only* what was actually retrieved. Any URL the model invents is stripped before you see it
 - ⚠️ **The weak link in your own position**, shown every time, before you send — if the other side is better supported, it says so
 - ⚖️ **Their best case, and where you answer it**: a private briefing that checks your reply actually addresses their strongest argument, and flags anything it leaves unanswered
@@ -24,7 +25,7 @@ prompts.
 - 💰 **Cost transparency**: estimated cost before you generate, actual cost and token counts after, and a running session total
 - ↻ **Off-menu access**: the curated list is a recommendation, not a cage — ↻ Refresh pulls any provider's full live catalog at runtime, so new releases appear without a code change
 - 🎨 **Beautiful UI**: Modern, responsive design that works on desktop and mobile
-- 🔒 **Secure**: Your API key is stored locally in browser storage and sent only to the provider it belongs to — never to this app's own servers
+- 🔒 **Secure**: Your API key is stored locally in browser storage and sent only to the provider it belongs to — never to this app's own servers. Your argument text stays in the browser too, with one explicit exception — Instant mode, which sends it to this app's `/api/generate` function so our key can pay for the reply; see [Privacy & Security](#privacy--security)
 - 📱 **PWA (Progressive Web App)**: Install on phone/desktop; the app shell loads offline after your first visit (generating rebuttals requires internet)
 - ⚡ **Lightning Fast**: Vite builds + service worker caching = instant loads
 
@@ -34,6 +35,33 @@ prompts.
 - **Build Tool**: Vite
 - **AI**: 8 cloud providers via direct browser API calls (see below), plus in-browser inference via [WebLLM](https://webllm.mlc.ai/) (WebGPU)
 - **Speech Recognition**: Web Speech API (native browser)
+
+## Instant mode — try it with no key
+
+You don't need an API key to find out whether this app is worth one. With no
+key saved, **Write my reply** still works: Instant mode gives you **3 free
+replies a day** — 6 if you sign in — paid for by this app's own OpenRouter key.
+
+The honest fine print:
+
+- **The cap is daily** and resets at midnight UTC. When it runs out, the app
+  says so and tells you when it resets. Signing in doubles the cap; a key of
+  your own removes it entirely.
+- **Your argument makes one server hop.** Because our key pays for the reply,
+  the browser sends the argument text and the structured fields around it (the
+  optional recipient line, language choices, retrieved citations) to this
+  app's `/api/generate` function, which builds the prompt server-side and
+  calls the model. Nothing you send is logged or stored; quota is counted
+  against an anonymous `rb_device` cookie (or your account, when signed in),
+  and the counter keeps an opaque id and a number — never your text.
+- **Long texts need your own key**: Instant mode caps input at 12,000
+  characters.
+- **A Cloudflare Turnstile check** runs invisibly in the background to keep
+  bots from draining the free pool. Most people never see it.
+
+Saving any provider key switches Instant mode off completely — every call then
+goes browser-direct to that provider, with no daily cap, and your text stops
+touching this app's servers at all.
 
 ## Choosing an AI
 
@@ -49,9 +77,12 @@ prompts.
 | DeepSeek | Paid (very cheap) | Yes | DeepSeek V4 Pro — frontier reasoning at ~1/10 the price |
 | Local in-browser (WebLLM) | **Free** | **No** | Qwen 2.5 7B, Llama 3.2 3B on your own GPU via WebGPU; downloads once, nothing leaves your device |
 
-Every provider here was verified to support direct browser (CORS) calls, because
-this app has no backend to proxy through. API keys are stored per-provider in
-your browser's local storage and sent only to that provider.
+Every provider here was verified to support direct browser (CORS) calls: with
+your own key there is no proxy in the path — the browser talks straight to the
+provider. The one server-side generation call in the app is Instant mode's
+`/api/generate`, which exists only for visitors with no key and spends this
+app's key, never yours. API keys are stored per-provider in your browser's
+local storage and sent only to that provider.
 
 **Why OpenAI is not in that list.** It is not an oversight, and it is not quite
 true to say OpenAI "blocks browser calls" — the reality is more specific, and
@@ -362,7 +393,7 @@ strings.
 ### Prerequisites
 
 - Node.js 18+ and npm (required by Vite 5)
-- An API key for one of the cloud providers above — free ones exist for Gemini, Groq and OpenRouter. Or no key at all, if you use the local in-browser option
+- An API key for one of the cloud providers above — free ones exist for Gemini, Groq and OpenRouter. Or no key at all: the live deployment's Instant mode gives a few free replies a day, and the local in-browser option never needs one
 - A modern browser with microphone access (Chrome, Edge, Safari, Firefox)
 
 ### Installation
@@ -394,7 +425,7 @@ npm run preview
 ## How to Use
 
 1. **Pick an AI**: the collapsed summary names the model and what it is good at; open it to change provider or model. For zero-cost, zero-signup use, pick **Local in-browser (FREE, no key)** — the model downloads once and runs on your GPU
-2. **Enter API Key** (cloud providers only): the app links to each provider's key page; free-tier keys exist for Gemini, Groq and OpenRouter
+2. **Enter API Key** (cloud providers only): the app links to each provider's key page; free-tier keys exist for Gemini, Groq and OpenRouter. No key yet? Skip this step — Instant mode covers your first few replies each day
 3. **Enter Your Argument**: Type it, click "Start Recording" and speak it, or switch to **🔗 Article URL** and paste a link — dictated and fetched text both stay editable afterwards
 4. **Say who will read it** (optional): one line about the recipient changes the register and which sources get used. Leave it blank and it is inferred from the text
 5. **Write my reply**: produces one sendable message, plus the weak link in your own position
@@ -422,8 +453,14 @@ Provides a comprehensive response with:
 
 ## Privacy & Security
 
-Keys are stored only in your browser's local storage, one entry per provider, and
-are sent only to the provider they belong to — never to this app's own endpoints.
+Your API keys never touch this app's servers — BYOK calls go browser-direct to
+the provider you chose, and keys are stored only in this browser's local
+storage, one entry per provider. Your argument text stays in the browser too,
+with one explicit exception: **Instant mode** (the free, keyless taste) sends
+the argument text — and the handful of structured fields around it, nothing
+more — to this app's `/api/generate` function so our key can pay for the
+reply. No account required, nothing you send is stored, and adding your own
+key turns Instant mode off entirely.
 
 Where your argument text actually goes, in full:
 
@@ -431,13 +468,23 @@ Where your argument text actually goes, in full:
   option it goes nowhere — inference runs on your own GPU.
 - **Tavily**, as the evidence-search query, on every generation where sourcing is
   left on. Turn off "Find real evidence to cite" and no search request is made.
+- **This app's `/api/generate` function, in Instant mode only** — that is, only
+  while no API key is saved. The browser sends the argument, the optional
+  recipient line, the language choices and the retrieved citations; the server
+  builds the prompt and calls OpenRouter on this app's own key. Nothing from
+  the request is logged or persisted. The daily quota counter (a separate,
+  private Worker) stores an opaque random id and a count — never text — plus
+  anonymous aggregate totals such as how many Instant replies were served that
+  day. A saved key routes around this endpoint completely.
 - **This app's `/api/article` function**, but only in URL mode, and only the URL —
   never your typed text. It fetches the page server-side because the browser cannot.
 - **This app's `/api/share` function**, only if you click "Get a shareable link".
   That publishes deliberately; the private briefing and weak-link note are never sent.
 
-Audio never leaves the browser's own speech recognition. There is no analytics, no
-tracking, and no server-side logging by this app.
+Audio never leaves the browser's own speech recognition. There is no third-party
+analytics and no tracking; the only things this app's servers count are the
+Instant-mode quotas and aggregate totals described above — ids and numbers,
+never content.
 
 ## Troubleshooting
 
@@ -503,11 +550,20 @@ npx wrangler pages deploy dist --project-name=m36x-rebuttal
 
 See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for details, caching rules
 (`public/_headers`), and troubleshooting. The `dist/` output is fully static,
-so any static host (Netlify, Vercel, S3+CloudFront, GitHub Pages…) also works.
+so any static host (Netlify, Vercel, S3+CloudFront, GitHub Pages…) also works —
+though BYOK generation is the only thing that survives the move: the Pages
+Functions (article extraction, sharing, sign-in, Instant mode) are
+Cloudflare-side.
 
 ## Environment Variables
 
-The app stores sensitive data (API key) in browser local storage, not in environment variables. This keeps it private and secure.
+Your API keys live in browser local storage, never in environment variables —
+that is what keeps them private. The deployment itself has a few operator-side
+secrets, all optional: `OPENROUTER_PROXY_KEY` (enables Instant mode),
+`TURNSTILE_SECRET` (enables bot checks on Instant mode), and the Google OAuth
+pair (enables sign-in). Each is set with `npx wrangler pages secret put` — see
+[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md). With none of them set, the app is
+plain BYOK and works fine.
 
 If you want to customize the build, you can modify `vite.config.ts`.
 

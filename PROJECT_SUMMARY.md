@@ -44,6 +44,26 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
   minimisation, and automatic retry so "thinking" models still return answers
 - ↻ Refresh pulls each provider's live model catalog at runtime
 
+✅ **Instant Mode (free, keyless)**
+- 3 free replies a day with no API key at all (6 signed in), counted per
+  anonymous `rb_device` cookie or per account — never per IP — with the cap
+  resetting at midnight UTC
+- Quota lives in the **m36x-limiter Worker** (`limiter/`): a SQLite Durable
+  Object doing atomic daily counting plus anonymous aggregate metrics, reached
+  only through a `[[services]]` binding — it has no public URL
+- `/api/generate` (`functions/api/generate.ts`) accepts structured fields only
+  (argument, optional recipient line, languages, citations) and builds the
+  prompt server-side, so the operator's OpenRouter key can never be driven as a
+  general LLM API; it is same-origin gated and Turnstile-verified
+- Model ladder: the first-ever reply goes to a paid model, later ones try the
+  shared free pool and fall back to paid when it is busy; a reply missing the
+  MESSAGE envelope is retried once, then refused — raw model output never
+  leaves the server
+- Spend is bounded twice: the limiter's caps, and the provisioned key's own
+  daily spend limit enforced on OpenRouter's side
+- Any saved API key bypasses Instant mode entirely — BYOK calls stay
+  browser-direct and never touch `/api/generate`
+
 ✅ **PWA (Progressive Web App)**
 - Install on desktop (Chrome, Edge, Safari)
 - Install on mobile (iOS/Android)
@@ -63,7 +83,12 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 - The server never sees a provider key, a passphrase, or a decryption key. It does
   store your language preference, and any rebuttal you explicitly publish as a
   share link — the private briefing and the weak-link note are never published
-- No tracking or analytics
+- Argument text reaches this app's servers in exactly one case: Instant mode
+  (no key saved) sends it to `/api/generate` so the operator's key can pay for
+  the reply. Nothing from the request is logged or persisted; the limiter
+  stores an opaque quota key and a count, never text
+- No third-party analytics or tracking; the limiter keeps only anonymous
+  aggregate counters (e.g. how many Instant replies were served per day)
 - HTTPS-only (enforced on all deployments)
 
 ---
@@ -74,8 +99,12 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 rebuttal-generator/
 ├── functions/api/
 │   ├── article.js             # Article extraction + Internet Archive fallback
+│   ├── generate.ts            # Instant mode: server-side proxy on the operator's OpenRouter key
 │   └── share.js               # Unlisted share links (Cloudflare KV)
-├── wrangler.toml              # Pages config + SHARES KV binding
+├── limiter/                   # m36x-limiter Worker: SQLite Durable Object for
+│                              #   atomic daily quotas + aggregate metrics
+│                              #   (service-bound, no public URL; deployed separately)
+├── wrangler.toml              # Pages config + KV bindings + LIMITER service binding
 ├── public/
 │   ├── manifest.json          # PWA metadata
 │   ├── sw.js                  # Service worker (offline support)
@@ -132,7 +161,7 @@ Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 1. **User speaks, types, or pastes a URL** → Web Speech API, the textarea, or `/api/article` extraction
 2. **User picks an AI** → provider + model dropdowns (`src/providers.ts` holds the curated registry and call adapters; read the CURATION RULE before adding models)
 3. **The app searches first** → Tavily (keyless) returns a fixed citation set; the reply may cite only from it
-4. **User clicks generate** → two parallel calls: the message and the honest check (sequential for local models)
+4. **User clicks generate** → two parallel calls: the message and the honest check (sequential for local models). With no key saved, Instant mode instead POSTs the structured fields to `/api/generate`, which builds the prompt server-side and calls OpenRouter on the operator's key, with the daily quota checked in the limiter Worker first
 5. **Results display** → one sendable message plus the weak link; the briefing is a third call, made only if opened
 6. **PWA magic** → Service worker caches assets for instant reopens
 
@@ -184,11 +213,15 @@ Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 ### Data Privacy
 - Argument text goes to: the chosen AI provider, and Tavily as the search query
   (unless sourcing is switched off). With the local in-browser model it goes nowhere
+- In Instant mode only (no key saved), argument text goes to `/api/generate`,
+  which forwards it to OpenRouter on the operator's key. Nothing is persisted;
+  the quota counter holds an opaque id and a count
 - `/api/article` receives the URL only, in URL mode — never typed text
 - `/api/share` receives content only when the user clicks share; the private briefing
   and weak-link note are never published
 - Audio never leaves the browser's own speech recognition
-- No third-party analytics or tracking, and no server logs on your side
+- No third-party analytics or tracking; server-side, only the anonymous quota
+  and aggregate counters described above — ids and numbers, never content
 
 ---
 
@@ -277,7 +310,8 @@ included in `public/`. See `public/ICONS.md` to regenerate them.
 - **Tavily** - keyless web search, so every model can cite real sources
 - **Web Speech API** - Voice recognition
 - **Service Workers** - PWA offline support
-- **Cloudflare Pages + Pages Functions** - hosting, article extraction, share links
+- **Cloudflare Pages + Pages Functions** - hosting, article extraction, share links, the Instant-mode proxy
+- **Cloudflare Workers + Durable Objects** - the m36x-limiter quota/metrics Worker (SQLite DO, service-bound)
 
 ---
 

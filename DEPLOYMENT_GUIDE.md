@@ -14,6 +14,14 @@ That's it. `wrangler` must be logged in (`npx wrangler login` once per machine;
 check with `npx wrangler whoami`). The project name, output directory, and the
 KV binding all come from `wrangler.toml`, so no flags are needed.
 
+If anything under `limiter/` changed, deploy that Worker too — and do it
+**before** the Pages deploy, because the Pages service binding resolves against
+the deployed Worker:
+
+```bash
+cd limiter && npx wrangler deploy
+```
+
 ### Share-link storage (one-time)
 
 Share links live in a Cloudflare KV namespace bound as `SHARES`. It already
@@ -36,6 +44,60 @@ Notes:
 - The service worker's update banner shows in already-open tabs after a deploy;
   clicking **Reload** activates the new version.
 
+## Instant Mode Setup (one-time)
+
+Instant mode (free keyless replies through `/api/generate`) needs three things.
+Do them in this order, with the Pages deploy last.
+
+### 1. Deploy the limiter Worker
+
+```bash
+cd limiter && npx wrangler deploy
+```
+
+The Pages project reaches `m36x-limiter` through the `[[services]]` binding in
+the root `wrangler.toml`, and that binding resolves against an already-deployed
+Worker — so the limiter must be deployed before the Pages deploy. It has no
+public URL (`workers_dev = false`); only this project's Functions can call it.
+
+### 2. Create the OpenRouter provisioned key
+
+At [openrouter.ai](https://openrouter.ai/) → **Settings → Provisioning API
+keys**, create a runtime key **with a daily spend limit** (start at $2/day).
+OpenRouter enforces that cap server-side, so spend stays bounded even if every
+guard in the app fails. Store it as a Pages secret:
+
+```bash
+npx wrangler pages secret put OPENROUTER_PROXY_KEY --project-name=m36x-rebuttal
+```
+
+Without this secret, `/api/generate` returns 501 and the app behaves as plain
+BYOK — nothing else breaks.
+
+### 3. Create the Turnstile widget
+
+In the Cloudflare dashboard (account level) → **Turnstile → Add widget**:
+hostname `rebuttal.m36x.com`, mode **Managed**. The sitekey is public and lives
+in `src/turnstile.ts` (already committed); the secret goes in:
+
+```bash
+npx wrangler pages secret put TURNSTILE_SECRET --project-name=m36x-rebuttal
+```
+
+With the secret unset, the server skips verification — the intended local-dev
+mode, not an error.
+
+### 4. Deploy Pages last
+
+Secrets bind at deploy time: a secret added after a deploy is invisible to the
+deployment already serving traffic. Set both secrets (and deploy the limiter)
+**before** the Pages deploy, then:
+
+```bash
+npm run build
+npx wrangler pages deploy
+```
+
 ## First-Time Setup (already done)
 
 For reference, the project was created with:
@@ -52,7 +114,10 @@ under **Workers & Pages → m36x-rebuttal → Custom domains**.
 
 The build output in `dist/` is a fully static site — any static host works
 (Netlify, Vercel, S3+CloudFront, GitHub Pages…). If you move hosts, replicate
-the caching rules from `public/_headers` in that host's config format.
+the caching rules from `public/_headers` in that host's config format. Note
+that everything under `functions/` (article extraction, sharing, sign-in,
+Instant mode) and the limiter Worker are Cloudflare-side — on another host the
+app runs as plain BYOK.
 
 ## Troubleshooting
 
