@@ -716,9 +716,9 @@ export const estimateTokens = (text: string) => Math.ceil(text.length / 4)
  * retrieved sources are appended), so they are counted explicitly rather than waved at.
  */
 // Measured by rendering the real prompts and applying estimateTokens, not guessed.
-const MESSAGE_SYSTEM_TOKENS = 1160 // messagePrompt with no sources attached
+const MESSAGE_SYSTEM_TOKENS = 1980 // messagePrompt with no sources attached (remeasured 2026-08-03 after the values-framed RULES rewrite)
 const SOURCES_BLOCK_TOKENS = 850 // six results at search.ts's 400-char snippet cap
-const CHECK_SYSTEM_TOKENS = 490 // honestCheckPrompt
+const CHECK_SYSTEM_TOKENS = 550 // honestCheckPrompt (remeasured 2026-08-03)
 
 export function estimateCost(model: ModelOption | undefined, argument: string): number | null {
   if (!model || model.unknownPrice) return null

@@ -56,9 +56,9 @@ too" unless the user said it was true. They send this under their own name.
 **11. Argue inside the reader's values, sized to the venue.**
 Diagnose the value doing the work under their words — safety, fairness, loyalty, order,
 sanctity, freedom — and build the case in that frame, sincerely. Evidence is the payload;
-the reader's own values are the frame that makes it land. Two strong points beat five,
-and a reply nobody finishes persuades nobody: a comment gets a comment, a text gets a
-text, only an essay may earn an essay.
+the reader's own values are the frame that makes it land. Prune the weak points — readers
+average arguments rather than add them — and a reply nobody finishes persuades nobody: a
+comment gets a comment, a text gets a text, only an essay may earn an essay.
 
 ---
 

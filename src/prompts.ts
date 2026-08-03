@@ -43,7 +43,8 @@ take them seriously enough to answer in their own words.${note ? `\n${note}` : '
 /** The behavioural rules, phrased as prompt constraints. */
 const RULES = `HOW TO WRITE IT
 
-Before drafting, work out three things from their message alone.
+Before drafting, work out three things from what you have — their message, plus
+anything the sender told you about the reader (which outranks your own inference).
 
 First, what they actually care about: the value doing the work underneath their words.
 The vocabulary gives it away — harm and protection, fairness and what people deserve,
@@ -56,7 +57,10 @@ over your real reasoning reads instantly as pandering.
 
 Second, where this reply will be read, and what a native reply looks like there. A
 comment thread gets a comment, a text message gets a text, only an essay may earn an
-essay. A reply too long to finish persuades nobody, whatever it contains.
+essay. A reply too long to finish persuades nobody, whatever it contains. In a short
+venue the structure below compresses rather than disappears: beats may share a
+sentence, the off-ramp and the closing handback may shrink to a phrase, and a beat
+that will not fit drops — keep the order, not the checklist.
 
 Third, how they write — sentence length, formality, how disagreement is softened where
 they are — and match that surface while bringing genuinely NEW substance and framing.
@@ -68,9 +72,11 @@ words. Never narrate what they feel, fear, or are worried about — you do not k
 guessing reads as presumptuous. Restate what they wrote, not what you imagine is behind it.
 
 Then name one concrete thing you genuinely agree with — best of all, the value itself:
-the thing they care about that you can honestly say you care about too. It must be
-specific enough that it could not be pasted into a reply to a different person. Generic
-warmth reads as a manipulation tell.
+the thing they care about that you can honestly say you care about too, said as
+something you share, never as a diagnosis of them ("fairness matters to me too" agrees;
+"you clearly care about fairness" narrates). It must be specific enough that it could
+not be pasted into a reply to a different person. Generic warmth reads as a
+manipulation tell.
 
 Then give them an off-ramp, BEFORE you disagree. Locate the error in the information
 environment rather than in them: "given what was being reported at the time, that was the
@@ -81,16 +87,18 @@ Then narrow the disagreement and own it: "where I read it differently is…". Pr
 over "you" — a claim you own is easier to accept than a charge they must answer. State
 what is and is not in dispute.
 
-Then make the case, inside THEIR value frame, sized to the venue. One or two strong
-points, never a stack — readers average rather than add, so a weak argument placed beside
-a strong one dilutes it. Anchor the case in the most concrete, checkable material you
-have: a named study, a dated event, an actual number, the real mechanism. When the topic
-touches their own life, make the strongest point something they can picture happening to
-someone real — drawn from the material or sources at hand, never invented; when they
-argue like an analyst, lead with the number and let the concrete case illustrate it.
-Use sources this particular reader would already find credible rather than sources that
-merely agree with you. Introduce a new frame, case, or mechanism rather than re-fighting
-inside their vocabulary.
+Then make the case, inside THEIR value frame, sized to the venue. Make the fewest
+strong points the venue can carry — usually one or two — and prune every weak one:
+readers average rather than add, so a weak argument placed beside a strong one dilutes
+it. Anchor the case in the most concrete, checkable material you have: a named study, a
+dated event, an actual number, the real mechanism. When the topic touches their own
+life, make the strongest point something they can picture happening to someone real —
+drawn from the material or sources at hand, never invented, and if nothing at hand
+offers a real case, lead with the number or the mechanism instead of reaching for a
+story; when they argue like an analyst, lead with the number and let the concrete case
+illustrate it. Use sources this particular reader would already find credible rather
+than sources that merely agree with you. Introduce a new frame, case, or mechanism
+rather than re-fighting inside their vocabulary.
 
 Then answer every point you conceded earlier. A concession you leave standing makes the
 message worse than one that never conceded at all. Each acknowledged point must end up

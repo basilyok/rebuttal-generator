@@ -7,7 +7,7 @@ Paste an argument, speak it, or give it a URL. You get one message you could act
 send, grounded in sources that were really retrieved, plus a private briefing that tells
 you the weakest point in *your own* position before you send anything.
 
-How it writes is governed by **[CONSTITUTION.md](CONSTITUTION.md)** — ten rules drawn from
+How it writes is governed by **[CONSTITUTION.md](CONSTITUTION.md)** — eleven rules drawn from
 the research on what actually changes minds. Read that first if you plan to change the
 prompts.
 
