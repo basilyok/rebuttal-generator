@@ -219,6 +219,15 @@ export const PROVIDERS: Provider[] = [
     baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
     modelsUrl: 'https://openrouter.ai/api/v1/models',
     models: [
+      // The whole list is grouped by vendor (2026-08-03 decision), one entry per
+      // vendor except where a second genuinely earns its slot: the recommended
+      // default leads, then vendors alphabetically. Every vendor is represented
+      // by its FLAGSHIP; the fast-cheap variants that used to pair with them
+      // (Grok 4.3, Kimi K2.6) were cut to keep the list tight. Prices are
+      // OpenRouter's live routed rates (api/v1/models, checked 2026-08-02), not
+      // the vendors' list prices. Per-model thinking quirks (K3 and Grok 4.5
+      // cannot stop reasoning) ride on the generic `reasoning: {effort}` control
+      // plus the rejection retry, so they need no special-casing on this route.
       {
         // The default: best fast-and-cheap model on the whole route. Frontier-class,
         // thinking switchable off, and OpenRouter's routing prices it at a fifth of
@@ -231,30 +240,46 @@ export const PROVIDERS: Provider[] = [
         blurb: 'Frontier-class for a fraction of everyone’s price, and fast with thinking off — the default here',
       },
       {
-        id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-        label: 'Nemotron 3 Ultra 550B (FREE)',
-        inPrice: 0,
-        outPrice: 0,
+        id: 'anthropic/claude-fable-5',
+        label: 'Claude Fable 5 (most capable)',
+        inPrice: 10,
+        outPrice: 50,
         reasoning: true,
-        blurb: 'The most capable genuinely free model anywhere — slower and rate-limited, but you pay nothing',
+        blurb: 'The most capable model in this catalog, same price as direct',
       },
       {
-        // Deliberately a SECOND free model on a different upstream. Free pools get
-        // throttled, and one free option is a single point of failure for the users
-        // least able to fall back to a paid one.
+        id: 'anthropic/claude-sonnet-5',
+        label: 'Claude Sonnet 5',
+        inPrice: 2,
+        outPrice: 10,
+        reasoning: true,
+        blurb: 'The catalog’s overall recommendation, at the direct price on this key',
+      },
+      {
+        id: 'deepseek/deepseek-v4-pro',
+        label: 'DeepSeek V4 Pro',
+        inPrice: 0.435,
+        outPrice: 0.87,
+        reasoning: true,
+        blurb: 'Frontier-level reasoning for a tenth of frontier prices, same rate as direct',
+      },
+      {
+        id: 'google/gemini-3.6-flash',
+        label: 'Gemini 3.6 Flash',
+        inPrice: 1.5,
+        outPrice: 7.5,
+        reasoning: true,
+        blurb: 'Google’s flagship at the direct price',
+      },
+      {
+        // Deliberately a SECOND free model on a different upstream from Nemotron.
+        // Free pools get throttled, and one free option is a single point of
+        // failure for the users least able to fall back to a paid one.
         id: 'google/gemma-4-31b-it:free',
         label: 'Gemma 4 31B (FREE — backup)',
         inPrice: 0,
         outPrice: 0,
         blurb: 'A second free option on a different provider, for when the free Nemotron pool is busy',
-      },
-      {
-        id: 'openai/gpt-5.6-luna',
-        label: 'GPT-5.6 Luna (cheapest GPT)',
-        inPrice: 0.1,
-        outPrice: 0.6,
-        reasoning: true,
-        blurb: 'GPT phrasing for about a tenth of a cent a reply — the best value anywhere in this catalog',
       },
       {
         // Route diversity, not price: every GPT entry here is moderated upstream, and
@@ -267,6 +292,22 @@ export const PROVIDERS: Provider[] = [
         blurb: 'For a topic a moderation filter refuses — every GPT option here is moderated, this one is not',
       },
       {
+        id: 'moonshotai/kimi-k3',
+        label: 'Kimi K3',
+        inPrice: 3,
+        outPrice: 15,
+        reasoning: true,
+        blurb: 'Moonshot’s flagship — always thinks first, so dearer per reply than the price implies',
+      },
+      {
+        id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        label: 'Nemotron 3 Ultra 550B (FREE)',
+        inPrice: 0,
+        outPrice: 0,
+        reasoning: true,
+        blurb: 'The most capable genuinely free model anywhere — slower and rate-limited, but you pay nothing',
+      },
+      {
         id: 'openai/gpt-5.6-sol',
         label: 'GPT-5.6 Sol (flagship GPT)',
         inPrice: 5,
@@ -274,59 +315,13 @@ export const PROVIDERS: Provider[] = [
         reasoning: true,
         blurb: 'OpenAI’s best — worth it when the reader is sharp and the disagreement is the hard kind',
       },
-      // --- Native-catalog mirrors ---------------------------------------------
-      // Entries below duplicate models offered natively elsewhere in this file.
-      // That is deliberate, and an exception to the no-redundancy rule at the top:
-      // one OpenRouter key is the single easiest door into BYOK, so every native
-      // provider is represented here by a PAIR — its top model and its best capable
-      // fast-and-cheap model — rather than forcing a second signup per vendor.
-      // (A full 16-model mirror shipped briefly and was cut the same day as too
-      // many choices; where one model is both top and cheapest — GLM-5.2 at the
-      // head of this list, DeepSeek below — the pair collapses to one entry.) Prices are OpenRouter's
-      // live routed rates (api/v1/models, checked 2026-08-02), not the vendors'
-      // list prices — GLM and Kimi are markedly cheaper here than direct.
-      // Per-model thinking quirks (K3 and Grok 4.5 cannot stop reasoning) ride on
-      // the generic `reasoning: {effort}` control plus the rejection retry, so
-      // they need no special-casing on this route.
       {
-        id: 'anthropic/claude-sonnet-5',
-        label: 'Claude Sonnet 5',
-        inPrice: 2,
-        outPrice: 10,
+        id: 'openai/gpt-5.6-luna',
+        label: 'GPT-5.6 Luna (cheapest GPT)',
+        inPrice: 0.1,
+        outPrice: 0.6,
         reasoning: true,
-        blurb: 'The catalog’s overall recommendation, at the direct price on this key',
-      },
-      {
-        id: 'anthropic/claude-fable-5',
-        label: 'Claude Fable 5 (most capable)',
-        inPrice: 10,
-        outPrice: 50,
-        reasoning: true,
-        blurb: 'The most capable model in this catalog, same price as direct',
-      },
-      {
-        id: 'google/gemini-3.1-flash-lite',
-        label: 'Gemini 3.1 Flash-Lite',
-        inPrice: 0.25,
-        outPrice: 1.5,
-        reasoning: true,
-        blurb: 'Same price as direct — though Google’s own key adds a free tier this route lacks',
-      },
-      {
-        id: 'google/gemini-3.6-flash',
-        label: 'Gemini 3.6 Flash',
-        inPrice: 1.5,
-        outPrice: 7.5,
-        reasoning: true,
-        blurb: 'Google’s flagship at the direct price',
-      },
-      {
-        id: 'x-ai/grok-4.3',
-        label: 'Grok 4.3',
-        inPrice: 1.25,
-        outPrice: 2.5,
-        reasoning: true,
-        blurb: 'The recommended Grok at the direct price, thinking switchable as usual',
+        blurb: 'GPT phrasing for about a tenth of a cent a reply — the best value anywhere in this catalog',
       },
       {
         id: 'x-ai/grok-4.5',
@@ -336,33 +331,9 @@ export const PROVIDERS: Provider[] = [
         reasoning: true,
         blurb: 'The blunt flagship — still thinks on every reply whichever key you reach it with',
       },
-      {
-        id: 'moonshotai/kimi-k2.6',
-        label: 'Kimi K2.6',
-        inPrice: 0.6,
-        outPrice: 3.41,
-        reasoning: true,
-        blurb: 'Noticeably cheaper here than on Moonshot’s own platform ($0.95/$4 direct)',
-      },
-      {
-        id: 'moonshotai/kimi-k3',
-        label: 'Kimi K3',
-        inPrice: 3,
-        outPrice: 15,
-        reasoning: true,
-        blurb: 'Moonshot’s flagship — always thinks first, so dearer per reply than the price implies',
-      },
-      {
-        id: 'deepseek/deepseek-v4-pro',
-        label: 'DeepSeek V4 Pro',
-        inPrice: 0.435,
-        outPrice: 0.87,
-        reasoning: true,
-        blurb: 'Frontier-level reasoning for a tenth of frontier prices, same rate as direct',
-      },
     ],
     defaultModel: 'z-ai/glm-5.2',
-    note: 'One key covers the field: the only browser-reachable route to GPT (OpenAI’s own API cannot be called from a web page — see the note at the top of this file), plus each provider’s top model and its best fast-and-cheap one. The default GLM-5.2 costs a fraction of a cent per reply but needs credit on the account; the two FREE models work with none. Press ↻ Refresh to load OpenRouter’s full live catalog (360+ models) with current prices.',
+    note: 'One key covers the field: the only browser-reachable route to GPT (OpenAI’s own API cannot be called from a web page — see the note at the top of this file), plus each vendor’s flagship, grouped by vendor. The default GLM-5.2 costs a fraction of a cent per reply but needs credit on the account; the two FREE models work with none. Press ↻ Refresh to load OpenRouter’s full live catalog (360+ models) with current prices.',
   },
   {
     id: 'xai',
