@@ -56,7 +56,7 @@
     {
       "id": 57,
       "subject": "Plan Task 9: Aggregate metrics (bridge, CTA beacon, readback)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [49, 56],
       "description": "**Goal:** /api/metric (allowlisted names, same-origin gate, 204), CTA sendBeacon in dismissShared, /api/metrics operator-only readback (OPERATOR_EMAIL, 404 otherwise).\n\n**Files:** functions/api/metric.js, functions/api/metrics.js, src/App.tsx.\n\n**Verify:** curl metric allowlisted -> 204, bogus -> 400; /api/metrics signed out -> 404/501; limiter /metrics shows share_cta+share_view.\n\nFull steps: plan Task 9.\n\n```json:metadata\n{\"files\": [\"functions/api/metric.js\", \"functions/api/metrics.js\", \"src/App.tsx\"], \"verifyCommand\": \"node --test tests/limiter.test.mjs\", \"acceptanceCriteria\": [\"name-only metrics\", \"allowlist enforced\", \"operator gate 404s non-operators\", \"beacon never breaks navigation\"]}\n```"
     },
@@ -68,5 +68,5 @@
       "description": "**Goal:** Docs (share URLs, history, metrics stance, index.html stale description), deploy, production verification: OG unfurl live + UA-invariant in prod, old ?s= works, no watermark in messages, BYOK makes zero generation calls to our API.\n\n**Files:** README.md, PROJECT_SUMMARY.md, DEPLOYMENT_GUIDE.md, index.html.\n\n**Verify:** prod curl OG tags; diff chrome-UA vs Twitterbot-UA responses -> identical; npm test all green.\n\nFull steps: plan Task 10.\n\n```json:metadata\n{\"files\": [\"README.md\", \"PROJECT_SUMMARY.md\", \"DEPLOYMENT_GUIDE.md\", \"index.html\"], \"verifyCommand\": \"npm test\", \"acceptanceCriteria\": [\"prod unfurl works\", \"UA-invariance in prod\", \"all invariants re-verified\", \"docs complete\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-08-02T18:45:00Z"
+  "lastUpdated": "2026-08-02T19:15:00Z"
 }

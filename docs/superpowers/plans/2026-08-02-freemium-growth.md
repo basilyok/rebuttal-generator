@@ -2203,16 +2203,16 @@ git commit -m "Serve share links from /s/<id> with per-share Open Graph meta, UA
 - Modify: `tests/limiter.test.mjs` (no change needed — metric routes already covered; extend only if gaps found)
 
 **Acceptance Criteria:**
-- [ ] `POST /api/metric {name}` accepts ONLY allowlisted names, requires the same-origin gate, forwards to LIMITER, returns 204
-- [ ] Clicking the shared-view CTA fires a `share_cta` beacon (visible in dev tools / limiter metrics)
-- [ ] `GET /api/metrics` returns totals only for a signed-in user whose email equals `OPERATOR_EMAIL`; 404 otherwise (existence unadvertised); 501 when the var is unset
-- [ ] No metric call ever carries user data — name only
+- [x] `POST /api/metric {name}` accepts ONLY allowlisted names, requires the same-origin gate, forwards to LIMITER, returns 204
+- [x] Clicking the shared-view CTA fires a `share_cta` beacon (visible in dev tools / limiter metrics)
+- [x] `GET /api/metrics` returns totals only for a signed-in user whose email equals `OPERATOR_EMAIL`; 404 otherwise (existence unadvertised); 501 when the var is unset
+- [x] No metric call ever carries user data — name only
 
 **Verify:** `curl -X POST http://127.0.0.1:8788/api/metric -H "Origin: http://127.0.0.1:8788" -H "Content-Type: application/json" -d "{\"name\":\"share_cta\"}"` → 204; same with `name:"bogus"` → 400; `curl http://127.0.0.1:8788/api/metrics` → 404/501.
 
 **Steps:**
 
-- [ ] **Step 1: `functions/api/metric.js`**
+- [x] **Step 1: `functions/api/metric.js`**
 
 ```js
 // Aggregate-only event counting. A metric is a NAME and nothing else — no ids,
@@ -2261,7 +2261,7 @@ export async function onRequestPost(context) {
 }
 ```
 
-- [ ] **Step 2: `functions/api/metrics.js` (operator readback)**
+- [x] **Step 2: `functions/api/metrics.js` (operator readback)**
 
 ```js
 // Reading the totals requires being signed in AS the operator. Everyone else
@@ -2286,7 +2286,7 @@ export async function onRequestGet(context) {
 
 Operator setup (user-run, alongside Task 5's secrets): `npx wrangler pages secret put OPERATOR_EMAIL --project-name=m36x-rebuttal` (their Google-account email).
 
-- [ ] **Step 3: The CTA beacon**
+- [x] **Step 3: The CTA beacon**
 
 In `src/App.tsx`, `dismissShared` (:467-471) — fire before clearing:
 
@@ -2306,7 +2306,7 @@ In `src/App.tsx`, `dismissShared` (:467-471) — fire before clearing:
 
 (`sendBeacon` sends the Origin header, so the gate passes. Keep whatever else the current `dismissShared` body does — this adds one statement at the top.)
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run the three curl checks from **Verify** above; in the browser open a share page, click the CTA, then `curl "http://127.0.0.1:8788/api/metrics"` → 404 (signed out). Confirm via the limiter directly: `curl "http://127.0.0.1:8787/metrics?days=1"` shows `share_cta` and `share_view` rows.
 
