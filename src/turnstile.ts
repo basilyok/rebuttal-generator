@@ -3,10 +3,11 @@
 // signals distrust gets the interactive challenge. Tokens are single-use, so
 // every generation fetches a fresh one.
 //
-// Operator fills this after creating the site in the Cloudflare dashboard
-// (a later task). Empty string = Turnstile disabled end to end (the server
-// skips verification when TURNSTILE_SECRET is unset, so dev works with no setup).
-export const TURNSTILE_SITE_KEY = ''
+// The public sitekey for the rebuttal.m36x.com managed widget. Public and
+// committable by design (the secret key lives in TURNSTILE_SECRET, set via
+// wrangler). Empty string = Turnstile disabled end to end (the server skips
+// verification when TURNSTILE_SECRET is unset, so dev works with no setup).
+export const TURNSTILE_SITE_KEY = '0x4AAAAAAEE1TV8KH-Jmmpr5'
 
 declare global {
   interface Window {
