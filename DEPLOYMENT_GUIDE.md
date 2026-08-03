@@ -98,6 +98,48 @@ npm run build
 npx wrangler pages deploy
 ```
 
+## Operator Metrics (one-time, optional)
+
+The limiter keeps aggregate counters — a name and a daily integer, nothing else
+(`share_view`, `instant_reply`, …; no ids, no payload, no user agent, no
+referrer). `GET /api/metrics` reads them back, and it is gated on being signed
+in **as the operator**: set `OPERATOR_EMAIL` to the Google-account email you
+sign in with.
+
+```bash
+npx wrangler pages secret put OPERATOR_EMAIL --project-name=m36x-rebuttal
+```
+
+Anyone else who calls that endpoint — signed in as another account or not
+signed in at all — gets a plain `404`, because the endpoint's existence is not
+worth advertising with a `403`. With the secret unset the endpoint returns
+`501 Not configured` for everyone, including you; counting still happens, you
+just cannot read it back. Set this before the Pages deploy for the same
+bind-at-deploy-time reason as the others.
+
+## Secrets This Deployment Uses
+
+All five are optional and independent — with none of them set the app runs as
+plain BYOK. Each is set the same way, and **every one of them binds at deploy
+time**, so adding one to a live project does nothing until you redeploy.
+
+```bash
+npx wrangler pages secret put <NAME> --project-name=m36x-rebuttal
+```
+
+| Secret | What it enables | What happens without it |
+|---|---|---|
+| `OPENROUTER_PROXY_KEY` | Instant mode: `/api/generate` spends this provisioned OpenRouter key so keyless visitors get free replies | `/api/generate` returns `501`; the app is plain BYOK and nothing else breaks |
+| `TURNSTILE_SECRET` | Server-side Turnstile verification on `/api/generate`, keeping bots off the free pool | Verification is skipped, not failed — Instant mode still works, unguarded. This is the intended local-dev state |
+| `OPERATOR_EMAIL` | `GET /api/metrics` for that one signed-in Google account | The endpoint returns `501` for everyone; the counters keep incrementing, they are just unreadable |
+| `GOOGLE_CLIENT_ID` | Sign-in (the OAuth authorize request, and the `aud` check on the returned token) | Sign-in stays hidden: `/api/auth/me` reports `configured: false` and the button never renders — so no vault, no history sync, no cross-device language preference |
+| `GOOGLE_CLIENT_SECRET` | The OAuth code-for-token exchange in the callback | Same as above — both halves of the pair are required together |
+
+**Not** secrets, and living in `wrangler.toml` instead: the `SHARES` and
+`ACCOUNTS` KV namespace ids, and the `LIMITER` service binding.
+Sign-in additionally needs `ACCOUNTS` to exist — the OAuth pair alone is not
+enough — and without it `/api/vault` and `/api/history` return `501`.
+
 ## First-Time Setup (already done)
 
 For reference, the project was created with:
