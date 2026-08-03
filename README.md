@@ -240,9 +240,10 @@ it only ever runs as a fallback.
 
 ## Sharing a rebuttal
 
-**🔗 Get a shareable link** publishes the argument, the rebuttal, the steelman and
-any sources to an unguessable URL (`/s/<id>`) backed by Cloudflare KV. Opening
-that link shows the result read-only, with a button to write your own.
+**🔗 Get a shareable link** publishes the argument, the rebuttal (with its
+strategy line) and any sources to an unguessable URL (`/s/<id>`) backed by
+Cloudflare KV. Opening that link shows the result read-only, with a button to
+write your own.
 
 That page is served by a Pages Function (`functions/s/[id].js`) that injects
 *this* share's Open Graph tags, so on platforms that show previews the link
@@ -254,8 +255,10 @@ unfurl can only draw on the fields you chose to publish. The private briefing an
 the weak-link note are never written to the share record at all, so there is
 nothing in it for a preview to leak.
 
-Links minted before this change used the query form (`/?s=<id>`); those keep
-working indefinitely, and the app still reads either shape.
+Links minted before this change used the query form (`/?s=<id>`); the app still
+recognises that shape indefinitely and reads either one. That is about the URL
+shape, not the record behind it — an old link expires on the same schedule as a
+new one.
 
 Be aware of what this means: the link is **unlisted, not private**. It is not
 browsable, indexed, or discoverable — there is no public gallery — but anyone you
@@ -291,7 +294,9 @@ change up immediately rather than waiting for your next reply. The list and the
 sync are both capped at those newest 100.
 
 An entry keeps the argument, the reply, its sources and the weak-link note that
-came with it, so restoring one gives you back the whole picture. The weak-link
+came with it, so restoring one puts all four back in front of you. The briefing
+is the one thing it cannot bring back — that was never saved, so a restored
+reply hides the briefing expander the way an Instant reply does. The weak-link
 note is still never *published*: it goes to your own history — plaintext in this
 browser's IndexedDB, sealed as ciphertext if you sync it — and never into a share
 link or the message you send.
@@ -565,10 +570,12 @@ analytics and no tracking. What this app's servers count, exhaustively:
   id, or your account id when signed in) and a number.
 - **Aggregate event totals**, each stored as a name, a date and a tally and
   nothing else — no id, no referrer, no user agent, no payload, so no two of
-  them can be joined back into a person. Two are about Instant mode (a reply
-  was served; the daily cap was hit — plus internal retries when the upstream
-  model misbehaves). Two are about the share funnel: **a share page was
-  viewed**, and someone on a share page **clicked "write your own"**.
+  them can be joined back into a person. Seven are about Instant mode: a reply
+  was served; the daily cap was hit; a request was refused (the per-IP flood
+  brake tripping, or a failed bot check); and the fallbacks and retries the
+  server runs when the upstream model misbehaves. Two are about the share
+  funnel: **a share page was viewed**, and someone on a share page **clicked
+  "write your own"**.
 
 That share-page count is worth calling out because it is the one thing here you
 do not trigger yourself: it is incremented by the *recipient* opening the link

@@ -96,7 +96,8 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 - The unfurl can only draw on fields the user chose to publish: the briefing and
   the weak-link note never reach the share record at all (`functions/api/share.js`
   builds it field by field), so they cannot leak even by bug
-- Legacy `/?s=<id>` links keep working indefinitely; `src/share.ts` reads both
+- The legacy `/?s=<id>` shape stays recognised indefinitely (the records behind
+  those links still expire on the normal one-year TTL); `src/share.ts` reads both
   shapes and mints the path form
 - Pages Function responses fall outside `public/_headers`, so this route carries
   its own `X-Content-Type-Options` / `Referrer-Policy` / `X-Frame-Options`
