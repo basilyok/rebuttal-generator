@@ -1,5 +1,5 @@
 // Invisible-until-challenged bot check. One managed widget with
-// appearance 'interactive-only': honest users see nothing; an address the
+// appearance 'interaction-only': honest users see nothing; an address the
 // signals distrust gets the interactive challenge. Tokens are single-use, so
 // every generation fetches a fresh one.
 //
@@ -64,23 +64,33 @@ export async function getTurnstileToken(deviceHint: string): Promise<string> {
     }
     pendingResolve = finish
 
-    if (widgetId !== null) {
-      // Cloudflare's documented pattern: reset() alone runs a fresh challenge
-      // and re-invokes the callback fixed at render time (below) with a new
-      // token — no re-render needed. Rendering again into the same,
-      // never-cleared container is undocumented and orphans an iframe per
-      // call, so it must not happen here. One tradeoff: cData is fixed at
-      // the first render and cannot be updated per reset(), so later calls'
-      // deviceHint is ignored — acceptable since it is only diagnostic.
-      window.turnstile!.reset(widgetId)
-      return
+    // The widget API validates its options and throws synchronously on a bad
+    // value — inside this executor that would REJECT the promise and surface
+    // as a generation error, which is exactly the "never block a reply on the
+    // checker" failure this module must not have. Catch and finish('').
+    try {
+      if (widgetId !== null) {
+        // Cloudflare's documented pattern: reset() alone runs a fresh challenge
+        // and re-invokes the callback fixed at render time (below) with a new
+        // token — no re-render needed. Rendering again into the same,
+        // never-cleared container is undocumented and orphans an iframe per
+        // call, so it must not happen here. One tradeoff: cData is fixed at
+        // the first render and cannot be updated per reset(), so later calls'
+        // deviceHint is ignored — acceptable since it is only diagnostic.
+        window.turnstile!.reset(widgetId)
+        return
+      }
+      widgetId = window.turnstile!.render(container!, {
+        sitekey: TURNSTILE_SITE_KEY,
+        // NB: 'interaction-only' is the documented value — 'interactive-only'
+        // (the plan's original spelling) is rejected by the widget at runtime.
+        appearance: 'interaction-only',
+        cData: deviceHint.slice(0, 255),
+        callback: (token: string) => pendingResolve?.(token),
+        'error-callback': () => pendingResolve?.(''),
+      })
+    } catch {
+      finish('')
     }
-    widgetId = window.turnstile!.render(container!, {
-      sitekey: TURNSTILE_SITE_KEY,
-      appearance: 'interactive-only',
-      cData: deviceHint.slice(0, 255),
-      callback: (token: string) => pendingResolve?.(token),
-      'error-callback': () => pendingResolve?.(''),
-    })
   })
 }
