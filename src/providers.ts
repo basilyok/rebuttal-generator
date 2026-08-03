@@ -272,6 +272,14 @@ export const PROVIDERS: Provider[] = [
         blurb: 'Google’s flagship at the direct price',
       },
       {
+        id: 'google/gemini-3.1-flash-lite',
+        label: 'Gemini 3.1 Flash-Lite',
+        inPrice: 0.25,
+        outPrice: 1.5,
+        reasoning: true,
+        blurb: 'Same price as direct — though Google’s own key adds a free tier this route lacks',
+      },
+      {
         // Deliberately a SECOND free model on a different upstream from Nemotron.
         // Free pools get throttled, and one free option is a single point of
         // failure for the users least able to fall back to a paid one.
