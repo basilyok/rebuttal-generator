@@ -2338,21 +2338,21 @@ git commit -m "Count the funnel in daily aggregates: metric bridge, CTA beacon, 
 
 README: add a "Share pages" paragraph (canonical `/s/<id>`, per-share unfurls, legacy `?s=` supported), a "History" paragraph (local-first, vault-encrypted sync, lost-key-loses-synced-history stated plainly), and the metrics stance (aggregate daily integers, no third-party analytics). Update index.html line 6's description. DEPLOYMENT_GUIDE: consolidated secrets table — `OPENROUTER_PROXY_KEY`, `TURNSTILE_SECRET`, `OPERATOR_EMAIL` (+ the pre-existing Google OAuth pair), and the two-step deploy (`limiter/` first, Pages second).
 
-- [ ] **Step 2: Deploy**
+- [x] **Step 2: Deploy**
 
 ```bash
 npm run build
 npx wrangler pages deploy dist --project-name=m36x-rebuttal --commit-dirty=true
 ```
 
-- [ ] **Step 3: The invariant sweep (production)**
+- [x] **Step 3: The invariant sweep (production)**
 
 ```bash
 curl -s https://rebuttal.m36x.com/s/<a-real-id> | grep -c "og:title"
 ```
 → `1`; repeat with `-H "User-Agent: Twitterbot/1.0"` and diff the two outputs → identical. Then: `/api/generate` without Origin → 403; a share POST cross-origin → 403; `/api/metrics` signed out → 404; a generated message contains no watermark or footer (read one end to end); DevTools on a BYOK generation shows zero requests to any `/api/*` generation endpoint.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 ```bash
 git add README.md PROJECT_SUMMARY.md DEPLOYMENT_GUIDE.md index.html
