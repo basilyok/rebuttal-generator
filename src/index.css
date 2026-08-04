@@ -1045,3 +1045,145 @@ h1 {
     justify-content: space-between;
   }
 }
+
+/* --- Instant mode: the keyless path, its quota, and its honest exhaustion state --- */
+
+.instant-quota {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #4b5563;
+  text-align: center;
+}
+
+/* A product state, not an error — indigo like the rest of the brand, no red. */
+.instant-done {
+  margin-top: 16px;
+  padding: 20px;
+  border: 1px solid #c7d2fe;
+  background: #f5f7ff;
+  border-radius: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.instant-done h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #312e81;
+}
+
+.instant-done p {
+  margin: 0;
+  font-size: 14px;
+  color: #4338ca;
+  line-height: 1.6;
+}
+
+.turnstile-slot {
+  position: fixed;
+  inset-block-end: 12px;
+  inset-inline-end: 12px;
+  z-index: 50;
+}
+
+/* --- History: local-first list of past replies, ciphertext-synced second --- */
+
+.history-toggle {
+  margin-inline-start: 0;
+  margin-bottom: 20px;
+  display: inline-block;
+}
+
+.history-panel {
+  margin: -8px 0 24px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.history-note {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0 0 12px;
+}
+
+.history-empty {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.history-restore {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  text-align: start;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #333;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.history-restore:hover {
+  background: #f0f4ff;
+  border-color: #c7d2fe;
+}
+
+.history-date {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.history-snippet {
+  font-size: 14px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.history-delete {
+  margin-inline-start: 0;
+  opacity: 0.6;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.history-delete:hover {
+  opacity: 1;
+}
+
+.history-clear {
+  margin-inline-start: 0;
+  margin-top: 12px;
+  font-size: 13px;
+}

@@ -203,6 +203,29 @@ const zh_Hans = {
   'error.micDenied': '麦克风权限被拒绝了。请允许本站使用麦克风，然后再试一次。',
   'error.micMissing': '没有找到麦克风。检查一下麦克风是不是接好了，然后再试一次。',
   'error.speechNetwork': '语音服务遇到了网络错误。检查一下网络连接，然后再试一次。',
+
+  // --- instant mode ----------------------------------------------------------
+  'instant.working': '正在写你的回复（不需要密钥）…',
+  'instant.left': '今天还剩 {n} 次免费回复',
+  'instant.leftOne': '今天还剩 1 次免费回复',
+  'instant.done.title': '今天的免费回复用完了',
+  'instant.done.body':
+    '{time} 会恢复。登录可以拿到更大的每日额度，或者输入你自己的 API 密钥，回复不设上限，也完全不经过我们的服务器。',
+  'instant.done.signIn': '用 Google 登录',
+  'instant.done.byok': '改用我自己的 API 密钥',
+  'instant.turnstile': '验证失败——刷新页面，然后再试一次。',
+  'instant.error': '即时模式这会儿用不了——过一会儿再试，或者用你自己的 API 密钥。',
+  'instant.badge': '即时模式',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': '历史记录',
+  'history.hide': '收起历史记录',
+  'history.empty': '还没有保存的回复——你生成的每一封回复都会保存在这里，就在这台设备上。',
+  'history.localOnly': '只保存在这台设备上。登录并解锁你的保险箱，就能让它加密同步到其他设备。',
+  'history.synced': '已加密同步到你的账户。只有你自己的设备才能读到它。',
+  'history.delete': '删除这条记录',
+  'history.clear': '清空所有历史记录',
+  'history.clearConfirm': '删除所有保存的回复？同步的那份副本也会一起清空。这个操作无法撤销。',
 }
 
 export default zh_Hans

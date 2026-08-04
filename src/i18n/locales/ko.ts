@@ -202,6 +202,30 @@ const ko = {
   'error.micDenied': '마이크 사용이 거부됐어요. 이 사이트에 마이크 권한을 허용하고 다시 시도해 주세요.',
   'error.micMissing': '마이크를 찾지 못했어요. 마이크가 연결되어 있는지 확인하고 다시 시도해 주세요.',
   'error.speechNetwork': '음성 인식 서비스에서 네트워크 오류가 났어요. 연결을 확인하고 다시 시도해 주세요.',
+
+  // --- instant mode ----------------------------------------------------------
+  'instant.working': '답장을 쓰는 중 (키 필요 없음)…',
+  'instant.left': '오늘 무료 답장 {n}개 남았어요',
+  'instant.leftOne': '오늘 무료 답장 1개 남았어요',
+  'instant.done.title': '오늘 무료 답장은 다 썼어요',
+  'instant.done.body':
+    '{time}에 다시 채워져요. 로그인하면 하루 한도가 늘어나고, 내 API 키를 추가하면 답장이 저희 서버를 거치지 않고 무제한으로 나가요.',
+  'instant.done.signIn': 'Google로 로그인',
+  'instant.done.byok': '대신 내 API 키 쓰기',
+  'instant.turnstile': '확인에 실패했어요 — 페이지를 새로고침하고 다시 시도해 주세요.',
+  'instant.error': '지금은 즉시 답장 기능을 쓸 수 없어요 — 잠시 후 다시 시도하거나, 내 API 키를 써 보세요.',
+  'instant.badge': '즉시 답장',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': '기록',
+  'history.hide': '기록 숨기기',
+  'history.empty': '아직 저장된 답장이 없어요 — 답장을 만들 때마다 여기, 이 기기에 저장돼요.',
+  'history.localOnly':
+    '이 기기에만 저장돼요. 로그인하고 보관함 잠금을 해제하면 암호화된 채로 여러 기기에 동기화돼요.',
+  'history.synced': '암호화해서 계정에 동기화했어요. 내 기기에서만 읽을 수 있어요.',
+  'history.delete': '이 항목 삭제',
+  'history.clear': '기록 전체 지우기',
+  'history.clearConfirm': '저장된 답장을 모두 지울까요? 동기화된 사본도 함께 지워져요. 되돌릴 수 없어요.',
 }
 
 export default ko

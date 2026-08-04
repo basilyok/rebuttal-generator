@@ -203,6 +203,29 @@ const en: Record<string, string> = {
   'error.micDenied': 'Microphone access was denied. Allow microphone access for this site and try again.',
   'error.micMissing': 'No microphone was found. Check that a microphone is connected and try again.',
   'error.speechNetwork': 'The speech service hit a network error. Check your connection and try again.',
+
+  // --- instant mode ------------------------------------------------------------
+  'instant.working': 'Writing your reply (no key needed)…',
+  'instant.left': '{n} free replies left today',
+  'instant.leftOne': '1 free reply left today',
+  'instant.done.title': 'Free replies are done for today',
+  'instant.done.body':
+    'They come back at {time}. Sign in for a bigger daily allowance, or add your own API key for unlimited replies that never touch our servers.',
+  'instant.done.signIn': 'Sign in with Google',
+  'instant.done.byok': 'Use my own API key instead',
+  'instant.turnstile': 'Verification failed — reload the page and try again.',
+  'instant.error': 'Instant mode is unavailable right now — try again shortly, or use your own API key.',
+  'instant.badge': 'Instant mode',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'History',
+  'history.hide': 'Hide history',
+  'history.empty': 'No saved replies yet — every reply you generate is saved here, on this device.',
+  'history.localOnly': 'Saved on this device only. Sign in and unlock your vault to sync it, encrypted, across devices.',
+  'history.synced': 'Encrypted and synced to your account. Only your devices can read it.',
+  'history.delete': 'Delete this entry',
+  'history.clear': 'Clear all history',
+  'history.clearConfirm': 'Delete all saved replies? The synced copy is cleared too. This cannot be undone.',
 }
 
 export default en

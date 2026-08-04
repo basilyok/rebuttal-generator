@@ -29,6 +29,7 @@ import {
   parseMessage,
   parseCheck,
   parseTheirCase,
+  section,
   type PromptContext,
 } from './prompts'
 import {
@@ -58,6 +59,8 @@ import {
 } from './i18n'
 import { detectLanguage, isRtl, displayLanguageName } from './lang'
 import { fetchAuthState, signIn, signOut, saveLanguagePreference, authErrorMessage, SIGNED_OUT, type AuthState } from './auth'
+import { generateInstant, InstantQuotaError, InstantTurnstileError } from './instant'
+import { getTurnstileToken } from './turnstile'
 import {
   fetchVault,
   saveVault,
@@ -72,6 +75,16 @@ import {
   type VaultBlob,
 } from './vault'
 import { AccountBar, VaultDialog, type VaultUiState } from './AccountBar'
+import HistoryPanel from './HistoryPanel'
+import {
+  listEntries,
+  saveEntry,
+  deleteEntry,
+  clearAllEntries,
+  pushHistory,
+  pullAndMergeHistory,
+  type HistoryEntry,
+} from './history'
 
 /**
  * One generated reply. `message` is the only part that is ever sent to anyone —
@@ -90,6 +103,8 @@ interface Reply {
   toVerify?: string[]
   theirCase?: string
   answered?: string[]
+  /** True when this reply came from Instant mode (no key, our server paid) */
+  instant?: boolean
 }
 
 const keyStorageId = (providerId: string) => `api_key_${providerId}`
@@ -202,6 +217,10 @@ export default function App() {
   const [useSources, setUseSources] = useState(true)
   const [audience, setAudience] = useState('')
 
+  // --- Instant mode: no key, our server pays, spend bounded by daily quota ---
+  const [instantQuota, setInstantQuota] = useState<{ remaining: number; cap: number } | null>(null)
+  const [instantDone, setInstantDone] = useState<{ resetAt: string; signedIn: boolean } | null>(null)
+
   // --- language ------------------------------------------------------------
   // Typed as string, not the Language union: values also arrive from the account
   // record and from <select>, and are validated against SUPPORTED at those edges.
@@ -236,6 +255,10 @@ export default function App() {
   const [isFetchingArticle, setIsFetchingArticle] = useState(false)
   const [articleStatus, setArticleStatus] = useState('')
 
+  // --- history: local-first, encrypted-sync second (see src/history.ts) ---
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([])
+  const [showHistory, setShowHistory] = useState(false)
+
   const provider = getProvider(providerId)
   const model = useMemo(() => models.find((m) => m.id === modelId), [models, modelId])
 
@@ -267,6 +290,12 @@ export default function App() {
       cancelled = true
     }
   }, [language])
+
+  // Local history is available immediately, signed in or not — it lives in this
+  // device's IndexedDB regardless of account state (see src/history.ts).
+  useEffect(() => {
+    listEntries().then(setHistoryEntries)
+  }, [])
 
   // Sign-in state, plus the account's saved language. A preference stored on the
   // account wins over this device's locale — that is what "maintained across logins"
@@ -321,6 +350,13 @@ export default function App() {
           setTavilyDraft(loadTavilyKey())
           setShowApiKeyInput(getProvider(providerId).requiresKey && !loadStoredKey(providerId))
           setVaultState('unlocked')
+          void pullAndMergeHistory().then((merged) => {
+            if (cancelled || !merged) return
+            setHistoryEntries(merged)
+            // Sign-in uploads the device backlog: entries generated while signed
+            // out are already in the merge, so pushing it completes the sync.
+            void pushHistory(merged)
+          })
         } else {
           setVaultState('locked')
         }
@@ -465,6 +501,12 @@ export default function App() {
   }, [])
 
   const dismissShared = () => {
+    // Aggregate loop-conversion signal — a name, nothing else
+    try {
+      navigator.sendBeacon('/api/metric', new Blob([JSON.stringify({ name: 'share_cta' })], { type: 'application/json' }))
+    } catch {
+      /* metrics must never break navigation */
+    }
     setShared(null)
     setSharedError('')
     clearSharedIdFromLocation()
@@ -486,6 +528,7 @@ export default function App() {
         providerLabel: provider.label,
         articleUrl: article?.url,
         articleTitle: article?.title,
+        language: lastRequestRef.current?.promptContext.replyLanguage,
       })
       setShareUrl(shareUrlFor(id))
       setShareCopied(false)
@@ -546,6 +589,34 @@ export default function App() {
     setArticle(null)
   }
 
+  /** Repopulate the transcript and reply from a saved history entry. */
+  const restoreFromHistory = (entry: HistoryEntry) => {
+    finalTranscriptRef.current = entry.argument
+    setTranscript(entry.argument)
+    setArticle(null)
+    setError('')
+    setShareUrl('')
+    setShowClaims(false)
+    setIsBriefingOpen(false)
+    setLastRun(null)
+    setInstantDone(null)
+    setReply({
+      message: entry.message,
+      strategy: entry.strategy || '',
+      context: null,
+      citations: entry.citations || [],
+      strippedUrls: [],
+      unusedCitations: [],
+      weakLink: entry.weakLink || '',
+      toVerify: [],
+      // A restored reply has no lastRequestRef (that briefing context was never
+      // saved), same as an Instant reply — so it hides the BYOK-only briefing
+      // expander the same way Instant does.
+      instant: true,
+    })
+    setShowHistory(false)
+  }
+
   const handleFetchArticle = async () => {
     setIsFetchingArticle(true)
     setError('')
@@ -592,6 +663,31 @@ export default function App() {
     if (cost) setSessionCost((current) => current + cost)
   }
 
+  /**
+   * Save a successful generation to local history, then sync it if the vault is
+   * unlocked. Called from both the Instant and BYOK reply paths — every
+   * successful generation, regardless of which one produced it.
+   */
+  const recordHistory = (message: string, strategy: string, weakLink: string, citationsUsed: Citation[]) => {
+    const entry: HistoryEntry = {
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      argument: transcript.trim(),
+      message,
+      strategy,
+      weakLink,
+      citations: citationsUsed,
+      modelLabel: model?.label,
+      articleTitle: article?.title,
+      articleUrl: article?.url,
+    }
+    saveEntry(entry).then(async () => {
+      const all = await listEntries()
+      setHistoryEntries(all)
+      if (vaultState === 'unlocked') void pushHistory(all) // one KV write per save, ciphertext only
+    })
+  }
+
   const generateReply = async () => {
     const argument = transcript.trim()
     if (!argument) {
@@ -602,14 +698,8 @@ export default function App() {
       setError(t('error.needModel'))
       return
     }
-    if (provider.requiresKey && !apiKey) {
-      setError(`Please set your ${provider.label.replace(/ \(.*\)$/, '')} API key`)
-      setShowApiKeyInput(true)
-      // The key form lives inside the collapsed settings — open it or the error
-      // points at something the user cannot see
-      setShowSettings(true)
-      return
-    }
+    // No key on file: Instant mode picks up the reply instead of dead-ending here.
+    const instant = provider.requiresKey && !apiKey
 
     setIsLoading(true)
     setError('')
@@ -619,6 +709,10 @@ export default function App() {
     setIsBriefingOpen(false)
     setBriefingError('')
     setShowClaims(false)
+    setInstantDone(null)
+    // A BYOK run makes any earlier Instant quota/exhaustion state stale — a
+    // key on file means neither applies anymore.
+    if (!instant) setInstantQuota(null)
 
     // Article text is delimited so the model can tell content from instructions.
     // Neutralise any closing tag in the page content itself, or it could break
@@ -673,6 +767,39 @@ export default function App() {
       const modelSearch = useSources && !citations.length && canSearchWeb(provider, model)
       lastRequestRef.current = { userContent, promptContext, citations, modelSearch }
 
+      if (instant) {
+        // Instant mode: no key, our server pays. One upstream call — the
+        // honest check arrives folded into the same envelope (see instantPrompt).
+        setProviderStatus(t('instant.working'))
+        const token = await getTurnstileToken(localStorage.getItem('ai_provider') || 'anon')
+        const instantReply = await generateInstant({
+          argument,
+          recipientLine: audience || undefined,
+          replyLanguage: promptContext.replyLanguage,
+          briefingLanguage: promptContext.briefingLanguage,
+          citations,
+          turnstileToken: token || undefined,
+        })
+        const parsed = parseMessage(instantReply.text)
+        const verified = stripUnverifiedUrls(parsed.message, citations)
+        setReply({
+          message: verified.text,
+          strategy: parsed.strategy,
+          context: parsed.context,
+          citations: verified.used,
+          strippedUrls: verified.strippedUrls,
+          unusedCitations: [],
+          weakLink: section(instantReply.text, 'WEAKLINK'),
+          toVerify: [],
+          instant: true,
+        })
+        recordHistory(verified.text, parsed.strategy, section(instantReply.text, 'WEAKLINK'), verified.used)
+        setInstantQuota({ remaining: instantReply.remaining, cap: instantReply.cap })
+        setInstantDone(null)
+        if (searchNote) setError(searchNote)
+        return
+      }
+
       setProviderStatus(t('generate.writing'))
       const call = (system: string, webSearch = false) =>
         generateText({
@@ -716,13 +843,27 @@ export default function App() {
         weakLink: check.weakLink,
         toVerify: check.toVerify,
       })
+      recordHistory(verified.text, parsed.strategy, check.weakLink, verified.used)
       if (searchNote) setError(searchNote)
 
       addUsage(messageResult.usage)
       addUsage(checkResult.usage)
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'TimeoutError') {
+      if (err instanceof InstantQuotaError) {
+        setInstantDone({ resetAt: err.resetAt, signedIn: err.signedIn })
+      } else if (err instanceof InstantTurnstileError) {
+        setError(t('instant.turnstile'))
+      } else if (err instanceof DOMException && err.name === 'TimeoutError') {
         setError(t('error.timeout'))
+      } else if (instant) {
+        // Every failure on this path — a server-side error() string or a raw
+        // fetch rejection (e.g. "Failed to fetch") — is `instanceof Error`, so
+        // checking that first (as the branch below does) would always win and
+        // the hand-translated instant.error string would never show for a
+        // non-English reader. Show the translated string always; keep the raw
+        // detail alongside for anyone who needs to diagnose it.
+        const detail = err instanceof Error ? err.message : ''
+        setError(detail ? `${t('instant.error')} (${detail})` : t('instant.error'))
       } else {
         setError(err instanceof Error ? err.message : t('error.generic'))
       }
@@ -737,6 +878,10 @@ export default function App() {
    * sendable. Generated on first expand, so replies nobody inspects cost nothing extra.
    */
   const toggleBriefing = async () => {
+    // No key paid for an Instant reply, and there is nothing to steelman it
+    // against on our own dime — the panel itself stays hidden for these
+    // replies, but guard here too in case this is ever reached another way.
+    if (reply?.instant) return
     const opening = !isBriefingOpen
     setIsBriefingOpen(opening)
     const context = lastRequestRef.current
@@ -825,6 +970,11 @@ export default function App() {
     // Drop the derived key too. Without this, "sign out" on a shared machine would
     // leave the next person able to decrypt the vault by simply signing back in.
     await forgetDeviceKey()
+    // Wipe the device's history copy as well — entries AND key both leave this
+    // device on sign-out. The server keeps the ciphertext; the next sign-in on
+    // this (or any) device pulls it back down once the vault is unlocked again.
+    await clearAllEntries()
+    setHistoryEntries([])
     setAuth((current) => ({ ...current, user: null }))
     setVaultState('none')
     setVaultBlob(null)
@@ -863,6 +1013,13 @@ export default function App() {
         await saveVault(sealed)
         setVaultBlob(sealed)
         setVaultState('unlocked')
+        void pullAndMergeHistory().then((merged) => {
+          if (!merged) return
+          setHistoryEntries(merged)
+          // Sign-in uploads the device backlog: entries generated while signed
+          // out are already in the merge, so pushing it completes the sync.
+          void pushHistory(merged)
+        })
       } else if (vaultBlob) {
         const bundle = await unlock(vaultBlob, passphrase)
         applyKeyBundle(bundle)
@@ -870,6 +1027,13 @@ export default function App() {
         setTavilyDraft(loadTavilyKey())
         setShowApiKeyInput(provider.requiresKey && !loadStoredKey(providerId))
         setVaultState('unlocked')
+        void pullAndMergeHistory().then((merged) => {
+          if (!merged) return
+          setHistoryEntries(merged)
+          // Sign-in uploads the device backlog: entries generated while signed
+          // out are already in the merge, so pushing it completes the sync.
+          void pushHistory(merged)
+        })
       }
       setVaultPrompt(null)
     } catch (err) {
@@ -1267,6 +1431,37 @@ export default function App() {
         </div>
       </div>
 
+      <button type="button" className="link-button history-toggle" onClick={() => setShowHistory((v) => !v)}>
+        {showHistory ? t('history.hide') : t('history.show')}
+      </button>
+      {showHistory && (
+        <HistoryPanel
+          t={t}
+          language={language}
+          entries={historyEntries}
+          synced={vaultState === 'unlocked'}
+          onRestore={restoreFromHistory}
+          onDelete={(id) => {
+            deleteEntry(id).then(async () => {
+              const all = await listEntries()
+              setHistoryEntries(all)
+              // Push immediately, not debounced: a per-entry delete on this device
+              // could otherwise be resurrected by a stale local list pushed from
+              // another device before this delete's push lands (see history.ts).
+              if (vaultState === 'unlocked') void pushHistory(all)
+            })
+          }}
+          onClear={() => {
+            if (!window.confirm(t('history.clearConfirm'))) return
+            clearAllEntries().then(() => {
+              setHistoryEntries([])
+              // Push immediately — same delete-resurrection risk as per-entry delete.
+              if (vaultState === 'unlocked') void pushHistory([])
+            })
+          }}
+        />
+      )}
+
       <div className="input-section">
         <div className="label-row">
           <label className="label" htmlFor="argument-input">
@@ -1477,6 +1672,40 @@ export default function App() {
         {isLoading ? t('generate.srStatus') : ''}
       </span>
 
+      {instantQuota && !instantDone && (
+        <p className="instant-quota">
+          {t(instantQuota.remaining === 1 ? 'instant.leftOne' : 'instant.left', { n: instantQuota.remaining })}
+        </p>
+      )}
+
+      {instantDone && (
+        <div className="instant-done">
+          <h3>{t('instant.done.title')}</h3>
+          <p>
+            {t('instant.done.body', {
+              time: instantDone.resetAt
+                ? new Date(instantDone.resetAt).toLocaleTimeString(language, { hour: 'numeric', minute: '2-digit' })
+                : '',
+            })}
+          </p>
+          {!auth.user && auth.configured && (
+            <button className="button button-primary" onClick={() => signIn('google')}>
+              {t('instant.done.signIn')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setShowSettings(true)
+              setShowApiKeyInput(true)
+            }}
+          >
+            {t('instant.done.byok')}
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="error" role="alert">
           ⚠️ {error}
@@ -1559,59 +1788,66 @@ export default function App() {
             </div>
           )}
 
-          <button
-            type="button"
-            className="expander-header briefing-header"
-            onClick={toggleBriefing}
-            aria-expanded={isBriefingOpen}
-            aria-controls="briefing-panel"
-            disabled={briefingLoading}
-          >
-            <span className={`expander-arrow ${isBriefingOpen ? 'open' : ''}`}>▼</span>
-            <span className="expander-text">
-              {t('briefing.title')}
-              {briefingLoading && <span className="spinner steelman-spinner"></span>}
-            </span>
-            <span className="briefing-tag">{t('briefing.tag')}</span>
-          </button>
+          {/* Instant replies had no key paying for a second call, so there is nothing
+              behind this expander — hide it rather than offer something that would
+              silently do nothing. */}
+          {!reply.instant && (
+            <>
+              <button
+                type="button"
+                className="expander-header briefing-header"
+                onClick={toggleBriefing}
+                aria-expanded={isBriefingOpen}
+                aria-controls="briefing-panel"
+                disabled={briefingLoading}
+              >
+                <span className={`expander-arrow ${isBriefingOpen ? 'open' : ''}`}>▼</span>
+                <span className="expander-text">
+                  {t('briefing.title')}
+                  {briefingLoading && <span className="spinner steelman-spinner"></span>}
+                </span>
+                <span className="briefing-tag">{t('briefing.tag')}</span>
+              </button>
 
-          <div
-            id="briefing-panel"
-            className={`collapsible ${isBriefingOpen ? '' : 'collapsed'}`}
-            aria-hidden={!isBriefingOpen}
-          >
-            <div className="collapsible-clip">
-              <div className="rebuttal-detailed-content steelman-content">
-                {briefingError ? (
-                  <span className="steelman-error">⚠️ {briefingError}</span>
-                ) : reply.theirCase ? (
-                  <>
-                    <RichText text={reply.theirCase} />
-                    {reply.answered?.length ? (
+              <div
+                id="briefing-panel"
+                className={`collapsible ${isBriefingOpen ? '' : 'collapsed'}`}
+                aria-hidden={!isBriefingOpen}
+              >
+                <div className="collapsible-clip">
+                  <div className="rebuttal-detailed-content steelman-content">
+                    {briefingError ? (
+                      <span className="steelman-error">⚠️ {briefingError}</span>
+                    ) : reply.theirCase ? (
                       <>
-                        <div className="sources-title">{t('briefing.answered')}</div>
-                        <ul className="sources-list answered-list">
-                          {reply.answered.map((line, i) => (
-                            <li key={i} className={/unanswered/i.test(line) ? 'unanswered' : undefined}>
-                              {line}
-                            </li>
-                          ))}
-                        </ul>
+                        <RichText text={reply.theirCase} />
+                        {reply.answered?.length ? (
+                          <>
+                            <div className="sources-title">{t('briefing.answered')}</div>
+                            <ul className="sources-list answered-list">
+                              {reply.answered.map((line, i) => (
+                                <li key={i} className={/unanswered/i.test(line) ? 'unanswered' : undefined}>
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        ) : null}
+                        {reply.unusedCitations.length > 0 && (
+                          <>
+                            <div className="sources-title">{t('briefing.unused')}</div>
+                            <SourceList citations={reply.unusedCitations} title={t('reply.sourcesTitle')} />
+                          </>
+                        )}
                       </>
-                    ) : null}
-                    {reply.unusedCitations.length > 0 && (
-                      <>
-                        <div className="sources-title">{t('briefing.unused')}</div>
-                        <SourceList citations={reply.unusedCitations} title={t('reply.sourcesTitle')} />
-                      </>
+                    ) : (
+                      <span className="token-detail">{t('briefing.building')}</span>
                     )}
-                  </>
-                ) : (
-                  <span className="token-detail">{t('briefing.building')}</span>
-                )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
 
           <div className="share-row">
             {shareUrl ? (

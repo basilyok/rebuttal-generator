@@ -200,6 +200,30 @@ const pt_BR = {
   'error.micDenied': 'O acesso ao microfone foi negado. Libere o microfone para este site e tente de novo.',
   'error.micMissing': 'Nenhum microfone foi encontrado. Veja se tem um microfone conectado e tente de novo.',
   'error.speechNetwork': 'O serviço de reconhecimento de fala teve um erro de rede. Confira sua conexão e tente de novo.',
+
+  // --- instant mode ------------------------------------------------------------
+  'instant.working': 'Escrevendo sua resposta (sem precisar de chave)…',
+  'instant.left': '{n} respostas grátis restantes hoje',
+  'instant.leftOne': '1 resposta grátis restante hoje',
+  'instant.done.title': 'As respostas grátis acabaram por hoje',
+  'instant.done.body':
+    'Elas voltam às {time}. Entre para ganhar um limite diário maior, ou adicione sua própria chave de API para respostas ilimitadas que nunca passam pelos nossos servidores.',
+  'instant.done.signIn': 'Entrar com o Google',
+  'instant.done.byok': 'Usar minha própria chave de API',
+  'instant.turnstile': 'A verificação falhou — recarregue a página e tente de novo.',
+  'instant.error': 'O modo instantâneo está indisponível agora — tente de novo em instantes, ou use sua própria chave de API.',
+  'instant.badge': 'Modo instantâneo',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'Histórico',
+  'history.hide': 'Ocultar histórico',
+  'history.empty': 'Ainda não há respostas salvas — toda resposta que você gerar fica salva aqui, neste dispositivo.',
+  'history.localOnly':
+    'Salvo só neste dispositivo. Entre e desbloqueie seu cofre para sincronizar, de forma criptografada, entre os dispositivos.',
+  'history.synced': 'Criptografado e sincronizado com sua conta. Só os seus dispositivos conseguem ler.',
+  'history.delete': 'Apagar este item',
+  'history.clear': 'Apagar todo o histórico',
+  'history.clearConfirm': 'Apagar todas as respostas salvas? A cópia sincronizada também é apagada. Isso não pode ser desfeito.',
 }
 
 export default pt_BR

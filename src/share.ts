@@ -26,6 +26,8 @@ export interface SharedRebuttal {
   providerLabel?: string
   articleUrl?: string
   articleTitle?: string
+  /** The reply's content language (e.g. "en", "pt-BR") — feeds og:locale on the share page. */
+  language?: string
   createdAt?: string
 }
 
@@ -79,18 +81,25 @@ export async function loadSharedResult(id: string): Promise<SharedRebuttal> {
   return data as SharedRebuttal
 }
 
-/** Full URL for a share id, on whatever origin the app is served from. */
-export const shareUrlFor = (id: string) => `${window.location.origin}/?s=${id}`
+/** New links are path-based so the share function can serve per-share OG meta. */
+export const shareUrlFor = (id: string) => `${window.location.origin}/s/${id}`
+
+const ID_PATTERN = /^[A-Za-z0-9]{6,32}$/
 
 /** Share id in the current address, if any. */
 export function sharedIdFromLocation(): string | null {
+  // Path form first (the canonical shape) …
+  const pathMatch = window.location.pathname.match(/^\/s\/([A-Za-z0-9]{6,32})\/?$/)
+  if (pathMatch) return pathMatch[1]
+  // … then the legacy query form — old links keep working indefinitely.
   const id = new URLSearchParams(window.location.search).get('s')
-  return id && /^[A-Za-z0-9]{6,32}$/.test(id) ? id : null
+  return id && ID_PATTERN.test(id) ? id : null
 }
 
-/** Drop ?s= without reloading, so "write your own" returns to a clean app. */
+/** Drop ?s= / /s/<id> without reloading, so "write your own" returns to a clean app. */
 export function clearSharedIdFromLocation() {
   const url = new URL(window.location.href)
   url.searchParams.delete('s')
+  if (/^\/s\//.test(url.pathname)) url.pathname = '/'
   window.history.replaceState({}, '', url.pathname + url.search)
 }

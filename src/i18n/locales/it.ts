@@ -205,6 +205,30 @@ const it = {
   'error.micDenied': "L'accesso al microfono è stato negato. Consenti il microfono per questo sito e riprova.",
   'error.micMissing': 'Non è stato trovato nessun microfono. Controlla che sia collegato e riprova.',
   'error.speechNetwork': 'Il servizio vocale ha avuto un errore di rete. Controlla la connessione e riprova.',
+
+  // --- instant mode ----------------------------------------------------------
+  'instant.working': 'Sto scrivendo la tua risposta (senza bisogno di chiavi)…',
+  'instant.left': '{n} risposte gratuite rimaste per oggi',
+  'instant.leftOne': '1 risposta gratuita rimasta per oggi',
+  'instant.done.title': 'Le risposte gratuite per oggi sono finite',
+  'instant.done.body':
+    'Tornano disponibili alle {time}. Accedi per avere più risposte al giorno, oppure aggiungi la tua chiave API per risposte illimitate che non passano mai dai nostri server.',
+  'instant.done.signIn': 'Accedi con Google',
+  'instant.done.byok': 'Usa invece la mia chiave API',
+  'instant.turnstile': 'Verifica non riuscita — ricarica la pagina e riprova.',
+  'instant.error': 'La modalità istantanea non è disponibile in questo momento — riprova tra poco, oppure usa la tua chiave API.',
+  'instant.badge': 'Modalità istantanea',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'Cronologia',
+  'history.hide': 'Nascondi cronologia',
+  'history.empty': 'Ancora nessuna risposta salvata — ogni risposta che generi viene salvata qui, su questo dispositivo.',
+  'history.localOnly':
+    'Salvata solo su questo dispositivo. Accedi e sblocca la tua cassaforte per sincronizzarla, cifrata, su ogni dispositivo.',
+  'history.synced': 'Cifrata e sincronizzata con il tuo account. Solo i tuoi dispositivi possono leggerla.',
+  'history.delete': 'Elimina questa voce',
+  'history.clear': 'Cancella tutta la cronologia',
+  'history.clearConfirm': 'Eliminare tutte le risposte salvate? Viene cancellata anche la copia sincronizzata. Non si può annullare.',
 }
 
 export default it

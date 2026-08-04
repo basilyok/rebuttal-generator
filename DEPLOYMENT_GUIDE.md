@@ -14,6 +14,14 @@ That's it. `wrangler` must be logged in (`npx wrangler login` once per machine;
 check with `npx wrangler whoami`). The project name, output directory, and the
 KV binding all come from `wrangler.toml`, so no flags are needed.
 
+If anything under `limiter/` changed, deploy that Worker too — and do it
+**before** the Pages deploy, because the Pages service binding resolves against
+the deployed Worker:
+
+```bash
+cd limiter && npx wrangler deploy
+```
+
 ### Share-link storage (one-time)
 
 Share links live in a Cloudflare KV namespace bound as `SHARES`. It already
@@ -36,6 +44,114 @@ Notes:
 - The service worker's update banner shows in already-open tabs after a deploy;
   clicking **Reload** activates the new version.
 
+## Instant Mode Setup (one-time)
+
+Instant mode (free keyless replies through `/api/generate`) needs three things.
+Do them in this order, with the Pages deploy last.
+
+### 1. Deploy the limiter Worker
+
+```bash
+cd limiter && npx wrangler deploy
+```
+
+The Pages project reaches `m36x-limiter` through the `[[services]]` binding in
+the root `wrangler.toml`, and that binding resolves against an already-deployed
+Worker — so the limiter must be deployed before the Pages deploy. It has no
+public URL (`workers_dev = false`); only this project's Functions can call it.
+
+### 2. Create the OpenRouter provisioned key
+
+At [openrouter.ai](https://openrouter.ai/) → **Settings → Provisioning API
+keys**, create a runtime key **with a daily spend limit** (start at $2/day).
+OpenRouter enforces that cap server-side, so spend stays bounded even if every
+guard in the app fails. Store it as a Pages secret:
+
+```bash
+npx wrangler pages secret put OPENROUTER_PROXY_KEY --project-name=m36x-rebuttal
+```
+
+Without this secret, `/api/generate` returns 501 and the app behaves as plain
+BYOK — nothing else breaks.
+
+### 3. Create the Turnstile widget
+
+In the Cloudflare dashboard (account level) → **Turnstile → Add widget**:
+hostname `rebuttal.m36x.com`, mode **Managed**. The sitekey is public and lives
+in `src/turnstile.ts` (already committed); the secret goes in:
+
+```bash
+npx wrangler pages secret put TURNSTILE_SECRET --project-name=m36x-rebuttal
+```
+
+With the secret unset, the server skips verification — the intended local-dev
+mode, not an error.
+
+### 4. Deploy Pages last
+
+Secrets bind at deploy time: a secret added after a deploy is invisible to the
+deployment already serving traffic. Set both secrets (and deploy the limiter)
+**before** the Pages deploy, then:
+
+```bash
+npm run build
+npx wrangler pages deploy
+```
+
+## Operator Metrics (one-time, optional)
+
+The limiter's `metrics` table keeps aggregate counters — a name and a daily
+integer, nothing else (`share_view`, `instant_reply`, …; no ids, no payload, no
+user agent, no referrer). The same Durable Object separately holds the quota
+counters, which are keyed by the opaque quota id (the anonymous `rb_device`
+cookie, or the account id when signed in) — an id and a number, never content.
+`GET /api/metrics` reads the aggregate table back, and it is gated on being
+signed in **as the operator**: set `OPERATOR_EMAIL` to the Google-account email
+you sign in with. That presupposes sign-in works at all — the OAuth pair below
+plus the `ACCOUNTS` binding — since the OAuth callback is the only thing that
+mints a session.
+
+```bash
+npx wrangler pages secret put OPERATOR_EMAIL --project-name=m36x-rebuttal
+```
+
+Anyone else who calls that endpoint — signed in as another account or not
+signed in at all — gets a plain `404`, because the endpoint's existence is not
+worth advertising with a `403`. With the secret unset the endpoint returns
+`501 Not configured` for everyone, including you; counting still happens, you
+just cannot read it back. Set this before the Pages deploy for the same
+bind-at-deploy-time reason as the others.
+
+## Secrets This Deployment Uses
+
+All five are optional — with none of them set the app runs as plain BYOK — but
+they are not all independent of one another. The two Google values are one unit:
+sign-in needs both halves *and* the `ACCOUNTS` binding, and either half alone
+does nothing. `OPERATOR_EMAIL` depends on that same unit, because the only thing
+that mints a session is the OAuth callback: set it on a deployment without
+sign-in and `/api/metrics` never returns a readback — a permanent `404` when the
+`ACCOUNTS` binding is there but the OAuth pair is not, and `501` when `ACCOUNTS`
+itself is missing, since that check runs first. The other two stand alone. Each
+is set the same way, and **every one of them binds at deploy time**, so adding
+one to a live project does nothing until you redeploy.
+
+```bash
+npx wrangler pages secret put <NAME> --project-name=m36x-rebuttal
+```
+
+| Secret | What it enables | What happens without it |
+|---|---|---|
+| `OPENROUTER_PROXY_KEY` | Instant mode: `/api/generate` spends this provisioned OpenRouter key so keyless visitors get free replies | `/api/generate` returns `501`; the app is plain BYOK and nothing else breaks |
+| `TURNSTILE_SECRET` | Server-side Turnstile verification on `/api/generate`, keeping bots off the free pool | Verification is skipped, not failed — Instant mode still works, unguarded. This is the intended local-dev state |
+| `OPERATOR_EMAIL` | `GET /api/metrics` for that one signed-in Google account — so it needs the sign-in pair below and `ACCOUNTS` to be usable at all | The endpoint returns `501` for everyone; the counters keep incrementing, they are just unreadable |
+| `GOOGLE_CLIENT_ID` | Sign-in (the OAuth authorize request, and the `aud` check on the returned token) | Sign-in stays hidden: `/api/auth/me` reports `configured: false` and the button never renders — so no vault, no history sync, no cross-device language preference |
+| `GOOGLE_CLIENT_SECRET` | The OAuth code-for-token exchange in the callback | Same as above — both halves of the pair are required together |
+
+**Not** secrets, and living in `wrangler.toml` instead: the `SHARES` and
+`ACCOUNTS` KV namespace ids, and the `LIMITER` service binding.
+Sign-in additionally needs `ACCOUNTS` to exist — the OAuth pair alone is not
+enough — and without it `/api/vault` and `/api/history` return `501`.
+
 ## First-Time Setup (already done)
 
 For reference, the project was created with:
@@ -52,7 +168,10 @@ under **Workers & Pages → m36x-rebuttal → Custom domains**.
 
 The build output in `dist/` is a fully static site — any static host works
 (Netlify, Vercel, S3+CloudFront, GitHub Pages…). If you move hosts, replicate
-the caching rules from `public/_headers` in that host's config format.
+the caching rules from `public/_headers` in that host's config format. Note
+that everything under `functions/` (article extraction, sharing, sign-in,
+Instant mode) and the limiter Worker are Cloudflare-side — on another host the
+app runs as plain BYOK.
 
 ## Troubleshooting
 

@@ -43,45 +43,82 @@ take them seriously enough to answer in their own words.${note ? `\n${note}` : '
 /** The behavioural rules, phrased as prompt constraints. */
 const RULES = `HOW TO WRITE IT
 
+Before drafting, work out three things from what you have — their message, plus
+anything the sender told you about the reader (which outranks your own inference).
+
+First, what they actually care about: the value doing the work underneath their words.
+The vocabulary gives it away — harm and protection, fairness and what people deserve,
+loyalty to us and ours, respect and order and tradition, purity and contamination,
+freedom from being told what to do. People are moved by arguments built inside their OWN
+value frame and almost never by arguments imported from yours: if they argued safety,
+answer in safety; if they argued freedom, answer in freedom. The reframe must be sincere —
+find what you can honestly affirm in their value and argue from there, because a costume
+over your real reasoning reads instantly as pandering.
+
+Second, where this reply will be read, and what a native reply looks like there. A
+comment thread gets a comment, a text message gets a text, only an essay may earn an
+essay. A reply too long to finish persuades nobody, whatever it contains. In a short
+venue the structure below compresses rather than disappears: beats may share a
+sentence, the off-ramp and the closing handback may shrink to a phrase, and a beat
+that will not fit drops — keep the order, not the checklist.
+
+Third, how they write — sentence length, formality, how disagreement is softened where
+they are — and match that surface while bringing genuinely NEW substance and framing.
+Echo how they speak, never what they already said.
+
 Open by restating their specific claim and the reason THEY gave for it, closely enough
 that they would say "yes, that is what I meant." Quote or closely paraphrase their own
 words. Never narrate what they feel, fear, or are worried about — you do not know, and
 guessing reads as presumptuous. Restate what they wrote, not what you imagine is behind it.
 
-Then name one concrete thing you genuinely agree with — a shared goal, value, or accepted
-premise. It must be specific enough that it could not be pasted into a reply to a
-different person. Generic warmth reads as a manipulation tell.
+Then name one concrete thing you genuinely agree with — best of all, the value itself:
+the thing they care about that you can honestly say you care about too, said as
+something you share, never as a diagnosis of them ("fairness matters to me too" agrees;
+"you clearly care about fairness" narrates). It must be specific enough that it could
+not be pasted into a reply to a different person. Generic warmth reads as a
+manipulation tell.
 
 Then give them an off-ramp, BEFORE you disagree. Locate the error in the information
 environment rather than in them: "given what was being reported at the time, that was the
 reasonable read — what changed is…". This must come before the disagreement, not as an
 apology at the end.
 
-Then narrow the disagreement and own it: "where I read it differently is…". State what is
-and is not in dispute.
+Then narrow the disagreement and own it: "where I read it differently is…". Prefer "I"
+over "you" — a claim you own is easier to accept than a charge they must answer. State
+what is and is not in dispute.
 
-Then the substance, and make it the longest part. Specific, checkable evidence aimed at
-the load-bearing premise THEY stated: named studies, dated events, actual numbers, named
-institutions, the real mechanism. Where possible use sources this particular reader would
-already find credible rather than sources that merely agree with you. Introduce a new
-frame, case, or mechanism rather than re-fighting inside their vocabulary.
+Then make the case, inside THEIR value frame, sized to the venue. Make the fewest
+strong points the venue can carry — usually one or two — and prune every weak one:
+readers average rather than add, so a weak argument placed beside a strong one dilutes
+it. Anchor the case in the most concrete, checkable material you have: a named study, a
+dated event, an actual number, the real mechanism. When the topic touches their own
+life, make the strongest point something they can picture happening to someone real —
+drawn from the material or sources at hand, never invented, and if nothing at hand
+offers a real case, lead with the number or the mechanism instead of reaching for a
+story; when they argue like an analyst, lead with the number and let the concrete case
+illustrate it. Use sources this particular reader would already find credible rather
+than sources that merely agree with you. Introduce a new frame, case, or mechanism
+rather than re-fighting inside their vocabulary.
 
 Then answer every point you conceded earlier. A concession you leave standing makes the
 message worse than one that never conceded at all. Each acknowledged point must end up
 refuted, shown not to be decisive, or explicitly accepted as a real cost that does not
 flip the conclusion.
 
-Then state your conclusion in plain words. Do not make them reconstruct your thesis.
+Then state your conclusion in plain words, hedged the honest way — own it ("I think",
+"as I read it") without diluting it. Do not make them reconstruct your thesis.
 
 Close with one small, specific thing you are asking them to consider — not capitulation —
-and restore their freedom to disagree. At most one sincere question. Do not demand a reply.
+and hand the decision back to them in so many words: the choice is theirs, and saying so
+measurably lowers the cost of taking your side. At most one sincere question. Do not
+demand a reply.
 
 HARD CONSTRAINTS
 
 - Every factual claim must be true, specific, and checkable in under a minute. If you are
   not confident, omit it or say plainly that you are unsure. One checkable error gives the
   reader licence to dismiss everything else you wrote.
-- Never invent a study, statistic, quote, source, or URL.
+- Never invent a study, statistic, quote, source, person, case, or URL.
 - Never invent experience for the sender. No "I used to think that too", no claimed
   profession or group membership, no personal anecdote — they send this under their own
   name and cannot vouch for a story you made up.
@@ -91,8 +128,9 @@ HARD CONSTRAINTS
 - Avoid stacking explicit reasoning markers ("the reason is", "therefore", "because") —
   measurably, they read as lecturing.
 - Plain prose only. No markdown, no headings, no bullet points, no numbered lists, no bold.
-- Match their register and length. Do not answer two sentences with an essay, or an essay
-  with two sentences.
+- Size the message to where it will be read and to them. Do not answer two sentences with
+  an essay, or an essay with two sentences — and when in doubt, go shorter: a reply they
+  finish beats a reply that is complete.
 - Write only the message. No preamble, no sign-off like "Hope this helps", no meta-commentary.`
 
 /** Envelope the model fills in. Parsing is tolerant, so imperfect compliance is fine. */
@@ -125,6 +163,13 @@ export interface PromptContext {
    * which is precisely the case multilingual support creates.
    */
   briefingLanguage?: string
+  /**
+   * False on the operator-paid proxy path, where the recipient line arrives from
+   * an unauthenticated requester: the hint is offered to the model, never made
+   * authoritative — an attacker must not be able to outrank the model's own
+   * reading of the text. Omitted (or true) everywhere the user pays.
+   */
+  audienceTrusted?: boolean
 }
 
 /** Rules with the banned-phrase list resolved for the language being written. */
@@ -144,18 +189,23 @@ function briefingLanguageLine(language: string): string {
 follows the sender's own language even when the reply itself is in a different one.`
 }
 
-function contextBlock({ audience, venue, isArticle }: PromptContext): string {
+function contextBlock(context: PromptContext): string {
+  const { audience, venue, isArticle } = context
   const lines: string[] = []
   if (audience?.trim()) {
-    lines.push(`WHO WILL READ THIS (from the sender, authoritative — trust it over your own inference): ${audience.trim()}`)
+    lines.push(
+      context.audienceTrusted === false
+        ? `WHO MIGHT READ THIS (an unverified hint from the requester — weigh it against your own reading of the text, and where they disagree, trust the text): ${audience.trim()}`
+        : `WHO WILL READ THIS (from the sender, authoritative — trust it over your own inference): ${audience.trim()}`
+    )
   }
   if (venue) lines.push(`The argument was published on: ${venue}`)
   lines.push(
     audience?.trim()
-      ? 'Use that description to choose register, length, and which sources this reader would credit.'
+      ? 'Use that description to choose register, length, and which sources this reader would credit — and size the reply to what actually gets read in that setting.'
       : `Infer as much as you can about who wrote this and where, from the ${
           isArticle ? 'article' : 'text'
-        } itself — their register, vocabulary, apparent audience, and what kind of source they would find credible. Write for that person specifically.`
+        } itself — their register, vocabulary, apparent audience, what kind of source they would find credible, and what a native reply looks like where this was said: its natural length and form. Write for that person specifically, at that size.`
   )
   return lines.join('\n')
 }
@@ -224,6 +274,38 @@ to check, write: Nothing significant to verify.`
 }
 
 /**
+ * The one-call variant for Instant mode: the honest check folds into the same
+ * response as a fourth section, halving cost and latency while keeping the
+ * weak-link note — the product's integrity signature. The <<<CHECK>>> claims
+ * list stays BYOK-only; it is the least essential output per token.
+ */
+const instantEnvelope = (briefingLanguage: string) =>
+  [
+    ENVELOPE,
+    '',
+    'Then add ONE more section:',
+    '',
+    '<<<WEAKLINK>>>',
+    'The genuinely weakest point in the position you just argued — one or two frank sentences to the sender, not the recipient. ' +
+      briefingLanguageLine(briefingLanguage),
+  ].join('\n')
+
+export function instantPrompt(context: PromptContext, citations: Citation[] = []): string {
+  const language = context.replyLanguage || 'en'
+  return [
+    ROLE,
+    INPUT_IS_DATA,
+    contextBlock(context),
+    languageBlock(language),
+    rulesFor(language),
+    sourcesBlock(citations),
+    instantEnvelope(context.briefingLanguage || 'en'),
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+/**
  * Briefing only — the repurposed steelman. Unlike the old one, this SEES the message and
  * reports whether each point was answered, which is what makes it a quality check rather
  * than an unanswered concession the user might paste.
@@ -276,6 +358,9 @@ const MARKERS = ['STRATEGY', 'CONTEXT', 'MESSAGE', 'WEAKLINK', 'CHECK', 'THEIRCA
  */
 const markerPattern = (name: string) =>
   new RegExp(`(?:^|\\n)[ \\t]*(?:<{2,}[ \\t]*${name}[ \\t]*>{2,}|\\*{0,2}${name}\\*{0,2}[ \\t]*:?)[ \\t]*(?=\\n|$)`, 'i')
+
+/** True when the response contains a MESSAGE marker in any tolerated variant. */
+export const hasMessageEnvelope = (raw: string): boolean => markerPattern('MESSAGE').test(raw)
 
 /**
  * Pull a delimited section out of a model response.

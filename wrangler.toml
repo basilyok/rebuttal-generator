@@ -24,3 +24,9 @@ id = "3ba59116bf3a4f1190b27e16616d9f8e"
 [[kv_namespaces]]
 binding = "ACCOUNTS"
 id = "cf639d7e71374271a4ee79c7af834d3f"
+
+# The rate-limiter Worker (limiter/). Service-bound so only our own Functions
+# can reach it — it has no public URL. Deploy it first: cd limiter && npx wrangler deploy
+[[services]]
+binding = "LIMITER"
+service = "m36x-limiter"

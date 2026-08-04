@@ -4,69 +4,84 @@
     {
       "id": 49,
       "subject": "Plan Task 1: Limiter Worker (SQLite Durable Object)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Separate Worker `m36x-limiter` with an atomic-counting SQLite DO: /consume (daily caps + all-time first), /metric, /metrics. No public URL.\n\n**Files:** Create limiter/wrangler.toml, limiter/src/index.js, tests/limiter.test.mjs; modify package.json (test script + tsx).\n\n**Verify:** `cd limiter && npx wrangler dev --port 8787` then `node --test tests/limiter.test.mjs` -> 5 pass.\n\nFull steps: docs/superpowers/plans/2026-08-02-freemium-growth.md, Task 1.\n\n```json:metadata\n{\"files\": [\"limiter/wrangler.toml\", \"limiter/src/index.js\", \"tests/limiter.test.mjs\", \"package.json\"], \"verifyCommand\": \"node --test tests/limiter.test.mjs\", \"acceptanceCriteria\": [\"cap+1th consume refused\", \"first true exactly once ever\", \"UTC daily reset + pruning\", \"metrics accumulate\", \"workers_dev false\"]}\n```"
     },
     {
       "id": 50,
       "subject": "Plan Task 2: Prompt changes (demoted trust + instant envelope)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** src/prompts.ts gains audienceTrusted demotion, instantPrompt (message + WEAKLINK in one envelope), hasMessageEnvelope.\n\n**Files:** Modify src/prompts.ts; create tests/prompts.test.ts.\n\n**Verify:** `node --import tsx --test tests/prompts.test.ts` -> 6 pass; `npm run build` green.\n\nFull steps: plan Task 2.\n\n```json:metadata\n{\"files\": [\"src/prompts.ts\", \"tests/prompts.test.ts\"], \"verifyCommand\": \"node --import tsx --test tests/prompts.test.ts\", \"acceptanceCriteria\": [\"default contextBlock unchanged\", \"audienceTrusted:false demotes hint\", \"instantPrompt has 4 sections, no CHECK\", \"hasMessageEnvelope tolerant variants\"]}\n```"
     },
     {
       "id": 51,
       "subject": "Plan Task 3: /api/generate proxy with availability ladder",
-      "status": "pending",
-      "blockedBy": [49, 50],
+      "status": "completed",
+      "blockedBy": [
+        49,
+        50
+      ],
       "description": "**Goal:** Pages Function: structured fields only, same-origin gate, Turnstile verify, DO quota (device cookie / session), paid-first -> free -> paid ladder, envelope enforced (one retry then 502).\n\n**Files:** Create functions/_lib/instant.js, functions/api/generate.ts, tests/generate.test.mjs; modify wrangler.toml ([[services]] LIMITER); .dev.vars (INSTANT_TEST_ECHO seam, gitignored).\n\n**Verify:** limiter dev (8787) + `npx wrangler pages dev dist` (8788), then `node --test tests/generate.test.mjs` -> 5 pass, zero OpenRouter spend.\n\nFull steps: plan Task 3.\n\n```json:metadata\n{\"files\": [\"functions/_lib/instant.js\", \"functions/api/generate.ts\", \"wrangler.toml\", \"tests/generate.test.mjs\"], \"verifyCommand\": \"node --test tests/generate.test.mjs\", \"acceptanceCriteria\": [\"403 no origin / 413 oversize / 400 malformed\", \"4th anon call 429 before upstream\", \"first-ever reply paid model\", \"no envelope after retry -> 502 never raw\", \"501 without OPENROUTER_PROXY_KEY\"]}\n```"
     },
     {
       "id": 52,
       "subject": "Plan Task 4: Client Instant mode UI",
-      "status": "pending",
-      "blockedBy": [51],
+      "status": "completed",
+      "blockedBy": [
+        51
+      ],
       "description": "**Goal:** No-key Generate flows through /api/generate; quota counter after first reply; honest exhaustion panel (sign-in + BYOK); Turnstile invisible; BYOK untouched.\n\n**Files:** Create src/instant.ts, src/turnstile.ts; modify src/App.tsx (guard :605-612 -> instant branch), src/index.css, all 12 src/i18n/locales/*.ts (10 keys).\n\n**Verify:** npm run build; browser at pages dev: keyless generate renders reply+weak-link, counter, exhaustion panel after cap.\n\nFull steps: plan Task 4.\n\n```json:metadata\n{\"files\": [\"src/instant.ts\", \"src/turnstile.ts\", \"src/App.tsx\", \"src/index.css\", \"src/i18n/locales/en.ts\"], \"verifyCommand\": \"npm run build\", \"acceptanceCriteria\": [\"keyless generate works\", \"no counter before first generation\", \"429 renders product-state panel not error\", \"BYOK path unchanged\", \"strings in 12 locales\"]}\n```"
     },
     {
       "id": 53,
       "subject": "Plan Task 5: Ship Phase A (ops, privacy wording, deploy)",
-      "status": "pending",
-      "blockedBy": [52],
+      "status": "completed",
+      "blockedBy": [
+        52
+      ],
       "description": "**Goal:** Limiter deployed; operator sets OPENROUTER_PROXY_KEY (provisioned, $2/day limit) + Turnstile keys (USER runs all secret commands); README privacy claim rewritten same day; production verified.\n\n**Files:** README.md, PROJECT_SUMMARY.md, DEPLOYMENT_GUIDE.md, src/turnstile.ts (sitekey).\n\n**Verify:** prod curl /api/generate no-origin -> 403; keyless reply in private window; BYOK makes zero /api/generate calls.\n\nFull steps: plan Task 5. NOTE: agent must never type secrets - hand commands to the user.\n\n```json:metadata\n{\"files\": [\"README.md\", \"PROJECT_SUMMARY.md\", \"DEPLOYMENT_GUIDE.md\", \"src/turnstile.ts\"], \"verifyCommand\": \"curl -s -o /dev/null -w %{http_code} -X POST https://rebuttal.m36x.com/api/generate -H Content-Type:application/json -d {}\", \"acceptanceCriteria\": [\"secrets set by user interactively\", \"README privacy wording honest\", \"prod instant reply works\", \"docs cover limiter+secrets\"]}\n```"
     },
     {
       "id": 54,
       "subject": "Plan Task 6: History data layer (ciphertext sync + local store)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** /api/history (vault.js clone, 200k cap, historyKey), sealJson/openJson exports in src/vault.ts, src/history.ts (IndexedDB local-first, mergeEntries pure, pushHistory/pullAndMergeHistory).\n\n**Files:** functions/_lib/session.js, functions/api/history.js, src/vault.ts, src/history.ts, tests/history.test.ts.\n\n**Verify:** `node --import tsx --test tests/history.test.ts` -> pass; curl /api/history unauthenticated -> 401/501.\n\nFull steps: plan Task 6.\n\n```json:metadata\n{\"files\": [\"functions/_lib/session.js\", \"functions/api/history.js\", \"src/vault.ts\", \"src/history.ts\", \"tests/history.test.ts\"], \"verifyCommand\": \"node --import tsx --test tests/history.test.ts\", \"acceptanceCriteria\": [\"endpoint mirrors vault.js guards\", \"fresh IV every seal, tamper throws\", \"mergeEntries union/newest/cap100\", \"no plaintext ever sent\"]}\n```"
     },
     {
       "id": 55,
       "subject": "Plan Task 7: History UI (panel, hooks, sign-out wipe)",
-      "status": "pending",
-      "blockedBy": [54],
+      "status": "completed",
+      "blockedBy": [
+        54
+      ],
       "description": "**Goal:** HistoryPanel component; save on every generation; pull+merge+push on vault unlock; sign-out clears local entries; restore repopulates transcript+reply; deploy Phase B.\n\n**Files:** src/HistoryPanel.tsx, src/App.tsx, src/index.css, 12 locale files (8 keys).\n\n**Verify:** browser: generate->entry, restore, delete, sign-out empties IndexedDB rebuttal-history.\n\nFull steps: plan Task 7.\n\n```json:metadata\n{\"files\": [\"src/HistoryPanel.tsx\", \"src/App.tsx\", \"src/index.css\", \"src/i18n/locales/en.ts\"], \"verifyCommand\": \"npm run build\", \"acceptanceCriteria\": [\"every generation saved\", \"restore works\", \"sign-out wipes device copy\", \"signed-out local history works\", \"12 locales\"]}\n```"
     },
     {
       "id": 56,
       "subject": "Plan Task 8: /s/id share pages with OG meta",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** functions/s/[id].js serves the app shell with per-share OG tags via HTMLRewriter - byte-identical for every UA; 404.html for unknown ids; share.ts moves to /s/<id> URLs with ?s= legacy support; language field into share record for og:locale.\n\n**Files:** functions/s/[id].js, functions/api/share.js, src/share.ts, src/App.tsx, tests/share-page.test.mjs.\n\n**Verify:** `node --test tests/share-page.test.mjs` -> 4 pass (includes UA-invariance byte equality).\n\nFull steps: plan Task 8.\n\n```json:metadata\n{\"files\": [\"functions/s/[id].js\", \"functions/api/share.js\", \"src/share.ts\", \"src/App.tsx\", \"tests/share-page.test.mjs\"], \"verifyCommand\": \"node --test tests/share-page.test.mjs\", \"acceptanceCriteria\": [\"OG tags escaped from published fields only\", \"byte-identical across UAs\", \"404 with noindex for unknown id\", \"legacy ?s= still renders\"]}\n```"
     },
     {
       "id": 57,
       "subject": "Plan Task 9: Aggregate metrics (bridge, CTA beacon, readback)",
-      "status": "pending",
-      "blockedBy": [49, 56],
+      "status": "completed",
+      "blockedBy": [
+        49,
+        56
+      ],
       "description": "**Goal:** /api/metric (allowlisted names, same-origin gate, 204), CTA sendBeacon in dismissShared, /api/metrics operator-only readback (OPERATOR_EMAIL, 404 otherwise).\n\n**Files:** functions/api/metric.js, functions/api/metrics.js, src/App.tsx.\n\n**Verify:** curl metric allowlisted -> 204, bogus -> 400; /api/metrics signed out -> 404/501; limiter /metrics shows share_cta+share_view.\n\nFull steps: plan Task 9.\n\n```json:metadata\n{\"files\": [\"functions/api/metric.js\", \"functions/api/metrics.js\", \"src/App.tsx\"], \"verifyCommand\": \"node --test tests/limiter.test.mjs\", \"acceptanceCriteria\": [\"name-only metrics\", \"allowlist enforced\", \"operator gate 404s non-operators\", \"beacon never breaks navigation\"]}\n```"
     },
     {
       "id": 58,
       "subject": "Plan Task 10: Ship Phase C + invariant sweep",
       "status": "pending",
-      "blockedBy": [56, 57],
+      "blockedBy": [
+        56,
+        57
+      ],
       "description": "**Goal:** Docs (share URLs, history, metrics stance, index.html stale description), deploy, production verification: OG unfurl live + UA-invariant in prod, old ?s= works, no watermark in messages, BYOK makes zero generation calls to our API.\n\n**Files:** README.md, PROJECT_SUMMARY.md, DEPLOYMENT_GUIDE.md, index.html.\n\n**Verify:** prod curl OG tags; diff chrome-UA vs Twitterbot-UA responses -> identical; npm test all green.\n\nFull steps: plan Task 10.\n\n```json:metadata\n{\"files\": [\"README.md\", \"PROJECT_SUMMARY.md\", \"DEPLOYMENT_GUIDE.md\", \"index.html\"], \"verifyCommand\": \"npm test\", \"acceptanceCriteria\": [\"prod unfurl works\", \"UA-invariance in prod\", \"all invariants re-verified\", \"docs complete\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-08-02T13:30:00Z"
+  "lastUpdated": "2026-08-03T18:30:00Z"
 }

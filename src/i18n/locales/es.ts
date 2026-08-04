@@ -204,6 +204,30 @@ const es = {
   'error.micDenied': 'Se denegó el acceso al micrófono. Permite el acceso al micrófono en este sitio e inténtalo de nuevo.',
   'error.micMissing': 'No se encontró ningún micrófono. Comprueba que haya uno conectado e inténtalo de nuevo.',
   'error.speechNetwork': 'El servicio de voz tuvo un error de red. Revisa tu conexión e inténtalo de nuevo.',
+
+  // --- instant mode ------------------------------------------------------------
+  'instant.working': 'Escribiendo tu respuesta (sin necesidad de clave)…',
+  'instant.left': 'Te quedan {n} respuestas gratis hoy',
+  'instant.leftOne': 'Te queda 1 respuesta gratis hoy',
+  'instant.done.title': 'Se acabaron las respuestas gratis por hoy',
+  'instant.done.body':
+    'Vuelven a las {time}. Inicia sesión para tener más respuestas gratis cada día, o añade tu propia clave API para respuestas ilimitadas que nunca pasan por nuestros servidores.',
+  'instant.done.signIn': 'Iniciar sesión con Google',
+  'instant.done.byok': 'Usar mi propia clave API en su lugar',
+  'instant.turnstile': 'La verificación falló: recarga la página e inténtalo de nuevo.',
+  'instant.error': 'El modo instantáneo no está disponible ahora mismo: inténtalo de nuevo en un momento, o usa tu propia clave API.',
+  'instant.badge': 'Modo instantáneo',
+
+  // --- history ---------------------------------------------------------------
+  'history.show': 'Historial',
+  'history.hide': 'Ocultar el historial',
+  'history.empty': 'Todavía no hay respuestas guardadas — cada respuesta que generas se guarda aquí, en este dispositivo.',
+  'history.localOnly':
+    'Guardado solo en este dispositivo. Inicia sesión y desbloquea tu bóveda para sincronizarlo, cifrado, en todos tus dispositivos.',
+  'history.synced': 'Cifrado y sincronizado con tu cuenta. Solo tus dispositivos pueden leerlo.',
+  'history.delete': 'Borrar esta entrada',
+  'history.clear': 'Borrar todo el historial',
+  'history.clearConfirm': '¿Borrar todas las respuestas guardadas? La copia sincronizada también se borra. Esto no se puede deshacer.',
 }
 
 export default es

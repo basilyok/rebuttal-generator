@@ -79,17 +79,17 @@
 - Modify: `package.json` (add `test` script + `tsx` devDependency — used from Task 2 onward)
 
 **Acceptance Criteria:**
-- [ ] `POST /consume {key, cap}` increments atomically and returns `{allowed, remaining, count, first, resetAt}`; the (cap+1)th call on a UTC day returns `allowed: false`
-- [ ] `first` is true only on the very first consume EVER for a key (across days), false after
-- [ ] Counters reset at UTC midnight (next-day consume starts at 1); rows older than 2 days are pruned
-- [ ] `POST /metric {name}` and `GET /metrics` accumulate and report daily integers
-- [ ] `workers_dev = false` (no public URL) and unknown routes return 404
+- [x] `POST /consume {key, cap}` increments atomically and returns `{allowed, remaining, count, first, resetAt}`; the (cap+1)th call on a UTC day returns `allowed: false`
+- [x] `first` is true only on the very first consume EVER for a key (across days), false after
+- [x] Counters reset at UTC midnight (next-day consume starts at 1); rows older than 2 days are pruned
+- [x] `POST /metric {name}` and `GET /metrics` accumulate and report daily integers
+- [x] `workers_dev = false` (no public URL) and unknown routes return 404
 
 **Verify:** terminal 1: `cd limiter && npx wrangler dev --port 8787` — then `node --test tests/limiter.test.mjs` → all pass.
 
 **Steps:**
 
-- [ ] **Step 1: Write the Worker config**
+- [x] **Step 1: Write the Worker config**
 
 `limiter/wrangler.toml`:
 
@@ -112,7 +112,7 @@ tag = "v1"
 new_sqlite_classes = ["Limiter"]
 ```
 
-- [ ] **Step 2: Write the DO + Worker**
+- [x] **Step 2: Write the DO + Worker**
 
 `limiter/src/index.js`:
 
@@ -241,7 +241,7 @@ export default {
 }
 ```
 
-- [ ] **Step 3: Add the test runner to the repo**
+- [x] **Step 3: Add the test runner to the repo**
 
 In `package.json`, add to `scripts`:
 
@@ -257,7 +257,7 @@ and to `devDependencies`:
 
 Run: `npm install` → lockfile updates, no errors. (`tsx` lets `node --test` execute the `.test.ts` files that arrive in Task 2; this task's own test is plain `.mjs` and doesn't need it, but the script and dependency land once, here.)
 
-- [ ] **Step 4: Write the failing test**
+- [x] **Step 4: Write the failing test**
 
 `tests/limiter.test.mjs`:
 
@@ -328,18 +328,18 @@ test('bad input is rejected', async () => {
 })
 ```
 
-- [ ] **Step 5: Run test to verify it fails (no server)**
+- [x] **Step 5: Run test to verify it fails (no server)**
 
 Run: `node --test tests/limiter.test.mjs`
 Expected: FAIL — `fetch failed` / ECONNREFUSED (nothing listening yet proves the test really talks to the Worker).
 
-- [ ] **Step 6: Start the Worker and verify tests pass**
+- [x] **Step 6: Start the Worker and verify tests pass**
 
 Terminal 1: `cd limiter && npx wrangler dev --port 8787`
 Terminal 2: `node --test tests/limiter.test.mjs`
 Expected: `# pass 5`, `# fail 0`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add limiter/ tests/limiter.test.mjs package.json package-lock.json
@@ -357,17 +357,17 @@ git commit -m "Add the m36x-limiter Worker: atomic quota counting in a SQLite Du
 **Context you need:** `src/prompts.ts` is environment-pure (only a type-only import from `./providers` and pure-data `./i18n/persuasion`) — it will be imported by the Pages Function in Task 3 unchanged. The envelope markers live in `MARKERS` (line 270: `['STRATEGY','CONTEXT','MESSAGE','WEAKLINK','CHECK','THEIRCASE','ANSWERED']`) — `WEAKLINK` is already a known marker, so `section(raw, 'WEAKLINK')` works on the merged response with no parser change. The line being demoted is prompts.ts:150: `` `WHO WILL READ THIS (from the sender, authoritative — trust it over your own inference): ${audience.trim()}` ``.
 
 **Acceptance Criteria:**
-- [ ] `contextBlock` output is unchanged for every existing caller (default stays trusted)
-- [ ] With `audienceTrusted: false`, the audience line reads as an unverified hint and the "trust it over your own inference" wording is absent
-- [ ] `instantPrompt(context, citations)` contains the three message sections AND `<<<WEAKLINK>>>`, includes `sourcesBlock` when citations exist, and writes the weak-link in `briefingLanguage`
-- [ ] `hasMessageEnvelope` is true for `<<<MESSAGE>>>`, `**MESSAGE**`, and `MESSAGE:` variants (same tolerance as `markerPattern`), false for prose without any marker
-- [ ] `npm run build` still passes (`tsc`)
+- [x] `contextBlock` output is unchanged for every existing caller (default stays trusted)
+- [x] With `audienceTrusted: false`, the audience line reads as an unverified hint and the "trust it over your own inference" wording is absent
+- [x] `instantPrompt(context, citations)` contains the three message sections AND `<<<WEAKLINK>>>`, includes `sourcesBlock` when citations exist, and writes the weak-link in `briefingLanguage`
+- [x] `hasMessageEnvelope` is true for `<<<MESSAGE>>>`, `**MESSAGE**`, and `MESSAGE:` variants (same tolerance as `markerPattern`), false for prose without any marker
+- [x] `npm run build` still passes (`tsc`)
 
 **Verify:** `node --import tsx --test tests/prompts.test.ts` → all pass; `npm run build` → exits 0.
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/prompts.test.ts`:
 
@@ -432,12 +432,12 @@ test('a merged response parses with the existing parsers', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test tests/prompts.test.ts`
 Expected: FAIL — `instantPrompt`, `hasMessageEnvelope` not exported; `audienceTrusted` not a known property.
 
-- [ ] **Step 3: Implement in `src/prompts.ts`**
+- [x] **Step 3: Implement in `src/prompts.ts`**
 
 (a) Add to `PromptContext` (after the `briefingLanguage` member, prompts.ts:122-127):
 
@@ -510,12 +510,12 @@ export function instantPrompt(context: PromptContext, citations: Citation[] = []
 export const hasMessageEnvelope = (raw: string): boolean => markerPattern('MESSAGE').test(raw)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `node --import tsx --test tests/prompts.test.ts`
 Expected: PASS (6/6). Also run `npm run build` → exits 0 (no existing caller breaks, since `audienceTrusted` is optional).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/prompts.ts tests/prompts.test.ts
@@ -537,19 +537,19 @@ git commit -m "Add the instant one-call envelope and demote audience trust on un
 **Context you need:** `functions/_lib/session.js` exports `getSession(request, env)` → `{sessionId, userId, user} | null` (cookie `rb_session`, KV `ACCOUNTS`), `jsonResponse(data, status)`, and the key builders. The same-origin gate pattern already exists in `functions/api/share.js:32-45`. The user record has NO entitlements field yet — this task reads `session.user.entitlements?.instantCap` defensively so the paid tier can flip on later by writing that field.
 
 **Acceptance Criteria:**
-- [ ] Requests without a browser same-origin signal → 403; oversize argument → 413; malformed body → 400
-- [ ] Anonymous quota keys off an `rb_device` HttpOnly cookie (set on first response); signed-in quota keys off the session's userId with the higher cap
-- [ ] 4th anonymous call in a day → 429 with `{resetAt, signedIn: false}` and NO upstream call
-- [ ] A key's first-ever reply uses the paid model; later replies try the free model and fall back to paid on 429/5xx/empty
-- [ ] A response with no MESSAGE envelope after one retry → 502, and the raw text is never returned
-- [ ] With `TURNSTILE_SECRET` set, a missing/invalid token → 403 `{code: 'turnstile'}`; with it unset (local dev), the check is skipped
-- [ ] Missing `OPENROUTER_PROXY_KEY` → 501 (Instant mode unconfigured — BYOK unaffected)
+- [x] Requests without a browser same-origin signal → 403; oversize argument → 413; malformed body → 400
+- [x] Anonymous quota keys off an `rb_device` HttpOnly cookie (set on first response); signed-in quota keys off the session's userId with the higher cap
+- [x] 4th anonymous call in a day → 429 with `{resetAt, signedIn: false}` and NO upstream call
+- [x] A key's first-ever reply uses the paid model; later replies try the free model and fall back to paid on 429/5xx/empty
+- [x] A response with no MESSAGE envelope after one retry → 502, and the raw text is never returned
+- [x] With `TURNSTILE_SECRET` set, a missing/invalid token → 403 `{code: 'turnstile'}`; with it unset (local dev), the check is skipped
+- [x] Missing `OPENROUTER_PROXY_KEY` → 501 (Instant mode unconfigured — BYOK unaffected)
 
 **Verify:** terminal 1: `cd limiter && npx wrangler dev --port 8787`; terminal 2: `npx wrangler pages dev dist` (wrangler's local dev registry connects the LIMITER service binding between the two sessions); terminal 3: `node --test tests/generate.test.mjs` → all pass. Tests use the `INSTANT_TEST_ECHO` seam (below) so no real OpenRouter spend occurs.
 
 **Steps:**
 
-- [ ] **Step 1: The config module — caps as config, not constants**
+- [x] **Step 1: The config module — caps as config, not constants**
 
 `functions/_lib/instant.js`:
 
@@ -572,7 +572,7 @@ export const INSTANT = {
 }
 ```
 
-- [ ] **Step 2: Add the service binding to the root `wrangler.toml`**
+- [x] **Step 2: Add the service binding to the root `wrangler.toml`**
 
 Append:
 
@@ -584,7 +584,7 @@ binding = "LIMITER"
 service = "m36x-limiter"
 ```
 
-- [ ] **Step 3: Write the failing tests**
+- [x] **Step 3: Write the failing tests**
 
 `tests/generate.test.mjs`:
 
@@ -668,12 +668,12 @@ test('citations are validated field-by-field', async () => {
 })
 ```
 
-- [ ] **Step 4: Run tests to verify they fail**
+- [x] **Step 4: Run tests to verify they fail**
 
 Run: `node --test tests/generate.test.mjs` (with both dev servers up)
 Expected: FAIL — `/api/generate` 404s (function does not exist yet).
 
-- [ ] **Step 5: Implement `functions/api/generate.ts`**
+- [x] **Step 5: Implement `functions/api/generate.ts`**
 
 ```ts
 // Instant mode: the one endpoint where OUR key pays for the reply. Everything
@@ -932,7 +932,7 @@ export async function onRequestPost(context: { request: Request; env: Env; waitU
 
 Note: `jsonResponse` in `functions/_lib/session.js:35-40` must accept a third `headers` argument — it already does (`jsonResponse(data, status = 200, headers = {})`). If its signature differs, extend it there rather than duplicating the helper.
 
-- [ ] **Step 6: Create `.dev.vars` for local testing (gitignored)**
+- [x] **Step 6: Create `.dev.vars` for local testing (gitignored)**
 
 ```
 OPENROUTER_PROXY_KEY=dev-placeholder
@@ -941,13 +941,13 @@ INSTANT_TEST_ECHO=1
 
 Confirm `.dev.vars` is in `.gitignore`; add it if not. **Never commit this file.**
 
-- [ ] **Step 7: Build, run both dev servers, verify tests pass**
+- [x] **Step 7: Build, run both dev servers, verify tests pass**
 
 Run: `npm run build` (generate.ts imports src/prompts — tsc must stay green), then with limiter dev (8787) and `npx wrangler pages dev dist` (8788) up:
 `node --test tests/generate.test.mjs`
 Expected: `# pass 5`, `# fail 0`. Also confirm in the pages-dev log that no request ever reached openrouter.ai (the echo seam short-circuits).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add functions/_lib/instant.js functions/api/generate.ts wrangler.toml tests/generate.test.mjs .gitignore
@@ -968,18 +968,18 @@ git commit -m "Add the Instant-mode proxy: structured fields, quota, Turnstile, 
 **Context you need:** `generateReply` (App.tsx:595-733) currently returns early at :605-612 when `provider.requiresKey && !apiKey`. The Tavily search step (:655-670) and `parseMessage`/`section` parsing (:701-707) are reusable as-is. `reply` state is set once via `setReply({...})` (:709-718) — the Instant path populates the same shape, with `weakLink` from `section(raw, 'WEAKLINK')` and `toVerify: []`. Sign-in state: `auth.user` (App.tsx:216). The i18n pattern: add each key to `src/i18n/locales/en.ts` plus the 11 translations; missing keys fall back to English automatically (`i18n/index.ts:88,103`).
 
 **Acceptance Criteria:**
-- [ ] With no key saved, Generate produces a real reply via `/api/generate`; strategy, message, chips, and the weak-link note all render
-- [ ] No counter is visible before the first generation; after it, "N free replies left today" shows
-- [ ] A 429 renders the `.instant-done` panel: sign-in button when signed out, BYOK settings link always, reset time in the user's locale — and it is not styled as an error
-- [ ] Turnstile stays invisible for a normal user (`appearance: 'interactive-only'`); with `TURNSTILE_SITE_KEY` empty the widget is skipped entirely
-- [ ] BYOK path is byte-for-byte unaffected (a saved key short-circuits all of this)
-- [ ] All new strings resolve in all 12 locales (`npm run build` + spot-check `?lang` switching)
+- [x] With no key saved, Generate produces a real reply via `/api/generate`; strategy, message, chips, and the weak-link note all render
+- [x] No counter is visible before the first generation; after it, "N free replies left today" shows
+- [x] A 429 renders the `.instant-done` panel: sign-in button when signed out, BYOK settings link always, reset time in the user's locale — and it is not styled as an error
+- [x] Turnstile stays invisible for a normal user (`appearance: 'interactive-only'`); with `TURNSTILE_SITE_KEY` empty the widget is skipped entirely
+- [x] BYOK path is byte-for-byte unaffected (a saved key short-circuits all of this)
+- [x] All new strings resolve in all 12 locales (`npm run build` + spot-check `?lang` switching)
 
 **Verify:** `npm run build`; then with the three local servers from Task 3 up, open `http://127.0.0.1:8788`, remove any saved key, generate → reply renders, counter shows "2 free replies left today"; two more replies → exhausted panel with reset time.
 
 **Steps:**
 
-- [ ] **Step 1: The fetch wrapper with typed errors**
+- [x] **Step 1: The fetch wrapper with typed errors**
 
 `src/instant.ts`:
 
@@ -1036,7 +1036,7 @@ export async function generateInstant(args: {
 }
 ```
 
-- [ ] **Step 2: The Turnstile loader**
+- [x] **Step 2: The Turnstile loader**
 
 `src/turnstile.ts`:
 
@@ -1108,7 +1108,7 @@ export async function getTurnstileToken(deviceHint: string): Promise<string> {
 }
 ```
 
-- [ ] **Step 3: Wire the Instant branch into `generateReply`**
+- [x] **Step 3: Wire the Instant branch into `generateReply`**
 
 In `src/App.tsx`, add state near the other generation state (after line ~200):
 
@@ -1175,7 +1175,7 @@ In the surrounding `catch` (:723-728), add before the generic branch:
 
 Also note: the briefing expander is powered by a BYOK model call (`toggleBriefing`, :739-766). On an Instant reply there is no key — guard `toggleBriefing`'s entry with `if (provider.requiresKey && !apiKey) return` so the expander header simply does not render for instant replies: wrap the briefing JSX block (:1562-1614) in `{!instantForReply && (...)}` where `instantForReply` is a boolean stored alongside the reply (add `instant?: boolean` to the reply state object, set `true` in the branch above).
 
-- [ ] **Step 4: The counter and the exhausted panel**
+- [x] **Step 4: The counter and the exhausted panel**
 
 After the submit-button block (below :1478, above the error div at :1480):
 
@@ -1247,7 +1247,7 @@ After the submit-button block (below :1478, above the error div at :1480):
 }
 ```
 
-- [ ] **Step 5: The strings — all 12 locales**
+- [x] **Step 5: The strings — all 12 locales**
 
 Add to `src/i18n/locales/en.ts` (new `// --- instant ---` section; then translate the same 10 keys in es, fr, de, pt-BR, it, ja, ko, zh-Hans, ar, hi, el — keep `{n}`/`{time}` placeholders verbatim):
 
@@ -1267,11 +1267,11 @@ Add to `src/i18n/locales/en.ts` (new `// --- instant ---` section; then translat
 
 (Use `instant.leftOne` when `remaining === 1`: `t(instantQuota.remaining === 1 ? 'instant.leftOne' : 'instant.left', { n: instantQuota.remaining })`.)
 
-- [ ] **Step 6: Verify in the browser**
+- [x] **Step 6: Verify in the browser**
 
 `npm run build`, restart `npx wrangler pages dev dist` (still with limiter dev + `.dev.vars` echo seam). In the browser at `127.0.0.1:8788`: clear localStorage keys `api_key_*`, generate → echo reply renders with strategy/message/weak-link; counter reads "2 free replies left today"; two more generations → `.instant-done` panel with a reset time and both escape hatches; add any API key → BYOK path unchanged.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/instant.ts src/turnstile.ts src/App.tsx src/index.css src/i18n/locales/
@@ -1290,16 +1290,16 @@ git commit -m "Add client Instant mode: keyless replies, quota counter, honest e
 - Modify: `src/turnstile.ts` (paste the real sitekey)
 
 **Acceptance Criteria:**
-- [ ] All operator steps below are done by the USER (keys and secrets are never typed by the agent — hand over the exact commands and wait)
-- [ ] README no longer claims text never reaches this app's servers; it says: only in Instant mode, only the argument text, never API keys
-- [ ] Production: keyless generate returns a reply; 4th anonymous reply → the exhaustion panel; `curl` without Origin → 403; BYOK still browser-direct (verify in devtools: no `/api/generate` call when a key is saved)
-- [ ] Docs cover: limiter deploy, both secrets, Turnstile site creation, the provisioned key's daily limit
+- [x] All operator steps below are done by the USER (keys and secrets are never typed by the agent — hand over the exact commands and wait)
+- [x] README no longer claims text never reaches this app's servers; it says: only in Instant mode, only the argument text, never API keys
+- [x] Production: keyless generate returns a reply; 4th anonymous reply → the exhaustion panel; `curl` without Origin → 403; BYOK still browser-direct (verify in devtools: no `/api/generate` call when a key is saved)
+- [x] Docs cover: limiter deploy, both secrets, Turnstile site creation, the provisioned key's daily limit
 
 **Verify:** production checks in Step 4.
 
 **Steps:**
 
-- [ ] **Step 1: Operator setup (hand these to the user — do not run the secret-bearing ones yourself)**
+- [x] **Step 1: Operator setup (hand these to the user — do not run the secret-bearing ones yourself)**
 
 ```bash
 cd limiter && npx wrangler deploy
@@ -1310,7 +1310,7 @@ Then the user, interactively:
 2. **Turnstile:** Cloudflare dashboard → Turnstile → Add site (domain `rebuttal.m36x.com`, widget type **Managed**). Copy the sitekey into `TURNSTILE_SITE_KEY` in `src/turnstile.ts` (public, committable), then `npx wrangler pages secret put TURNSTILE_SECRET --project-name=m36x-rebuttal` with the secret key.
 3. Secrets bind at deploy time — the Step 3 deploy below must happen AFTER the secrets are set (this bit us before: d97801d).
 
-- [ ] **Step 2: Rewrite the privacy claims**
+- [x] **Step 2: Rewrite the privacy claims**
 
 In `README.md`, find the claim that text is never sent to this app's own servers (near line 27, and the privacy section near line 434) and replace with wording equivalent to:
 
@@ -1325,21 +1325,21 @@ your own key turns Instant mode off entirely.
 
 Update `DEPLOYMENT_GUIDE.md` with: `cd limiter && npx wrangler deploy` (first, so the service binding resolves), both `secret put` commands, the Turnstile site step, and the note that ACCOUNTS KV creation is documented in wrangler.toml comments. Update `PROJECT_SUMMARY.md`'s architecture list with the limiter Worker and `/api/generate`.
 
-- [ ] **Step 3: Deploy and verify in production**
+- [x] **Step 3: Deploy and verify in production**
 
 ```bash
 npm run build
 npx wrangler pages deploy dist --project-name=m36x-rebuttal --commit-dirty=true
 ```
 
-- [ ] **Step 4: Production verification**
+- [x] **Step 4: Production verification**
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" -X POST https://rebuttal.m36x.com/api/generate -H "Content-Type: application/json" -d "{\"argument\":\"test\"}"
 ```
 Expected: `403` (no browser origin). Then in a private browser window on rebuttal.m36x.com with no saved keys: one real generate (this spends ~$0.002 — the paid first reply) → reply renders with the weak-link note; the counter appears; confirm in DevTools → Network that with a saved key no request to `/api/generate` is made. Confirm the Turnstile widget did not visibly appear.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```bash
 git add README.md PROJECT_SUMMARY.md DEPLOYMENT_GUIDE.md src/turnstile.ts
@@ -1365,17 +1365,17 @@ git push
 **Context you need:** `functions/api/vault.js` is the template — clone its guard pattern (`requireAccounts` → `getSession` → 401), its base64 `isBlob` validation, and its `{salt, iv, ciphertext, version, updatedAt}` record, changing only the KV key prefix and the size cap. In `src/vault.ts`, `sealWith(key, bundle, salt)` (:191-206) and `decryptWith(key, blob)` (:141-160) are module-private and typed to `KeyBundle` — the new exports generalize them to any JSON value. The device key lives in IndexedDB `rebuttal-vault`/`keys` under id `'vault-key'` via `cachedKey()` (:100-101); `forgetDeviceKey()` (:107) already runs on sign-out.
 
 **Acceptance Criteria:**
-- [ ] `GET/PUT/DELETE /api/history` behave exactly like `/api/vault` (401 signed out, 501 unconfigured, field-validated PUT) with `MAX_CIPHERTEXT_CHARS = 200_000`
-- [ ] `sealJson`/`openJson` round-trip an arbitrary object; a fresh 12-byte IV every seal; tampered ciphertext throws, never returns garbage
-- [ ] `mergeEntries(local, remote)` unions by id, newest-first, caps at 100 — and is a pure function
-- [ ] Local store works signed out; nothing in `src/history.ts` ever sends plaintext to any endpoint
-- [ ] `npm run build` passes
+- [x] `GET/PUT/DELETE /api/history` behave exactly like `/api/vault` (401 signed out, 501 unconfigured, field-validated PUT) with `MAX_CIPHERTEXT_CHARS = 200_000`
+- [x] `sealJson`/`openJson` round-trip an arbitrary object; a fresh 12-byte IV every seal; tampered ciphertext throws, never returns garbage
+- [x] `mergeEntries(local, remote)` unions by id, newest-first, caps at 100 — and is a pure function
+- [x] Local store works signed out; nothing in `src/history.ts` ever sends plaintext to any endpoint
+- [x] `npm run build` passes
 
 **Verify:** `node --import tsx --test tests/history.test.ts` → pass (crypto + merge, in Node's WebCrypto); then with `npx wrangler pages dev dist`: `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8788/api/history` → `401` (or `501` if ACCOUNTS is unbound locally — both prove the guard runs).
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/history.test.ts`:
 
@@ -1435,12 +1435,12 @@ test('mergeEntries unions by id, newest first, capped at 100', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test tests/history.test.ts`
 Expected: FAIL — `sealJson`, `openJson`, `mergeEntries` not exported.
 
-- [ ] **Step 3: Server side**
+- [x] **Step 3: Server side**
 
 In `functions/_lib/session.js`, next to `vaultKey` (:19):
 
@@ -1515,7 +1515,7 @@ export async function onRequestDelete(context) {
 
 (Check vault.js:20-21 for the exact `isBlob` it uses and keep the two in lockstep; if `requireAccounts` returns a Response vs null contract differs from shown, mirror vault.js exactly.)
 
-- [ ] **Step 4: Generalize the crypto in `src/vault.ts`**
+- [x] **Step 4: Generalize the crypto in `src/vault.ts`**
 
 Add near the existing private helpers (after `sealWith`, ~:206), reusing `toBase64`/`fromBase64` (:56-62) and the `VaultBlob` type:
 
@@ -1549,7 +1549,7 @@ export async function openJson<T = unknown>(key: CryptoKey, blob: VaultBlob): Pr
 
 Also export the existing `cachedKey` if it is not already exported (history needs the device key): check :100-101; if private, add `export` — it returns `Promise<CryptoKey | null>`.
 
-- [ ] **Step 5: The history module**
+- [x] **Step 5: The history module**
 
 `src/history.ts`:
 
@@ -1675,11 +1675,11 @@ export async function pullAndMergeHistory(): Promise<HistoryEntry[] | null> {
 }
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `node --import tsx --test tests/history.test.ts` → PASS. `npm run build` → exits 0. Then `npx wrangler pages dev dist` and `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8788/api/history` → `401` or `501`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add functions/_lib/session.js functions/api/history.js src/vault.ts src/history.ts tests/history.test.ts
@@ -1699,18 +1699,18 @@ git commit -m "Add vault-encrypted history: local-first store and ciphertext-onl
 - Modify: all 12 `src/i18n/locales/*.ts` (8 keys)
 
 **Acceptance Criteria:**
-- [ ] Every successful generation (BYOK and Instant) appears in the panel immediately
-- [ ] Restore repopulates the transcript and the full reply (message, strategy, weak-link, citations)
-- [ ] Per-entry delete and clear-all work locally and push the change when the vault is unlocked
-- [ ] Sign-out clears the local history store (verify IndexedDB `rebuttal-history` is empty after)
-- [ ] Signed-out users still get local history; the panel shows the honest note that sync needs sign-in + vault
-- [ ] `npm run build` passes; strings resolve in all 12 locales
+- [x] Every successful generation (BYOK and Instant) appears in the panel immediately
+- [x] Restore repopulates the transcript and the full reply (message, strategy, weak-link, citations)
+- [x] Per-entry delete and clear-all work locally and push the change when the vault is unlocked
+- [x] Sign-out clears the local history store (verify IndexedDB `rebuttal-history` is empty after)
+- [x] Signed-out users still get local history; the panel shows the honest note that sync needs sign-in + vault
+- [x] `npm run build` passes; strings resolve in all 12 locales
 
 **Verify:** browser flow in Step 5.
 
 **Steps:**
 
-- [ ] **Step 1: The component**
+- [x] **Step 1: The component**
 
 `src/HistoryPanel.tsx`:
 
@@ -1762,7 +1762,7 @@ export default function HistoryPanel({ t, language, entries, synced, onRestore, 
 }
 ```
 
-- [ ] **Step 2: App wiring**
+- [x] **Step 2: App wiring**
 
 In `src/App.tsx`:
 
@@ -1879,7 +1879,7 @@ Load once on mount: `useEffect(() => { listEntries().then(setHistoryEntries) }, 
         )}
 ```
 
-- [ ] **Step 3: Styles**
+- [x] **Step 3: Styles**
 
 `src/index.css`:
 
@@ -1903,7 +1903,7 @@ Load once on mount: `useEffect(() => { listEntries().then(setHistoryEntries) }, 
 
 (Logical properties — `text-align: start` — keep RTL working, matching the codebase convention at index.css:892-897.)
 
-- [ ] **Step 4: Strings ×12 locales**
+- [x] **Step 4: Strings ×12 locales**
 
 `en.ts` (translate in the other 11):
 
@@ -1919,7 +1919,7 @@ Load once on mount: `useEffect(() => { listEntries().then(setHistoryEntries) }, 
   'history.clearConfirm': 'Delete all saved replies? The synced copy is cleared too. This cannot be undone.',
 ```
 
-- [ ] **Step 5: Verify in the browser, deploy, commit**
+- [x] **Step 5: Verify in the browser, deploy, commit**
 
 `npm run build`; `npx wrangler pages dev dist`; generate (echo seam or BYOK) → entry appears; restore an entry → transcript + reply repopulate; delete → gone; sign-out (if signed in locally) → panel empties and IndexedDB `rebuttal-history` is cleared (DevTools → Application). Deploy + spot-check production, then:
 
@@ -1947,18 +1947,18 @@ git push
 **Context you need:** `public/404.html` exists, so Cloudflare Pages serves a 404 (not the SPA shell) for unknown paths — `/s/<id>` therefore MUST be a function route; functions take precedence over static assets. `env.ASSETS.fetch()` is implicitly available in Pages Functions (unused so far in this repo). The share record in `SHARES` KV has `{argument, message?, brief?/detailed? (legacy), citations?, articleTitle?, articleUrl?, createdAt?}` — the briefing and weak-link are NOT in the record, so the unfurl structurally cannot leak them. `index.html`'s head has `<title>` (line 17) and `<meta name="description">` (line 6) and no og: tags at all. `sw.js` treats `/s/*` as network-first navigations and only falls back to the cached shell when offline — no SW change needed. The client detects shares via `sharedIdFromLocation()` (share.ts:86-89, `?s=` only today) and renders the shared view (App.tsx:1027-1083) which already has the `share.writeYourOwn` CTA.
 
 **Acceptance Criteria:**
-- [ ] `GET /s/<valid-id>` → 200, the app shell with: rewritten `<title>`, rewritten meta description, `og:title`, `og:description` (first ~140 chars of the message, HTML-escaped), `og:type`, `og:url`, `og:site_name`, `twitter:card`
-- [ ] Responses are byte-identical for a browser UA and a crawler UA (asserted in the test)
-- [ ] Unknown/expired id → 404 with the 404.html body (noindex)
-- [ ] The SPA on `/s/<id>` renders the shared view (path-based detection), and legacy `?s=` links still render
-- [ ] New shares copy `/s/<id>` URLs; `Cache-Control: public, max-age=300` on success
-- [ ] Nothing from the record beyond title/message-prefix reaches the meta; all injected values are HTML-escaped
+- [x] `GET /s/<valid-id>` → 200, the app shell with: rewritten `<title>`, rewritten meta description, `og:title`, `og:description` (first ~140 chars of the message, HTML-escaped), `og:type`, `og:url`, `og:site_name`, `twitter:card`
+- [x] Responses are byte-identical for a browser UA and a crawler UA (asserted in the test)
+- [x] Unknown/expired id → 404 with the 404.html body (noindex)
+- [x] The SPA on `/s/<id>` renders the shared view (path-based detection), and legacy `?s=` links still render
+- [x] New shares copy `/s/<id>` URLs; `Cache-Control: public, max-age=300` on success
+- [x] Nothing from the record beyond title/message-prefix reaches the meta; all injected values are HTML-escaped
 
 **Verify:** `node --test tests/share-page.test.mjs` against `npx wrangler pages dev dist` (create a share first via curl in the test itself).
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/share-page.test.mjs`:
 
@@ -2024,12 +2024,12 @@ test('malformed id is a 404, not an error', async () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --test tests/share-page.test.mjs`
 Expected: FAIL — `/s/<id>` returns the static 404 page with no OG meta.
 
-- [ ] **Step 3: Implement `functions/s/[id].js`**
+- [x] **Step 3: Implement `functions/s/[id].js`**
 
 ```js
 // The share page: the app shell with THIS share's Open Graph meta injected.
@@ -2137,7 +2137,7 @@ export async function onRequestGet(context) {
 }
 ```
 
-- [ ] **Step 3b: Carry the content language into the share record**
+- [x] **Step 3b: Carry the content language into the share record**
 
 Three one-line changes so `og:locale` has data:
 
@@ -2150,7 +2150,7 @@ Three one-line changes so `og:locale` has data:
 2. `src/share.ts` — add `language?: string` to `SharedRebuttal` (:16-30) and to the `publishResult` payload type.
 3. `src/App.tsx` `handleShare` (:473-497) — pass `language: lastRequestRef.current?.promptContext.replyLanguage` in the `publishResult({...})` call.
 
-- [ ] **Step 4: Client-side path handling in `src/share.ts`**
+- [x] **Step 4: Client-side path handling in `src/share.ts`**
 
 Replace `shareUrlFor` (:83) and extend `sharedIdFromLocation` (:86-89) / `clearSharedIdFromLocation` (:92-96):
 
@@ -2179,11 +2179,11 @@ export function clearSharedIdFromLocation(): void {
 
 (Keep the existing exact function names — App.tsx:458-465 and :467-471 call them; no App changes needed for detection.)
 
-- [ ] **Step 5: Run tests, build, verify the client**
+- [x] **Step 5: Run tests, build, verify the client**
 
 `npm run build`; restart `npx wrangler pages dev dist`; `node --test tests/share-page.test.mjs` → PASS (4/4). In the browser: publish a share (echo/BYOK reply → share row), copy link → it is `/s/<id>`; open it in a private window → shared view renders; open a legacy `/?s=<id>` URL → still renders.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add functions/s/ functions/api/share.js src/share.ts src/App.tsx tests/share-page.test.mjs
@@ -2203,16 +2203,16 @@ git commit -m "Serve share links from /s/<id> with per-share Open Graph meta, UA
 - Modify: `tests/limiter.test.mjs` (no change needed — metric routes already covered; extend only if gaps found)
 
 **Acceptance Criteria:**
-- [ ] `POST /api/metric {name}` accepts ONLY allowlisted names, requires the same-origin gate, forwards to LIMITER, returns 204
-- [ ] Clicking the shared-view CTA fires a `share_cta` beacon (visible in dev tools / limiter metrics)
-- [ ] `GET /api/metrics` returns totals only for a signed-in user whose email equals `OPERATOR_EMAIL`; 404 otherwise (existence unadvertised); 501 when the var is unset
-- [ ] No metric call ever carries user data — name only
+- [x] `POST /api/metric {name}` accepts ONLY allowlisted names, requires the same-origin gate, forwards to LIMITER, returns 204
+- [x] Clicking the shared-view CTA fires a `share_cta` beacon (visible in dev tools / limiter metrics)
+- [x] `GET /api/metrics` returns totals only for a signed-in user whose email equals `OPERATOR_EMAIL`; 404 otherwise (existence unadvertised); 501 when the var is unset
+- [x] No metric call ever carries user data — name only
 
 **Verify:** `curl -X POST http://127.0.0.1:8788/api/metric -H "Origin: http://127.0.0.1:8788" -H "Content-Type: application/json" -d "{\"name\":\"share_cta\"}"` → 204; same with `name:"bogus"` → 400; `curl http://127.0.0.1:8788/api/metrics` → 404/501.
 
 **Steps:**
 
-- [ ] **Step 1: `functions/api/metric.js`**
+- [x] **Step 1: `functions/api/metric.js`**
 
 ```js
 // Aggregate-only event counting. A metric is a NAME and nothing else — no ids,
@@ -2261,7 +2261,7 @@ export async function onRequestPost(context) {
 }
 ```
 
-- [ ] **Step 2: `functions/api/metrics.js` (operator readback)**
+- [x] **Step 2: `functions/api/metrics.js` (operator readback)**
 
 ```js
 // Reading the totals requires being signed in AS the operator. Everyone else
@@ -2286,7 +2286,7 @@ export async function onRequestGet(context) {
 
 Operator setup (user-run, alongside Task 5's secrets): `npx wrangler pages secret put OPERATOR_EMAIL --project-name=m36x-rebuttal` (their Google-account email).
 
-- [ ] **Step 3: The CTA beacon**
+- [x] **Step 3: The CTA beacon**
 
 In `src/App.tsx`, `dismissShared` (:467-471) — fire before clearing:
 
@@ -2306,7 +2306,7 @@ In `src/App.tsx`, `dismissShared` (:467-471) — fire before clearing:
 
 (`sendBeacon` sends the Origin header, so the gate passes. Keep whatever else the current `dismissShared` body does — this adds one statement at the top.)
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run the three curl checks from **Verify** above; in the browser open a share page, click the CTA, then `curl "http://127.0.0.1:8788/api/metrics"` → 404 (signed out). Confirm via the limiter directly: `curl "http://127.0.0.1:8787/metrics?days=1"` shows `share_cta` and `share_view` rows.
 
@@ -2327,14 +2327,14 @@ git commit -m "Count the funnel in daily aggregates: metric bridge, CTA beacon, 
 - Modify: `PROJECT_SUMMARY.md`, `DEPLOYMENT_GUIDE.md` (OPERATOR_EMAIL secret; the full secret list in one place)
 
 **Acceptance Criteria:**
-- [ ] Production: a fresh share unfurls (curl shows OG tags on rebuttal.m36x.com), old `?s=` links render, history syncs for a signed-in+unlocked account, Instant mode live
-- [ ] The UA-invariance check passes IN PRODUCTION (chrome vs Twitterbot UA → identical bytes)
-- [ ] `npm test` green (all five test files), `npm run build` green
-- [ ] Every spec invariant re-verified (checklist in Step 3)
+- [x] Production: a fresh share unfurls (curl shows OG tags on rebuttal.m36x.com), old `?s=` links render, history syncs for a signed-in+unlocked account, Instant mode live
+- [x] The UA-invariance check passes IN PRODUCTION (chrome vs Twitterbot UA → identical bytes)
+- [x] `npm test` green (all five test files), `npm run build` green
+- [x] Every spec invariant re-verified (checklist in Step 3)
 
 **Steps:**
 
-- [ ] **Step 1: Docs**
+- [x] **Step 1: Docs**
 
 README: add a "Share pages" paragraph (canonical `/s/<id>`, per-share unfurls, legacy `?s=` supported), a "History" paragraph (local-first, vault-encrypted sync, lost-key-loses-synced-history stated plainly), and the metrics stance (aggregate daily integers, no third-party analytics). Update index.html line 6's description. DEPLOYMENT_GUIDE: consolidated secrets table — `OPENROUTER_PROXY_KEY`, `TURNSTILE_SECRET`, `OPERATOR_EMAIL` (+ the pre-existing Google OAuth pair), and the two-step deploy (`limiter/` first, Pages second).
 
