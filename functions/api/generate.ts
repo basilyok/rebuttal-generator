@@ -30,9 +30,9 @@ interface Env {
 const DEVICE_COOKIE = 'rb_device'
 const LANG = /^[a-z]{2,3}(-[A-Za-z0-9]+)?$/
 
-// Flood brake, same shape as functions/api/share.js and functions/api/article.js
-// (see functions/_lib/ratelimit.js for the shared per-isolate, per-colo
-// mechanics). This endpoint needs it more than either of those: with
+// Flood brake, built from the same makeFloodBrake factory as functions/api/share.js
+// and functions/api/article.js (see functions/_lib/ratelimit.js for the shared
+// per-isolate, per-colo mechanics). This endpoint needs it more than either of those: with
 // TURNSTILE_SECRET unset (an anticipated deployment mode, not a
 // misconfiguration — see the acceptance criteria) the only quota identity an
 // anonymous caller carries is the rb_device cookie IT supplies. A caller that

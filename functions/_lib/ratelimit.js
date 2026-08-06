@@ -5,6 +5,15 @@
 // makes its own brake so tuning one never loosens another.
 export function makeFloodBrake({ windowMs, max }) {
   const recentHits = new Map()
+  /**
+   * @param {{ headers: { get(name: string): string | null } }} request
+   *   Only `headers.get` is used, so any object shaped like this — a real
+   *   `Request`, or a test double — works. This is the shape generate.ts's
+   *   `(request: Request): boolean` signature lost in the extraction; a
+   *   Cloudflare `Request` satisfies it structurally.
+   * @returns {boolean} true once this address has exceeded `max` hits inside
+   *   the trailing `windowMs`.
+   */
   return function overLimit(request) {
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
     const now = Date.now()

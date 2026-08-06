@@ -42,7 +42,12 @@ async function pbkdf2(secretBytes, saltBytes, iterations) {
   return new Uint8Array(bits)
 }
 
-/** Hash a just-received authHash for storage, under a fresh per-user salt. */
+/**
+ * Hash a just-received authHash for storage, under a fresh per-user salt.
+ * Validates nothing about authHashBytes — the caller must already have
+ * validated bytes (this is the output of the client's PBKDF2 derivation,
+ * never user-supplied).
+ */
 export async function hashAuth(authHashBytes) {
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const hash = await pbkdf2(authHashBytes, salt, SERVER_ITERATIONS)
@@ -57,7 +62,12 @@ export async function hashAuth(authHashBytes) {
 /**
  * Byte-wise comparison without an early exit — an early exit would leak how
  * much of the digest matched. Length mismatch returns immediately: both sides
- * are fixed-length digests, so length is not secret.
+ * are fixed-length digests, so length is not secret. The name is aspirational,
+ * not a guarantee: V8 gives no constant-time promise for array indexing or XOR,
+ * so this removes the prefix-length timing leak an early-exit loop would have,
+ * without claiming engine-level constant time. That is enough here because the
+ * compared value is a PBKDF2 output the caller cannot steer bit-by-bit — this
+ * is hygiene, not the load-bearing control (that's PBKDF2 itself).
  */
 function timingSafeEqual(a, b) {
   if (a.length !== b.length) return false
@@ -66,12 +76,28 @@ function timingSafeEqual(a, b) {
   return diff === 0
 }
 
-/** Verify a login attempt against a stored record. False (never a throw) on any malformed input. */
+/**
+ * Verify a login attempt against a stored record. False (never a throw) on any
+ * malformed record — null, missing fields, bad base64, non-positive or absurd
+ * iteration counts. authHashBytes is NOT validated: it must already be real,
+ * well-formed bytes (the caller's job), because a malformed authHashBytes
+ * (null, wrong type) throws from the underlying WebCrypto importKey call
+ * rather than returning false.
+ */
 export async function verifyAuth(record, authHashBytes) {
   const salt = fromBase64(record?.salt)
   const expected = fromBase64(record?.hash)
   const iterations = Number.isInteger(record?.iterations) ? record.iterations : 0
-  if (!salt || !expected || iterations < 1) return false
+  // Upper bound is headroom for a future re-hash upgrade (a record migrated to
+  // more rounds than SERVER_ITERATIONS currently mints), not a security
+  // boundary — 100,000 rounds is still well inside the CPU budget. Without it,
+  // a stored value like 1e21 passes Number.isInteger and burns the isolate.
+  if (!salt || !expected || iterations < 1 || iterations > 100_000) return false
+  // record.version is informational for now — PASSWORD_RECORD_VERSION (1) is
+  // the only version that has ever existed. When a v2 lands, branch on it here
+  // instead of assuming v1 logic fits every record, or v2 records fail closed
+  // silently (every affected user's password reads as "wrong") instead of
+  // raising a clear migration error.
   const actual = await pbkdf2(authHashBytes, salt, iterations)
   return timingSafeEqual(actual, expected)
 }
