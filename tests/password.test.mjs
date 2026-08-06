@@ -67,11 +67,33 @@ test('malformed stored records verify false, never throw', async () => {
   assert.equal(await verifyAuth({}, AUTH_HASH), false)
   assert.equal(await verifyAuth({ salt: '!!!', hash: 'AAAA', iterations: 1000 }, AUTH_HASH), false)
   assert.equal(await verifyAuth({ salt: 'AAAA', hash: 'AAAA', iterations: 0 }, AUTH_HASH), false)
-  // Absurd-high iteration counts (e.g. a corrupted or hostile record claiming
-  // 1e21 rounds) are rejected too — the ceiling is headroom for a future
-  // re-hash upgrade, not a security boundary, but it stops a stored record
-  // from burning the isolate's CPU budget.
+  // NOTE: this does not exercise the iterations ceiling — 'AAAA' decodes to a
+  // 3-byte "digest", so timingSafeEqual's length check rejects it before the
+  // ceiling is ever consulted, regardless of what iterations says. It only
+  // proves malformed records are still refused when iterations happens to be
+  // large. See the known-answer test below for what actually pins the ceiling.
   assert.equal(await verifyAuth({ salt: 'AAAA', hash: 'AAAA', iterations: 100_001 }, AUTH_HASH), false)
+})
+
+// The obvious way to test the ceiling — tamper a well-formed record's
+// iterations to something over 100_000 — doesn't distinguish "rejected by the
+// ceiling" from "rejected because the digest no longer matches at that count"
+// (PBKDF2 output at 100_000 rounds and at 100_001 rounds are unrelated
+// values). Only a record whose digest is genuinely correct at its stated
+// count can isolate the ceiling: both digests below are real PBKDF2 outputs,
+// computed independently with node:crypto, so the *only* thing that can make
+// the second assertion return false is the iterations > 100_000 guard itself.
+test('the iteration ceiling refuses a record that would otherwise verify', async () => {
+  const authHash = new Uint8Array(32).fill(7)
+  const salt = 'c2FsdHNhbHRzYWx0c2FsdA=='
+  assert.equal(
+    await verifyAuth({ salt, hash: '+2IQ6xPwXC+ZMPLKy7ESRTswEDBkAaBW97XojOKkG+E=', iterations: 100_000, version: 1 }, authHash),
+    true
+  )
+  assert.equal(
+    await verifyAuth({ salt, hash: 'TZes1AjgL8lSxKUGHSnpZw14AhMYa1iNndTGxWswJe4=', iterations: 100_001, version: 1 }, authHash),
+    false
+  )
 })
 
 test('fromBase64 rejects junk and accepts real base64', () => {
