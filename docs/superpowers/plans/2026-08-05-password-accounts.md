@@ -1748,6 +1748,7 @@ Expected: JSON with `"configured":true` and `"providers":["google","local"]`
 2. Sign out, sign back in — the key returns. If a second device is handy, sign in there too: same key, same history.
 3. Run one Instant-mode generate signed out (private window) to confirm Turnstile passes on the new hostname.
 4. Confirm the Google button still completes sign-in from the new domain.
+5. **Account-switch guard** (the refusal has no unit test — its value is its position in `handleAuthSubmit`, so this manual check is the regression net): while signed in and vault-locked, click Unlock — the username must be read-only with no "create one" switch. Then, from the plain sign-in dialog while signed in, entering a *different* account's credentials must refuse with the sign-out-first message, and DevTools → Network must show no `/api/vault` or `/api/history` traffic between that login and the automatic logout.
 
 - [ ] **Step 6: Merge/push per repo practice**
 
