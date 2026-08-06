@@ -314,6 +314,11 @@ Two consequences, stated plainly rather than buried:
   nobody can decrypt the blob for you — not the operator, not anyone with a full
   dump of the KV namespace. That is the design working as intended, and it is
   the honest price of it. Any device still holding its local copy is unaffected.
+  For a password account, the password plays the passphrase's role, so this
+  applies to it too — and if you signed up with no email on file, forgetting
+  that password costs you the account along with the history, not just the
+  history (see [Enabling sign-in on your own
+  deployment](#enabling-sign-in-on-your-own-deployment)).
 
 See [`src/history.ts`](src/history.ts) and
 [`functions/api/history.js`](functions/api/history.js).
@@ -358,10 +363,13 @@ request you should be suspicious of. Anthropic and OpenAI keys spend real money.
 
 So the server never sees them. When you set a passphrase, the browser derives an
 AES-256 key from it with PBKDF2 (600,000 iterations, SHA-256), encrypts your keys
-with AES-GCM, and uploads only the ciphertext, salt and IV. **The passphrase is
-never transmitted**, and there is no code path in `functions/api/vault.js` that
-could decrypt a vault — it stores three opaque strings and hands the same three
-back. A full dump of that KV namespace yields nothing spendable.
+with AES-GCM, and uploads only the ciphertext, salt and IV. A password account
+runs that identical derivation over your login password instead of a separate
+passphrase (`src/account.ts`) — one secret, no extra step, same guarantee.
+**Neither the passphrase nor the password is ever transmitted**, and there is
+no code path in `functions/api/vault.js` that could decrypt a vault — it
+stores three opaque strings and hands the same three back. A full dump of
+that KV namespace yields nothing spendable.
 
 The cost is one passphrase per new device. After that the derived key is cached in
 IndexedDB as a **non-extractable** `CryptoKey`: the browser will decrypt with it but
@@ -419,19 +427,22 @@ npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name=m36x-rebuttal
 ```
 
 4. **Redeploy.** Pages binds environment variables at deploy time, so a secret
-   added afterwards is invisible to the deployment already serving traffic —
-   `/api/auth/me` keeps reporting `configured: false` and the sign-in button
-   never appears, with nothing in the logs to explain why. Publishing the same
-   commit again is enough:
+   added afterwards is invisible to the deployment already serving traffic. If
+   you already completed step 1, `configured` is already `true` and "Sign in /
+   Sign up" already works via password accounts — what's still missing is just
+   the Google option: `/api/auth/me`'s `providers` list won't include `google`
+   yet, so the dialog quietly has no "Continue with Google" button or divider,
+   with nothing in the logs to explain why. Publishing the same commit again
+   is enough:
 
 ```bash
 npm run build && npx wrangler pages deploy dist --project-name=m36x-rebuttal --branch=main
 ```
 
-   For a couple of minutes afterwards a small share of requests still land on the
-   previous deployment, so `configured` flaps between `true` and `false` before
-   settling. That is propagation, not a fault — wait it out rather than
-   redeploying again.
+   For a couple of minutes afterwards a small share of requests still land on
+   the previous deployment, so the Google button flickers in and out of the
+   dialog as `providers` flaps between including `google` and not. That is
+   propagation, not a fault — wait it out rather than redeploying again.
 
 Meta and Apple are not wired up. The session layer is provider-agnostic
 (`functions/_lib/session.js` namespaces user ids by provider), so adding them is
@@ -671,8 +682,13 @@ Your API keys live in browser local storage, never in environment variables —
 that is what keeps them private. The deployment itself has a few operator-side
 secrets, all optional: `OPENROUTER_PROXY_KEY` (enables Instant mode),
 `TURNSTILE_SECRET` (enables bot checks on Instant mode), `OPERATOR_EMAIL` (lets
-that one account read the aggregate counts), and the Google OAuth pair (enables
-sign-in, and with it the encrypted vault and history sync). Each is set with
+you read the aggregate counts, signed in via Google with that address — a
+password account cannot satisfy this check, however its email is set, because
+that address is a self-reported claim rather than proven identity), and the
+Google OAuth pair (enables *Google* sign-in specifically — password accounts
+need only the `ACCOUNTS` KV namespace, [described
+earlier](#enabling-sign-in-on-your-own-deployment), and bring the same
+encrypted vault and history sync with them, no Google required). Each is set with
 `npx wrangler pages secret put`; [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) has
 the full table of what each one turns on and what breaks without it. With none
 of them set, the app is plain BYOK and works fine.

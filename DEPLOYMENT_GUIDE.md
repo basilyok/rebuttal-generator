@@ -107,33 +107,47 @@ counters, which are keyed by the opaque quota id (the anonymous `rb_device`
 cookie, or the account id when signed in) — an id and a number, never content.
 `GET /api/metrics` reads the aggregate table back, and it is gated on being
 signed in **as the operator**: set `OPERATOR_EMAIL` to the Google-account email
-you sign in with. That presupposes sign-in works at all — the OAuth pair below
-plus the `ACCOUNTS` binding — since the OAuth callback is the only thing that
-mints a session.
+you sign in with. The gate specifically requires a *Google*-authenticated
+session, not just a matching email — a password account's email is a
+self-reported, unverified claim (`functions/api/auth/register.js` stores
+whatever the sign-up form submits, with no proof of ownership), while Google's
+is only ever stored once its `email_verified` claim checks out
+(`functions/api/auth/google/callback.js`). See the provider check in
+`functions/api/metrics.js`. So this feature specifically needs the OAuth pair
+below plus the `ACCOUNTS` binding — even though `ACCOUNTS` alone is already
+enough to turn sign-in on at all, via password accounts with no Google
+involved (see [README.md](README.md#enabling-sign-in-on-your-own-deployment)).
 
 ```bash
 npx wrangler pages secret put OPERATOR_EMAIL --project-name=m36x-rebuttal
 ```
 
-Anyone else who calls that endpoint — signed in as another account or not
-signed in at all — gets a plain `404`, because the endpoint's existence is not
-worth advertising with a `403`. With the secret unset the endpoint returns
-`501 Not configured` for everyone, including you; counting still happens, you
-just cannot read it back. Set this before the Pages deploy for the same
-bind-at-deploy-time reason as the others.
+Anyone else who calls that endpoint — signed in as another account (including
+a password account registered with your email address — the gate above is
+exactly what stops that from working), or not signed in at all — gets a plain
+`404`, because the endpoint's existence is not worth advertising with a `403`.
+With the secret unset the endpoint returns `501 Not configured` for everyone,
+including you; counting still happens, you just cannot read it back. Set this
+before the Pages deploy for the same bind-at-deploy-time reason as the others.
 
 ## Secrets This Deployment Uses
 
 All five are optional — with none of them set the app runs as plain BYOK — but
 they are not all independent of one another. The two Google values are one unit:
-sign-in needs both halves *and* the `ACCOUNTS` binding, and either half alone
-does nothing. `OPERATOR_EMAIL` depends on that same unit, because the only thing
-that mints a session is the OAuth callback: set it on a deployment without
-sign-in and `/api/metrics` never returns a readback — a permanent `404` when the
-`ACCOUNTS` binding is there but the OAuth pair is not, and `501` when `ACCOUNTS`
-itself is missing, since that check runs first. The other two stand alone. Each
-is set the same way, and **every one of them binds at deploy time**, so adding
-one to a live project does nothing until you redeploy.
+*Google* sign-in needs both halves *and* the `ACCOUNTS` binding, and either half
+alone does nothing — though `ACCOUNTS` alone already turns sign-in on by itself,
+via password accounts (see
+[README.md](README.md#enabling-sign-in-on-your-own-deployment)).
+`OPERATOR_EMAIL` depends on that Google unit specifically, not on sign-in in
+general: `/api/metrics` accepts only a Google-authenticated session
+(`functions/api/metrics.js` checks the session's provider, not merely its
+email — see "Operator Metrics" above for why). Set `OPERATOR_EMAIL` on a
+deployment that has `ACCOUNTS` bound but no Google pair and `/api/metrics`
+never returns a readback — a permanent `404`, because no session on that
+deployment can ever carry `provider === 'google'` — and `501` when `ACCOUNTS`
+itself is missing, since that check runs first. The other two stand alone.
+Each is set the same way, and **every one of them binds at deploy time**, so
+adding one to a live project does nothing until you redeploy.
 
 ```bash
 npx wrangler pages secret put <NAME> --project-name=m36x-rebuttal
@@ -144,7 +158,7 @@ npx wrangler pages secret put <NAME> --project-name=m36x-rebuttal
 | `OPENROUTER_PROXY_KEY` | Instant mode: `/api/generate` spends this provisioned OpenRouter key so keyless visitors get free replies | `/api/generate` returns `501`; the app is plain BYOK and nothing else breaks |
 | `TURNSTILE_SECRET` | Server-side Turnstile verification on `/api/generate`, keeping bots off the free pool | Verification is skipped, not failed — Instant mode still works, unguarded. This is the intended local-dev state |
 | `OPERATOR_EMAIL` | `GET /api/metrics` for that one signed-in Google account — so it needs the sign-in pair below and `ACCOUNTS` to be usable at all | The endpoint returns `501` for everyone; the counters keep incrementing, they are just unreadable |
-| `GOOGLE_CLIENT_ID` | Sign-in (the OAuth authorize request, and the `aud` check on the returned token) | Sign-in stays hidden: `/api/auth/me` reports `configured: false` and the button never renders — so no vault, no history sync, no cross-device language preference |
+| `GOOGLE_CLIENT_ID` | *Google* sign-in (the OAuth authorize request, and the `aud` check on the returned token) | The Google option is simply missing from the sign-in dialog — `/api/auth/me`'s `providers` omits `google`, so no button, no divider. Password accounts are unaffected: with `ACCOUNTS` bound, `configured` stays `true` and sign-in, the vault, and history sync all still work with no Google involved |
 | `GOOGLE_CLIENT_SECRET` | The OAuth code-for-token exchange in the callback | Same as above — both halves of the pair are required together |
 
 **Not** secrets, and living in `wrangler.toml` instead: the `SHARES` and
