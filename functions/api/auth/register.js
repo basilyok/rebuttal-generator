@@ -20,7 +20,15 @@ import { makeFloodBrake } from '../../_lib/ratelimit.js'
 import { fromBase64, hashAuth } from '../../_lib/password.js'
 
 const MAX_BODY_BYTES = 4_096
-const USERNAME_PATTERN = /^[a-z0-9_-]{3,32}$/
+// Matched against the DISPLAY form (pre-lowercasing) with the `i` flag, not
+// against the already-lowercased username. Matching the lowercased form
+// would let a homoglyph through: U+212A KELVIN SIGN lowercases to plain 'k'
+// (JS's own case folding does this), so a display name typed with a Kelvin
+// sign instead of 'K' would pass a pattern check run AFTER lowercasing, and
+// then get stored verbatim as the display name rendered in the UI. Checking
+// the untouched display form rejects it, because U+212A is not itself in
+// [A-Za-z] under case-insensitive matching.
+const USERNAME_PATTERN = /^[a-z0-9_-]{3,32}$/i
 const EMAIL_PATTERN = /^[^\s@]{1,64}@[^\s@]{1,255}$/
 
 // Names that would confuse ("admin" answering someone in a thread) or collide
@@ -59,7 +67,7 @@ export async function onRequestPost({ request, env }) {
 
   const displayName = typeof body?.username === 'string' ? body.username.trim() : ''
   const username = displayName.toLowerCase()
-  if (!USERNAME_PATTERN.test(username)) {
+  if (!USERNAME_PATTERN.test(displayName)) {
     return jsonResponse(
       { error: 'Usernames are 3–32 characters: letters, numbers, - or _.', code: 'username-invalid' },
       400
@@ -80,7 +88,15 @@ export async function onRequestPost({ request, env }) {
     return jsonResponse({ error: 'That email address does not look right.', code: 'email-invalid' }, 400)
   }
 
-  if (overRateLimit(request)) {
+  // Test-only escape hatch: tests/auth-endpoints.test.mjs re-runs against the
+  // same long-lived `wrangler pages dev` process, and local dev never sends
+  // CF-Connecting-IP, so every caller (the suite, the maintainer's browser,
+  // anything else hitting localhost) shares this brake's one "unknown"
+  // bucket — a second or third consecutive run would otherwise trip it. Same
+  // pattern as generate.ts's INSTANT_TEST_ECHO gate: set via a gitignored
+  // .dev.vars file, and production never sets it, so real traffic always
+  // passes through this brake.
+  if (!env.AUTH_TEST_BYPASS_RATE_LIMIT && overRateLimit(request)) {
     return jsonResponse({ error: 'Too many attempts — wait a few minutes and try again.', code: 'rate-limited' }, 429)
   }
 
@@ -90,22 +106,35 @@ export async function onRequestPost({ request, env }) {
   // milliseconds-wide race, the brake above keeps that unfarmable, and losing
   // it means one of the two immediately fails to log in — annoying, not
   // dangerous. A Durable Object reservation is the v2 fix if it ever matters.
+  // Note: upsertUser() below re-reads this exact key (userKey(userId)) to
+  // decide new-vs-existing — the two reads are meant to agree, since they are
+  // both reading the one row that IS the index. Don't "clean up" one side.
   const userId = `local:${username}`
-  if (await env.ACCOUNTS.get(userKey(userId))) {
-    return jsonResponse({ error: 'That username is taken.', code: 'username-taken' }, 409)
+
+  let user, sessionId
+  try {
+    if (await env.ACCOUNTS.get(userKey(userId))) {
+      return jsonResponse({ error: 'That username is taken.', code: 'username-taken' }, 409)
+    }
+
+    const credential = await hashAuth(authHash)
+    await env.ACCOUNTS.put(passwordKey(userId), JSON.stringify(credential))
+    user = await upsertUser(env, {
+      provider: 'local',
+      subject: username,
+      email,
+      // The name keeps the case the user typed; the id is lowercased so Basil
+      // and basil can never become two accounts (or two different vault keys).
+      name: displayName,
+    })
+    sessionId = await createSession(env, user.id)
+  } catch {
+    // A KV outage or a thrown crypto call here would otherwise surface as a
+    // bare platform 500 with no JSON body — the client can only render that
+    // as a blank failure. Same idiom as google/callback.js's exchange-failure
+    // handling: catch it, answer with our own shape.
+    return jsonResponse({ error: 'Something went wrong creating your account — try again.', code: 'server-error' }, 500)
   }
 
-  const credential = await hashAuth(authHash)
-  await env.ACCOUNTS.put(passwordKey(userId), JSON.stringify(credential))
-  const user = await upsertUser(env, {
-    provider: 'local',
-    subject: username,
-    email,
-    // The name keeps the case the user typed; the id is lowercased so Basil
-    // and basil can never become two accounts (or two different vault keys).
-    name: displayName,
-  })
-
-  const sessionId = await createSession(env, user.id)
   return jsonResponse({ user: publicUser(user) }, 200, { 'Set-Cookie': setSessionCookie(sessionId) })
 }

@@ -2,10 +2,33 @@
 // The ACCOUNTS KV binding comes from wrangler.toml; no secrets are needed —
 // password accounts working without any Google credentials is the point.
 //
-// Note on re-runs: the register endpoint's flood brake allows 5 registrations
-// per 10 minutes per IP, and this suite performs 2. A third consecutive run
-// against the same long-lived dev server can trip it; restart the dev server
-// or wait out the window.
+// Re-running this suite against the same long-lived dev server: set
+// AUTH_TEST_BYPASS_RATE_LIMIT=1 in a gitignored .dev.vars file (same pattern
+// as generate.ts's INSTANT_TEST_ECHO seam — see register.js/login.js for the
+// "production never sets this" guarantee). Without it, every caller in local
+// dev shares one "unknown" bucket per brake, because there is no
+// CF-Connecting-IP header locally — and this suite alone spends 3 of the
+// register brake's 5 slots per run (the register+duplicate test, plus the
+// mixed-case test below; validation failures don't count, because the brake
+// sits after validation — see register.js). A second consecutive run trips
+// it. The rate-limited *response itself* (code: 'rate-limited') is instead
+// covered by tests/auth-endpoints.unit.test.mjs, which trips real,
+// isolated brakes via direct import rather than the shared live server.
+//
+// State left in .wrangler/state after a run: one `local:<name>` user row and
+// its password row per successful registration this file performs (NAME and
+// the mixed-case name below), plus whatever sessions were minted and later
+// cleared by the final logout test. Names are fresh per run (see NAME
+// below), so re-runs never collide on identity — they just accumulate
+// harmlessly until `.wrangler/state` is wiped.
+//
+// Order dependence: these tests run in file order and are NOT independent.
+// Test 2 ("register → cookie session...") creates the NAME account that
+// test 4 ("login: match succeeds...") and test 7 ("logout clears a local
+// session") both sign into. If Node's test runner is ever configured to run
+// tests within a file concurrently or out of order, this suite breaks
+// silently (test 4/7 would 401 against an account that doesn't exist yet).
+// Keep them sequential.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -54,6 +77,19 @@ test('register → cookie session → me sees the user; duplicates are refused c
   assert.equal((await dup.json()).code, 'username-taken')
 })
 
+test('register preserves the display-name case while lowercasing the id', async () => {
+  // NAME (above) is already lowercase, so no test using it can tell "case
+  // preserved" apart from "case silently lowercased" — register.js calls
+  // out case preservation as a deliberate design point, previously with no
+  // test able to catch it regressing. This name actually has case to lose.
+  const mixedName = `MixedCase-${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`
+  const res = await post('/api/auth/register', { username: mixedName, authHash: authHash(3) })
+  assert.equal(res.status, 200)
+  const data = await res.json()
+  assert.equal(data.user.name, mixedName, 'display name must keep the case the user typed')
+  assert.equal(data.user.id, `local:${mixedName.toLowerCase()}`, 'the id must still be lowercased')
+})
+
 test('login: match succeeds; wrong password and unknown user are indistinguishable', async () => {
   const ok = await post('/api/auth/login', { username: NAME, authHash: authHash(1) })
   assert.equal(ok.status, 200)
@@ -63,17 +99,43 @@ test('login: match succeeds; wrong password and unknown user are indistinguishab
   assert.equal(wrong.status, 401)
   const ghost = await post('/api/auth/login', { username: `no-such-${NAME}`, authHash: authHash(9) })
   assert.equal(ghost.status, 401)
-  // Identical bodies: the endpoint must not reveal which of the two was wrong
-  assert.deepEqual(await wrong.json(), await ghost.json())
+
+  // Byte-identical, not just deep-equal-after-parsing: the acceptance
+  // criterion is "byte-identical bodies", and comparing parsed JSON objects
+  // would still pass even if key order or whitespace differed between the
+  // two responses (both are real risks — e.g. one path building the object
+  // literal with keys in a different order than the other).
+  const wrongText = await wrong.text()
+  const ghostText = await ghost.text()
+  assert.equal(wrongText, ghostText)
+  assert.equal(JSON.parse(wrongText).code, 'bad-credentials')
 })
 
 test('validation: bad usernames, reserved names, malformed authHash and email', async () => {
-  assert.equal((await post('/api/auth/register', { username: 'ab', authHash: authHash(1) })).status, 400)
+  const shortName = await post('/api/auth/register', { username: 'ab', authHash: authHash(1) })
+  assert.equal(shortName.status, 400)
+  assert.equal((await shortName.json()).code, 'username-invalid')
+
   assert.equal((await post('/api/auth/register', { username: 'has space', authHash: authHash(1) })).status, 400)
-  assert.equal((await post('/api/auth/register', { username: 'admin', authHash: authHash(1) })).status, 409)
+
+  // "postmaster", not "admin": .wrangler/state persists across dev-server
+  // runs, and a maintainer casually poking at the running app with the
+  // obvious word "admin" would leave a real row behind — turning this
+  // assertion into "already taken" rather than "reserved" (same 409/
+  // username-taken code either way, since reserved names ARE taken by
+  // design — see register.js). "postmaster" is in RESERVED but not a name
+  // anyone would type by accident while trying the app out.
+  const reserved = await post('/api/auth/register', { username: 'postmaster', authHash: authHash(1) })
+  assert.equal(reserved.status, 409)
+  assert.equal((await reserved.json()).code, 'username-taken')
+
   assert.equal((await post('/api/auth/register', { username: `x${NAME}`, authHash: 'tooshort' })).status, 400)
   assert.equal((await post('/api/auth/register', { username: `x${NAME}`, authHash: 'not base64!!!' })).status, 400)
-  assert.equal((await post('/api/auth/register', { username: `x${NAME}`, authHash: authHash(1), email: 'nope' })).status, 400)
+
+  const badEmail = await post('/api/auth/register', { username: `x${NAME}`, authHash: authHash(1), email: 'nope' })
+  assert.equal(badEmail.status, 400)
+  assert.equal((await badEmail.json()).code, 'email-invalid')
+
   assert.equal((await post('/api/auth/login', { username: NAME, authHash: 'tooshort' })).status, 400)
 })
 

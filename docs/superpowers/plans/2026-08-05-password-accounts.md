@@ -542,16 +542,16 @@ git commit -m "feat: server credential store for password accounts; extract the 
 - Test: `tests/auth-endpoints.test.mjs`
 
 **Acceptance Criteria:**
-- [ ] Register: 200 + `rb_session` HttpOnly cookie + `publicUser` shape; duplicate (any case) → 409 `username-taken`; reserved → 409; bad username/authHash/email → 400
-- [ ] Login: 200 on match; wrong password and unknown user return byte-identical 401 bodies
-- [ ] Cross-site requests → 403; `me` lists `local` in `providers` with no Google secrets configured
-- [ ] Logout still works for local sessions
+- [x] Register: 200 + `rb_session` HttpOnly cookie + `publicUser` shape; duplicate (any case) → 409 `username-taken`; reserved → 409; bad username/authHash/email → 400
+- [x] Login: 200 on match; wrong password and unknown user return byte-identical 401 bodies
+- [x] Cross-site requests → 403; `me` lists `local` in `providers` with no Google secrets configured
+- [x] Logout still works for local sessions
 
 **Verify:** with `npx wrangler pages dev dist` running: `node --import tsx --test tests/auth-endpoints.test.mjs` → all pass
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/auth-endpoints.test.mjs`:
 
@@ -653,7 +653,7 @@ test('logout clears a local session', async () => {
 })
 ```
 
-- [ ] **Step 2: Run to see it fail**
+- [x] **Step 2: Run to see it fail**
 
 ```bash
 npm run build
@@ -664,7 +664,7 @@ Then in a second terminal: `npx wrangler pages dev dist` (leave running).
 Run: `node --import tsx --test tests/auth-endpoints.test.mjs`
 Expected: FAIL — register/login return 404 (routes don't exist yet); the `me` test fails (`providers` lacks `local`).
 
-- [ ] **Step 3: Create `functions/api/auth/register.js`**
+- [x] **Step 3: Create `functions/api/auth/register.js`**
 
 ```js
 // Create a password account: validate, claim the username, store the re-hashed
@@ -780,7 +780,7 @@ export async function onRequestPost({ request, env }) {
 }
 ```
 
-- [ ] **Step 4: Create `functions/api/auth/login.js`**
+- [x] **Step 4: Create `functions/api/auth/login.js`**
 
 ```js
 // Password login: verify the authHash, mint a session. Login IS unlock — the
@@ -873,7 +873,7 @@ export async function onRequestPost({ request, env }) {
 }
 ```
 
-- [ ] **Step 5: Update `functions/api/auth/me.js`**
+- [x] **Step 5: Update `functions/api/auth/me.js`**
 
 Replace the body of `onRequestGet` so `providers` includes `local`:
 
@@ -892,7 +892,7 @@ export async function onRequestGet({ request, env }) {
 }
 ```
 
-- [ ] **Step 6: Run the suite to green**
+- [x] **Step 6: Run the suite to green**
 
 With the dev server still running (wrangler auto-reloads Functions; if in doubt, restart it):
 
@@ -903,7 +903,7 @@ Also run the neighbours to prove no session regression:
 `node --import tsx --test tests/generate.test.mjs tests/share-page.test.mjs`
 Expected: pass (needs the limiter dev session for generate — same setup as tests/generate.test.mjs's header comment describes; skip that file if the limiter isn't up, and say so in the task report).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add functions/api/auth/register.js functions/api/auth/login.js functions/api/auth/me.js tests/auth-endpoints.test.mjs

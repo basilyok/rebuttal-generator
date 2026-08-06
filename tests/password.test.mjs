@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { hashAuth, verifyAuth, fromBase64 } from '../functions/_lib/password.js'
+import { hashAuth, verifyAuth, fromBase64, dummyRecord } from '../functions/_lib/password.js'
 
 const AUTH_HASH = crypto.getRandomValues(new Uint8Array(32))
 
@@ -100,4 +100,31 @@ test('fromBase64 rejects junk and accepts real base64', () => {
   assert.equal(fromBase64('not base64!!'), null)
   assert.equal(fromBase64(42), null)
   assert.deepEqual(fromBase64('AAECAw=='), new Uint8Array([0, 1, 2, 3]))
+})
+
+// login.js verifies unknown-user attempts against dummyRecord() so that path
+// costs the same PBKDF2 run as a real user's — see login.js's comment at its
+// call site. That property depends entirely on dummyRecord() staying
+// shaped like a real record: same keys, same iterations, same version. If a
+// future SERVER_ITERATIONS bump or a v2 record shape lands in hashAuth()
+// without dummyRecord() following it, the dummy verifies at the old cost (or
+// down an unversioned branch) and the timing oracle silently comes back.
+// This test is the guard — it fails the moment the two drift apart.
+test('dummyRecord matches the shape of a freshly-minted hashAuth record', async () => {
+  const real = await hashAuth(new Uint8Array(32).fill(3))
+  const dummy = dummyRecord()
+  assert.deepEqual(Object.keys(dummy).sort(), Object.keys(real).sort())
+  assert.equal(dummy.iterations, real.iterations)
+  assert.equal(dummy.version, real.version)
+  // What actually keeps verifyAuth from short-circuiting BEFORE it runs
+  // PBKDF2 is narrower than "looks like a digest": salt and hash must both
+  // decode as base64, and iterations must be an integer in [1, 100000] (see
+  // password.js's verifyAuth). Digest LENGTH is not part of that gate — it
+  // is compared only inside timingSafeEqual, AFTER the derivation already
+  // ran — so a dummy with a short or oddly-sized hash would still cost a
+  // real PBKDF2 run. This pins the thing that actually matters: dummy's
+  // salt/hash both decode successfully, and its iterations are in range.
+  assert.notEqual(fromBase64(dummy.salt), null)
+  assert.notEqual(fromBase64(dummy.hash), null)
+  assert.ok(dummy.iterations >= 1 && dummy.iterations <= 100_000)
 })

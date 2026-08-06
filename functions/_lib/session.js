@@ -137,8 +137,20 @@ export async function destroySession(env, sessionId) {
  * never collide, and so adding Meta/Apple later cannot silently merge accounts.
  * Only fields we explicitly name are persisted — never the raw provider payload,
  * which carries more personal data than this app has any reason to keep.
+ *
+ * `refreshAfterMs` is an opt-in write-avoidance guard: when given, and the
+ * existing record's `lastSeenAt` is already newer than that window, this
+ * returns the existing record UNCHANGED and skips the `put` entirely. It
+ * exists because `lastSeenAt` has no reader anywhere in this repo today — a
+ * write that only refreshes it is pure KV write-budget cost with no
+ * observable benefit (see functions/api/auth/login.js, which is the only
+ * caller that passes it: every successful login would otherwise cost a user
+ * write on top of the session write it can't avoid). Callers that omit
+ * `refreshAfterMs` keep the original always-write behaviour — in particular
+ * the Google callback, which must always land fresh profile fields
+ * (name/email/picture) and cannot skip on staleness alone.
  */
-export async function upsertUser(env, { provider, subject, email, name, picture }) {
+export async function upsertUser(env, { provider, subject, email, name, picture, refreshAfterMs }) {
   const userId = `${provider}:${subject}`
   const existingRaw = await env.ACCOUNTS.get(userKey(userId))
   let existing = null
@@ -148,6 +160,15 @@ export async function upsertUser(env, { provider, subject, email, name, picture 
     } catch {
       existing = null
     }
+  }
+
+  if (
+    refreshAfterMs != null &&
+    existing &&
+    typeof existing.lastSeenAt === 'number' &&
+    Date.now() - existing.lastSeenAt < refreshAfterMs
+  ) {
+    return existing
   }
 
   const user = {

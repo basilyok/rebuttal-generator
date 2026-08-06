@@ -77,6 +77,28 @@ function timingSafeEqual(a, b) {
 }
 
 /**
+ * A syntactically-valid record with no real secret behind it, for login.js to
+ * verify against when a username does not exist — so both failure paths cost
+ * one PBKDF2 run and "no such user" is not a timing oracle by response time
+ * (see login.js for the full argument, and its comment at the call site for
+ * exactly what property this depends on).
+ *
+ * Built from SERVER_ITERATIONS and PASSWORD_RECORD_VERSION rather than
+ * hardcoded, so it cannot drift from what hashAuth actually produces: a
+ * future re-hash upgrade (SERVER_ITERATIONS bump) or a v2 record shape lands
+ * here automatically. See the "matches a freshly-minted record" test in
+ * password.test.mjs, which is the guard against that drift.
+ */
+export function dummyRecord() {
+  return {
+    salt: 'c2FsdHNhbHRzYWx0c2FsdA==', // 'saltsaltsaltsalt', 16 bytes — any fixed salt works; no real record uses it
+    hash: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', // 32 zero bytes — no digest was ever computed for this
+    iterations: SERVER_ITERATIONS,
+    version: PASSWORD_RECORD_VERSION,
+  }
+}
+
+/**
  * Verify a login attempt against a stored record. False (never a throw) on any
  * malformed record — null, missing fields, bad base64, non-positive or absurd
  * iteration counts. authHashBytes is NOT validated: it must already be real,
