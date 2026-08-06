@@ -84,7 +84,7 @@ test('adoptKey imports a non-extractable key', async () => {
 // --- wire safety: the app's central invariant is that no secret reaches the
 // server. These tests stub fetch and inspect exactly what would go out.
 
-const fakeUser = { id: 'u1', provider: 'password', email: '', name: '', picture: '', language: '' }
+const fakeUser = { id: 'u1', provider: 'local', email: '', name: '', picture: '', language: '' }
 
 function jsonResponse(status: number, body: unknown): typeof fetch {
   return (async () =>
@@ -115,6 +115,28 @@ test('register sends only username/authHash/email — never the password or mast
   const wireText = JSON.stringify(capturedBody)
   assert.equal(wireText.includes('correct horse battery'), false)
   assert.equal(wireText.includes(Buffer.from(masterKeyBytes).toString('base64')), false)
+})
+
+test('register omits the email key entirely when email is blank — the sign-in-mode path', async (t) => {
+  const originalFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = originalFetch
+  })
+  let capturedBody: Record<string, unknown> | null = null
+  globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+    capturedBody = JSON.parse(init!.body as string)
+    return new Response(JSON.stringify({ user: fakeUser }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }) as typeof fetch
+
+  await register('basil', 'correct horse battery', '')
+
+  assert.ok(capturedBody)
+  // Not an empty-string email — the key must be absent altogether, since
+  // sign-in mode (no email field at all) reaches this same production path.
+  assert.deepEqual(Object.keys(capturedBody!).sort(), ['authHash', 'username'])
 })
 
 test('loginLocal sends only username/authHash — never the password or masterKey', async (t) => {
