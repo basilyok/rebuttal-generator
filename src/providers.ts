@@ -10,7 +10,7 @@
 // answer browser requests and its preflight explicitly allows what we need:
 //
 //   OPTIONS /v1/chat/completions
-//     Access-Control-Allow-Origin:  https://rebuttal.m36x.com
+//     Access-Control-Allow-Origin:  https://rebut.m36x.com
 //     Access-Control-Allow-Headers: authorization,content-type
 //     Access-Control-Allow-Methods: GET, OPTIONS, POST
 //

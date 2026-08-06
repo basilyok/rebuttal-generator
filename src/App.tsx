@@ -70,11 +70,26 @@ import {
   unlockWithDeviceKey,
   resealWithDeviceKey,
   forgetDeviceKey,
+  adoptKey,
+  unlockWithKey,
+  sealJson,
+  cachedKey,
   WrongPassphraseError,
   type KeyBundle,
   type VaultBlob,
 } from './vault'
 import { AccountBar, VaultDialog, type VaultUiState } from './AccountBar'
+import { AuthDialog, type AuthMode } from './AuthDialog'
+import {
+  register as registerAccount,
+  loginLocal,
+  UsernameTakenError,
+  BadCredentialsError,
+  RateLimitedError,
+  EmailInvalidError,
+  UsernameInvalidError,
+  AuthServerError,
+} from './account'
 import HistoryPanel from './HistoryPanel'
 import {
   listEntries,
@@ -140,6 +155,25 @@ function applyKeyBundle(bundle: KeyBundle): void {
     if (id === 'tavily') localStorage.setItem(TAVILY_KEY_STORAGE, key)
     else localStorage.setItem(keyStorageId(id), key)
   }
+}
+
+/**
+ * Which translated line the auth dialog shows for a failed register/login.
+ *
+ * Every error src/account.ts throws carries a machine code as its `message`
+ * (never a sentence), so this table is the only place that decides what a user
+ * reads — the server's own English `error` text is deliberately never rendered.
+ * The fallback covers a bare AccountError ('auth-failed', 'malformed-response')
+ * and anything fetch itself threw, e.g. an offline TypeError.
+ */
+const authErrorKey = (err: unknown): string => {
+  if (err instanceof UsernameTakenError) return 'account.usernameTaken'
+  if (err instanceof BadCredentialsError) return 'account.badCredentials'
+  if (err instanceof RateLimitedError) return 'account.rateLimited'
+  if (err instanceof EmailInvalidError) return 'account.emailInvalid'
+  if (err instanceof UsernameInvalidError) return 'account.usernameInvalid'
+  if (err instanceof AuthServerError) return 'account.serverError'
+  return 'account.authError'
 }
 
 // One-time migration from the single-provider era
@@ -238,6 +272,12 @@ export default function App() {
   const [vaultPrompt, setVaultPrompt] = useState<'setup' | 'unlock' | null>(null)
   const [vaultBusy, setVaultBusy] = useState(false)
   const [vaultError, setVaultError] = useState('')
+  const [authDialog, setAuthDialog] = useState<AuthMode | null>(null)
+  const [authBusy, setAuthBusy] = useState(false)
+  const [authError, setAuthError] = useState('')
+  // A password account's vault key, held for this session — still works where
+  // IndexedDB is blocked and the persistent cache is a no-op. Cleared on sign-out.
+  const localKeyRef = useRef<CryptoKey | null>(null)
 
   // Always-current translator, for callbacks registered once (speech recognition)
   const tRef = useRef(t)
@@ -312,9 +352,11 @@ export default function App() {
 
     // Report a failed sign-in once, then clean the URL so a refresh does not repeat it
     const params = new URLSearchParams(window.location.search)
-    const authError = params.get('auth_error')
-    if (authError) {
-      const message = authErrorMessage(authError)
+    // Not `authError`: that name is now the auth dialog's error state, and a
+    // shadow here would read like the dialog's while being the OAuth redirect's.
+    const oauthFailure = params.get('auth_error')
+    if (oauthFailure) {
+      const message = authErrorMessage(oauthFailure)
       if (message) setError(message)
       params.delete('auth_error')
       const query = params.toString()
@@ -324,6 +366,64 @@ export default function App() {
       cancelled = true
     }
   }, [])
+
+  /**
+   * A decrypted bundle just arrived: apply keys and pull history. One path for
+   * every unlock — the vault effect, the passphrase dialog, and a password
+   * login all land here.
+   *
+   * `isStale` exists only for the effect, whose cleanup must be able to
+   * suppress the history write after the effect re-runs or unmounts. Callers
+   * that are not effects (the two dialogs) pass nothing, which matches what
+   * they did before this was shared.
+   */
+  const onVaultOpened = (bundle: KeyBundle, isStale: () => boolean = () => false) => {
+    applyKeyBundle(bundle)
+    setApiKey(loadStoredKey(providerId))
+    setTavilyDraft(loadTavilyKey())
+    setShowApiKeyInput(getProvider(providerId).requiresKey && !loadStoredKey(providerId))
+    setVaultState('unlocked')
+    void pullAndMergeHistory().then((merged) => {
+      if (isStale() || !merged) return
+      setHistoryEntries(merged)
+      // Sign-in uploads the device backlog: entries generated while signed
+      // out are already in the merge, so pushing it completes the sync.
+      void pushHistory(merged)
+    })
+  }
+
+  /** The password account's vault key: this session's, or the device cache. */
+  const localVaultKey = async (): Promise<CryptoKey | null> => localKeyRef.current ?? (await cachedKey())
+
+  /**
+   * First seal for a password account — no passphrase dialog, the
+   * login-derived key IS the vault key. Quietly does nothing when there are no
+   * keys to save yet or no key survived (blocked IndexedDB + reload); the next
+   * key change or sign-in repairs both.
+   *
+   * `isStale` mirrors onVaultOpened's: the vault effect passes its cancelled
+   * flag so a sign-out (or account switch) mid-seal neither uploads a vault
+   * for the departed session nor writes state over the new one's.
+   */
+  const setupLocalVault = async (isStale: () => boolean = () => false) => {
+    const key = await localVaultKey()
+    const bundle = collectKeyBundle()
+    if (isStale()) return
+    if (!key || !Object.keys(bundle).length) {
+      setVaultState('none')
+      return
+    }
+    try {
+      const sealed = await sealJson(key, bundle)
+      if (isStale()) return
+      await saveVault(sealed)
+      if (isStale()) return
+      setVaultBlob(sealed)
+      setVaultState('unlocked')
+    } catch {
+      if (!isStale()) setVaultState('none')
+    }
+  }
 
   // Pull the encrypted vault once signed in, and open it silently if this device
   // already holds the derived key — the whole point is not asking again.
@@ -339,27 +439,24 @@ export default function App() {
         if (cancelled) return
         setVaultBlob(blob)
         if (!blob) {
-          setVaultState('none')
+          // A password account seals silently: login already produced the key,
+          // so the passphrase-setup dialog would be a second secret for nothing.
+          if (auth.user?.provider === 'local') void setupLocalVault(() => cancelled)
+          else setVaultState('none')
           return
         }
-        const bundle = await unlockWithDeviceKey(blob)
-        if (cancelled) return
-        if (bundle) {
-          applyKeyBundle(bundle)
-          setApiKey(loadStoredKey(providerId))
-          setTavilyDraft(loadTavilyKey())
-          setShowApiKeyInput(getProvider(providerId).requiresKey && !loadStoredKey(providerId))
-          setVaultState('unlocked')
-          void pullAndMergeHistory().then((merged) => {
-            if (cancelled || !merged) return
-            setHistoryEntries(merged)
-            // Sign-in uploads the device backlog: entries generated while signed
-            // out are already in the merge, so pushing it completes the sync.
-            void pushHistory(merged)
-          })
-        } else {
-          setVaultState('locked')
+        let bundle: KeyBundle | null = null
+        if (auth.user?.provider === 'local' && localKeyRef.current) {
+          try {
+            bundle = await unlockWithKey(blob, localKeyRef.current)
+          } catch {
+            bundle = null
+          }
         }
+        if (!bundle) bundle = await unlockWithDeviceKey(blob)
+        if (cancelled) return
+        if (bundle) onVaultOpened(bundle, () => cancelled)
+        else setVaultState('locked')
       })
       .catch(() => {
         if (!cancelled) setVaultState('none')
@@ -965,11 +1062,77 @@ export default function App() {
     if (auth.user) void saveLanguagePreference(next)
   }
 
+  /**
+   * Register or sign in with a password. The one place where "logging in" and
+   * "unlocking the vault" are the same act: the derived master key is adopted
+   * as this device's vault key, so no passphrase dialog ever appears on this
+   * path. Google accounts do not reach here at all.
+   */
+  const handleAuthSubmit = async (username: string, password: string, email: string) => {
+    setAuthBusy(true)
+    setAuthError('')
+    try {
+      const result =
+        authDialog === 'signup'
+          ? await registerAccount(username, password, email)
+          : await loginLocal(username, password)
+      // REFUSE a different account while one is signed in. By this point the
+      // server has already minted the new session and its Set-Cookie has
+      // replaced the signed-in user's cookie — but nothing on this device has
+      // been handed over yet. Proceeding would: adopt the new key, refire the
+      // vault effect under the new user, and either seal collectKeyBundle()
+      // (the signed-in user's API keys, still in localStorage) into the new
+      // account's vault, or merge this device's un-wiped history into the new
+      // account's — both readable by whoever owns the new credentials. That
+      // is the account-switch leak, reached without any sign-out. The only
+      // honest recovery is a full reset: handleSignOut() destroys the session
+      // the cookie now holds (the just-minted one) and runs the same device
+      // hygiene a deliberate sign-out runs. The original session cookie is
+      // already gone (overwritten), so "still signed in as the old user"
+      // stopped being true the moment the response landed.
+      if (auth.user && result.user.id !== auth.user.id) {
+        await handleSignOut()
+        setAuthDialog('signin')
+        setAuthError(t('account.signOutFirst'))
+        return
+      }
+      // Login IS unlock: the derived master key becomes this device's vault key
+      localKeyRef.current = await adoptKey(result.masterKeyBytes)
+      // Signed-in-but-locked (key lost to a blocked IndexedDB + reload): the
+      // effect keys on auth.user.id and will not refire for the same user, so
+      // open the vault directly here.
+      if (vaultBlob && vaultState === 'locked') {
+        try {
+          onVaultOpened(await unlockWithKey(vaultBlob, localKeyRef.current))
+        } catch {
+          // A blob this account's key cannot open — leave it locked
+        }
+      }
+      setAuthDialog(null)
+      // Refetch rather than trusting the response: one source of truth for auth
+      // state, and the change of auth.user.id is what fires the vault effect.
+      const fresh = await fetchAuthState()
+      // fetchAuthState never throws — it swallows network failures into
+      // SIGNED_OUT. Right after a successful login that would present as
+      // "sign-in failed" while the session cookie is in fact set, so fall
+      // back to the user the register/login response itself vouched for.
+      if (fresh.user) setAuth(fresh)
+      else setAuth((current) => ({ ...current, user: result.user }))
+    } catch (err) {
+      setAuthError(t(authErrorKey(err)))
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
   const handleSignOut = async () => {
     await signOut()
     // Drop the derived key too. Without this, "sign out" on a shared machine would
     // leave the next person able to decrypt the vault by simply signing back in.
     await forgetDeviceKey()
+    localKeyRef.current = null
+    setAuthDialog(null)
+    setAuthError('')
     // Wipe the device's history copy as well — entries AND key both leave this
     // device on sign-out. The server keeps the ciphertext; the next sign-in on
     // this (or any) device pulls it back down once the vault is unlocked again.
@@ -991,7 +1154,11 @@ export default function App() {
     if (!Object.keys(bundle).length) return
     setVaultState('saving')
     try {
-      const sealed = await resealWithDeviceKey(bundle, vaultBlob)
+      // A password account reseals under the login-derived key it already
+      // holds, which survives a blocked IndexedDB; a Google account keeps
+      // using the device key exactly as before.
+      const localKey = auth.user.provider === 'local' ? await localVaultKey() : null
+      const sealed = localKey ? await sealJson(localKey, bundle) : await resealWithDeviceKey(bundle, vaultBlob)
       if (sealed) {
         await saveVault(sealed)
         setVaultBlob(sealed)
@@ -1021,19 +1188,7 @@ export default function App() {
           void pushHistory(merged)
         })
       } else if (vaultBlob) {
-        const bundle = await unlock(vaultBlob, passphrase)
-        applyKeyBundle(bundle)
-        setApiKey(loadStoredKey(providerId))
-        setTavilyDraft(loadTavilyKey())
-        setShowApiKeyInput(provider.requiresKey && !loadStoredKey(providerId))
-        setVaultState('unlocked')
-        void pullAndMergeHistory().then((merged) => {
-          if (!merged) return
-          setHistoryEntries(merged)
-          // Sign-in uploads the device backlog: entries generated while signed
-          // out are already in the merge, so pushing it completes the sync.
-          void pushHistory(merged)
-        })
+        onVaultOpened(await unlock(vaultBlob, passphrase))
       }
       setVaultPrompt(null)
     } catch (err) {
@@ -1113,6 +1268,8 @@ export default function App() {
    */
   const afterKeyChange = () => {
     if (vaultState === 'unlocked') void syncVault()
+    // A password account never gets the passphrase offer: it already has a key.
+    else if (auth.user?.provider === 'local' && vaultState === 'none' && !vaultBlob) void setupLocalVault()
     else if (auth.user && vaultState === 'none' && !vaultBlob) setVaultPrompt('setup')
   }
 
@@ -1148,9 +1305,16 @@ export default function App() {
         onLanguageChange={handleLanguageChange}
         auth={auth}
         vaultState={vaultState}
-        onSignIn={() => signIn('google')}
+        onSignInClick={() => {
+          setAuthError('')
+          setAuthDialog('signin')
+        }}
         onSignOut={handleSignOut}
-        onUnlockClick={() => setVaultPrompt('unlock')}
+        // A password user's "unlock" is re-entering their password — the same
+        // secret — never a vault passphrase they were never given.
+        onUnlockClick={() =>
+          auth.user?.provider === 'local' ? setAuthDialog('signin') : setVaultPrompt('unlock')
+        }
       />
 
       {updateAvailable && (
@@ -1163,6 +1327,36 @@ export default function App() {
       )}
       <h1>{t('app.title')}</h1>
       <p className="subtitle">{t('app.subtitle')}</p>
+
+      {authDialog && (
+        <AuthDialog
+          // Keyed on the account context: when the refusal path signs the
+          // user out while the dialog stays mounted, the key change remounts
+          // it fresh (editable empty username) instead of leaving the old
+          // account's read-only name and typed password in component state.
+          key={auth.user?.id ?? 'signed-out'}
+          t={t}
+          mode={authDialog}
+          hasGoogle={auth.providers.includes('google')}
+          busy={authBusy}
+          error={authError}
+          // The dialog can only be open while signed in via the locked-vault
+          // unlock route (the bar's sign-in button and the Instant CTA both
+          // require auth.user to be null), so a signed-in local user here
+          // means "re-enter your password": fix the username to the account's.
+          fixedUsername={auth.user?.provider === 'local' ? auth.user.name : undefined}
+          onModeChange={(m) => {
+            setAuthError('')
+            setAuthDialog(m)
+          }}
+          onGoogle={() => signIn('google')}
+          onSubmit={handleAuthSubmit}
+          onDismiss={() => {
+            setAuthDialog(null)
+            setAuthError('')
+          }}
+        />
+      )}
 
       {vaultPrompt && (
         <VaultDialog
@@ -1688,9 +1882,19 @@ export default function App() {
                 : '',
             })}
           </p>
+          {/* Opens the same dialog as the bar rather than starting Google
+              directly: a deployment can now be password-only, and on one of
+              those /api/auth/google/start answers 501 — this button used to
+              navigate the user onto that raw JSON. */}
           {!auth.user && auth.configured && (
-            <button className="button button-primary" onClick={() => signIn('google')}>
-              {t('instant.done.signIn')}
+            <button
+              className="button button-primary"
+              onClick={() => {
+                setAuthError('')
+                setAuthDialog('signup')
+              }}
+            >
+              {t('account.signInOrUp')}
             </button>
           )}
           <button

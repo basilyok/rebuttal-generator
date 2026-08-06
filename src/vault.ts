@@ -243,6 +243,29 @@ export async function openJson<T = unknown>(key: CryptoKey, blob: VaultBlob): Pr
   return JSON.parse(new TextDecoder().decode(plaintext)) as T
 }
 
+/**
+ * Adopt an externally-derived key (a password account's masterKey) as this
+ * device's vault key. Imported non-extractable — the same property a
+ * passphrase-derived key has — and cached so it survives a reload. For
+ * password accounts, logging in IS unlocking: there is no passphrase here.
+ */
+export async function adoptKey(rawKey: Uint8Array): Promise<CryptoKey> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    rawKey as unknown as BufferSource,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt', 'decrypt']
+  )
+  await cacheKey(key)
+  return key
+}
+
+/** Decrypt with a caller-held key (a just-adopted one) rather than the IndexedDB cache. */
+export async function unlockWithKey(blob: VaultBlob, key: CryptoKey): Promise<KeyBundle> {
+  return decryptWith(key, blob)
+}
+
 // --- server transport -------------------------------------------------------
 
 export async function fetchVault(): Promise<VaultBlob | null> {

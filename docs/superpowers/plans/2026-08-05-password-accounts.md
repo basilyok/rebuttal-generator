@@ -53,17 +53,17 @@ Two deliberate deviations from the spec, both narrowings:
 - Test: `tests/account.test.ts`
 
 **Acceptance Criteria:**
-- [ ] `deriveCredentials` is deterministic, and changes with either username or password
-- [ ] Username case/whitespace do not change the derived values
-- [ ] `authHash` ≠ base64 of `masterKeyBytes`
-- [ ] Vault sealed via `adoptKey` + `sealJson` opens after re-derivation, fails with wrong password
-- [ ] `npm run build` passes (tsc + vite)
+- [x] `deriveCredentials` is deterministic, and changes with either username or password
+- [x] Username case/whitespace do not change the derived values
+- [x] `authHash` ≠ base64 of `masterKeyBytes`
+- [x] Vault sealed via `adoptKey` + `sealJson` opens after re-derivation, fails with wrong password
+- [x] `npm run build` passes (tsc + vite)
 
 **Verify:** `node --import tsx --test tests/account.test.ts` → all pass (expect a few seconds: each derivation really runs 600k PBKDF2 rounds)
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/account.test.ts`:
 
@@ -125,12 +125,12 @@ test('normalizeUsername lowercases and trims', () => {
 })
 ```
 
-- [ ] **Step 2: Run it to see it fail**
+- [x] **Step 2: Run it to see it fail**
 
 Run: `node --import tsx --test tests/account.test.ts`
 Expected: FAIL — cannot resolve `../src/account`.
 
-- [ ] **Step 3: Create `src/account.ts`**
+- [x] **Step 3: Create `src/account.ts`**
 
 ```ts
 // Password-account client: key derivation and the register/login calls.
@@ -258,7 +258,7 @@ export async function loginLocal(username: string, password: string): Promise<Au
 }
 ```
 
-- [ ] **Step 4: Add the two vault exports**
+- [x] **Step 4: Add the two vault exports**
 
 In `src/vault.ts`, directly after the `openJson` function (line ~244), add:
 
@@ -289,15 +289,15 @@ export async function unlockWithKey(blob: VaultBlob, key: CryptoKey): Promise<Ke
 
 (`cacheKey` degrades to a no-op where IndexedDB is blocked — `idb()` already swallows that — so `adoptKey` still returns a usable key for the session.)
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `node --import tsx --test tests/account.test.ts`
-Expected: 5 pass, 0 fail.
+Expected: 5 pass, 0 fail. (Extended in code review to 13 pass, 0 fail — see the known-answer, wire-safety, and non-extractability tests added to `tests/account.test.ts`.)
 
 Run: `npm run build`
 Expected: clean tsc + vite build.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/account.ts src/vault.ts tests/account.test.ts
@@ -542,16 +542,16 @@ git commit -m "feat: server credential store for password accounts; extract the 
 - Test: `tests/auth-endpoints.test.mjs`
 
 **Acceptance Criteria:**
-- [ ] Register: 200 + `rb_session` HttpOnly cookie + `publicUser` shape; duplicate (any case) → 409 `username-taken`; reserved → 409; bad username/authHash/email → 400
-- [ ] Login: 200 on match; wrong password and unknown user return byte-identical 401 bodies
-- [ ] Cross-site requests → 403; `me` lists `local` in `providers` with no Google secrets configured
-- [ ] Logout still works for local sessions
+- [x] Register: 200 + `rb_session` HttpOnly cookie + `publicUser` shape; duplicate (any case) → 409 `username-taken`; reserved → 409; bad username/authHash/email → 400
+- [x] Login: 200 on match; wrong password and unknown user return byte-identical 401 bodies
+- [x] Cross-site requests → 403; `me` lists `local` in `providers` with no Google secrets configured
+- [x] Logout still works for local sessions
 
-**Verify:** with `npx wrangler pages dev dist` running: `node --import tsx --test tests/auth-endpoints.test.mjs` → all pass
+**Verify:** copy `.dev.vars.example` to `.dev.vars` first (sets `AUTH_TEST_BYPASS_RATE_LIMIT=1` — without it, a second consecutive run of the suite below trips the register/login flood brakes and fails on an unrelated 429; see `.dev.vars.example` and the seam's call sites in `register.js`/`login.js`). Then, with `npx wrangler pages dev dist` running: `node --import tsx --test tests/auth-endpoints.test.mjs` → all pass, repeatably.
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/auth-endpoints.test.mjs`:
 
@@ -653,7 +653,7 @@ test('logout clears a local session', async () => {
 })
 ```
 
-- [ ] **Step 2: Run to see it fail**
+- [x] **Step 2: Run to see it fail**
 
 ```bash
 npm run build
@@ -664,7 +664,7 @@ Then in a second terminal: `npx wrangler pages dev dist` (leave running).
 Run: `node --import tsx --test tests/auth-endpoints.test.mjs`
 Expected: FAIL — register/login return 404 (routes don't exist yet); the `me` test fails (`providers` lacks `local`).
 
-- [ ] **Step 3: Create `functions/api/auth/register.js`**
+- [x] **Step 3: Create `functions/api/auth/register.js`**
 
 ```js
 // Create a password account: validate, claim the username, store the re-hashed
@@ -780,7 +780,7 @@ export async function onRequestPost({ request, env }) {
 }
 ```
 
-- [ ] **Step 4: Create `functions/api/auth/login.js`**
+- [x] **Step 4: Create `functions/api/auth/login.js`**
 
 ```js
 // Password login: verify the authHash, mint a session. Login IS unlock — the
@@ -873,7 +873,7 @@ export async function onRequestPost({ request, env }) {
 }
 ```
 
-- [ ] **Step 5: Update `functions/api/auth/me.js`**
+- [x] **Step 5: Update `functions/api/auth/me.js`**
 
 Replace the body of `onRequestGet` so `providers` includes `local`:
 
@@ -892,7 +892,7 @@ export async function onRequestGet({ request, env }) {
 }
 ```
 
-- [ ] **Step 6: Run the suite to green**
+- [x] **Step 6: Run the suite to green**
 
 With the dev server still running (wrangler auto-reloads Functions; if in doubt, restart it):
 
@@ -903,7 +903,7 @@ Also run the neighbours to prove no session regression:
 `node --import tsx --test tests/generate.test.mjs tests/share-page.test.mjs`
 Expected: pass (needs the limiter dev session for generate — same setup as tests/generate.test.mjs's header comment describes; skip that file if the limiter isn't up, and say so in the task report).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add functions/api/auth/register.js functions/api/auth/login.js functions/api/auth/me.js tests/auth-endpoints.test.mjs
@@ -1490,14 +1490,14 @@ git commit -m "feat: sign in / sign up dialog — password login doubles as vaul
 
 ### Task 5: Locale translations (11 files) with a parity test
 
-**Goal:** All 11 non-English locales carry the 27 new `account.*` keys, translated to match each file's existing tone, and none still carries `account.signInWithGoogle`.
+**Goal:** All 11 non-English locales carry the **30** new `account.*` keys (Task 4 added `account.emailInvalid` and `account.serverError` beyond the original 27 for the carried-forward error mapping, and its review round added `account.signOutFirst` for the account-switch refusal), translated to match each file's existing tone, and none still carries the removed keys `account.signInWithGoogle` or `instant.done.signIn`.
 
 **Files:**
 - Modify: `src/i18n/locales/{es,fr,de,pt-BR,it,ja,ko,zh-Hans,ar,hi,el}.ts`
 - Test: `tests/i18n-account.test.mjs`
 
 **Acceptance Criteria:**
-- [ ] Parity test passes: every locale defines all 27 keys, none defines the removed key
+- [ ] Parity test passes: every locale defines all 30 keys, none defines either removed key (`account.signInWithGoogle`, `instant.done.signIn`)
 - [ ] Translations are real translations (not English copies), keeping `-` / `_` / digit literals intact in `usernamePlaceholder`/`usernameInvalid`
 - [ ] `npm run build` clean
 
@@ -1530,6 +1530,10 @@ const REQUIRED = [
   'account.createAccount', 'account.signInAction', 'account.switchToSignIn', 'account.switchToSignUp',
   'account.passwordShort', 'account.passwordMismatch', 'account.usernameInvalid', 'account.usernameTaken',
   'account.badCredentials', 'account.rateLimited', 'account.authError',
+  // Added in Task 4's carried-forward error mapping — not in the original 27:
+  'account.emailInvalid', 'account.serverError',
+  // Added in Task 4's review round, for the account-switch refusal:
+  'account.signOutFirst',
 ]
 
 for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
@@ -1539,6 +1543,7 @@ for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
       assert.ok(text.includes(`'${key}'`), `${file} is missing ${key}`)
     }
     assert.ok(!text.includes(`'account.signInWithGoogle'`), `${file} still defines the removed signInWithGoogle key`)
+    assert.ok(!text.includes(`'instant.done.signIn'`), `${file} still defines the removed instant.done.signIn key`)
   })
 }
 ```
@@ -1548,7 +1553,7 @@ Expected: `en.ts` passes (Task 4 added its strings); the other 11 FAIL.
 
 - [ ] **Step 2: Translate**
 
-For each of the 11 files, add the 27 keys in the file's `--- account ---` section and delete its `account.signInWithGoogle` line. Translate from the English strings in Task 4 Step 1, with these constraints:
+For each of the 11 files, add the 30 keys in the file's `--- account ---` section and delete its `account.signInWithGoogle` **and** `instant.done.signIn` lines (both keys were removed from `en.ts` in Task 4; the Instant-exhausted CTA now reuses `account.signInOrUp`). Translate from the English strings in Task 4 Step 1 plus the three keys added after it — `account.emailInvalid` / `account.serverError` (carry-forward error mapping) and `account.signOutFirst` (account-switch refusal) — with these constraints:
 
 - Match the file's existing register (each locale already has translated `account.*` strings to imitate for tone and formality — e.g. formal-you vs informal-you must match what the file already uses).
 - Keep `3–32`, the literal characters `-` and `_`, and "Google" untranslated.
@@ -1743,6 +1748,7 @@ Expected: JSON with `"configured":true` and `"providers":["google","local"]`
 2. Sign out, sign back in — the key returns. If a second device is handy, sign in there too: same key, same history.
 3. Run one Instant-mode generate signed out (private window) to confirm Turnstile passes on the new hostname.
 4. Confirm the Google button still completes sign-in from the new domain.
+5. **Account-switch guard** (the refusal has no unit test — its value is its position in `handleAuthSubmit`, so this manual check is the regression net): while signed in and vault-locked, click Unlock — the username must be read-only with no "create one" switch. Then, from the plain sign-in dialog while signed in, entering a *different* account's credentials must refuse with the sign-out-first message, and DevTools → Network must show no `/api/vault` or `/api/history` traffic between that login and the automatic logout.
 
 - [ ] **Step 6: Merge/push per repo practice**
 
@@ -1751,6 +1757,30 @@ git push origin main
 ```
 
 ---
+
+## v2 follow-ups (deferred on purpose, not forgotten)
+
+**Wire per-caller KV write quotas into the rate-limiter Durable Object.**
+`functions/api/auth/register.js` and `functions/api/auth/login.js` each use a
+per-isolate, per-colo in-memory flood brake (`makeFloodBrake`) as a stopgap
+against the free plan's 1000-writes/day KV budget — not real per-caller
+enforcement. The brakes narrow the worst case (one address hammering its own
+valid account) from exhausting the daily budget in under an hour to roughly
+seventeen, and that number is a floor: because the brake is per-isolate and
+per-colo, an address reaching multiple edge locations clears multiple
+independent buckets in parallel, so real damage can exceed it. See the
+write-budget comment above `login.js`'s `overRateLimit` for the arithmetic.
+This project already has the right primitive for real enforcement — the
+`LIMITER` service binding (Durable Object; see `limiter/src/index.js` and
+`functions/api/generate.ts`'s `consume()`/quota use of it) — it is just not
+wired up to auth's writes yet.
+
+**Priority note:** this should be the FIRST thing addressed once the app has
+real users, not a someday item. Once there are real accounts, the same
+1000-writes/day KV budget this stopgap protects is also carrying legitimate
+vault saves and history sync for every signed-in user — a write-budget
+exhaustion at that point takes down real user data flows, not just a
+theoretical attack surface on an empty deployment.
 
 ## Explicitly not in this plan (matching the spec's out-of-scope list)
 

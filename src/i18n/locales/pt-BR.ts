@@ -13,7 +13,6 @@ const pt_BR = {
 
   // --- account ---------------------------------------------------------------
   'account.signIn': 'Entrar',
-  'account.signInWithGoogle': 'Entrar com o Google',
   'account.signInBlurb': 'Entre para manter suas chaves de API e seu idioma em todos os dispositivos.',
   'account.signOut': 'Sair',
   'account.signedInAs': 'Entrou como {name}',
@@ -43,6 +42,39 @@ const pt_BR = {
   'account.notNow': 'Agora não',
   'account.syncing': 'Salvando…',
   'account.vaultSaved': 'Suas chaves foram criptografadas e salvas.',
+  'account.signInOrUp': 'Entrar / Criar conta',
+  'account.benefitsTitle': 'Por que entrar?',
+  'account.benefitsKeys':
+    'Suas chaves de API vão com você para qualquer dispositivo — criptografadas para que só você consiga ler.',
+  'account.benefitsHistory': 'Seu histórico de respostas também sincroniza, protegido do mesmo jeito.',
+  'account.benefitsQuota': 'Seis respostas instantâneas grátis por dia, em vez de três.',
+  'account.benefitsLanguage': 'Sua escolha de idioma vale em qualquer lugar em que você entrar.',
+  'account.signUpTitle': 'Crie sua conta',
+  'account.signInTitle': 'Entrar',
+  'account.continueWithGoogle': 'Continuar com o Google',
+  'account.orDivider': 'ou',
+  'account.username': 'Nome de usuário',
+  'account.usernamePlaceholder': '3–32 letras, números, - ou _',
+  'account.password': 'Senha',
+  'account.confirmPassword': 'Confirme a senha',
+  'account.emailOptional': 'E-mail (opcional)',
+  'account.noEmailWarning':
+    'Sem e-mail, não existe jeito de entrar de novo se você esquecer esta senha — não há como redefini-la. Anote em algum lugar seguro.',
+  'account.createAccount': 'Criar conta',
+  'account.signInAction': 'Entrar',
+  'account.switchToSignIn': 'Já tem uma conta? Entre',
+  'account.switchToSignUp': 'Primeira vez aqui? Crie uma conta',
+  'account.passwordShort': 'Use pelo menos 10 caracteres.',
+  'account.passwordMismatch': 'As duas senhas não são iguais.',
+  'account.usernameInvalid': 'Nomes de usuário têm 3–32 caracteres: letras, números, - ou _.',
+  'account.usernameTaken': 'Esse nome de usuário já está em uso — tente outro.',
+  'account.badCredentials': 'Esse nome de usuário e essa senha não conferem.',
+  'account.rateLimited': 'Tentativas demais — espere alguns minutos e tente de novo.',
+  'account.emailInvalid': 'Esse endereço de e-mail não parece certo.',
+  'account.serverError': 'Algo deu errado do nosso lado. Tente de novo em instantes.',
+  'account.signOutFirst':
+    'Essa é uma conta diferente. Para manter as contas separadas, este dispositivo foi desconectado e o histórico salvo nele foi apagado — entre de novo para continuar.',
+  'account.authError': 'Não deu para concluir a entrada. Tente de novo.',
 
   // --- language --------------------------------------------------------------
   'language.label': 'Idioma',
@@ -208,7 +240,6 @@ const pt_BR = {
   'instant.done.title': 'As respostas grátis acabaram por hoje',
   'instant.done.body':
     'Elas voltam às {time}. Entre para ganhar um limite diário maior, ou adicione sua própria chave de API para respostas ilimitadas que nunca passam pelos nossos servidores.',
-  'instant.done.signIn': 'Entrar com o Google',
   'instant.done.byok': 'Usar minha própria chave de API',
   'instant.turnstile': 'A verificação falhou — recarregue a página e tente de novo.',
   'instant.error': 'O modo instantâneo está indisponível agora — tente de novo em instantes, ou use sua própria chave de API.',

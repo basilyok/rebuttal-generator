@@ -1,0 +1,22 @@
+# Copy this file to .dev.vars (gitignored) for local `wrangler pages dev`
+# runs. Nothing here is a secret — these are test-only seams that make local
+# dev tolerable, and production never sets any of them (see the comment at
+# each seam's call site in the source file named).
+
+# Lets tests/auth-endpoints.test.mjs (and manual poking at the local app) be
+# re-run against the same long-lived dev server without tripping the
+# register/login flood brakes. Local dev never sends CF-Connecting-IP, so
+# every caller shares one "unknown" bucket per brake — without this, a
+# second or third consecutive run fails on a 429 that has nothing to do with
+# the change you're testing. See functions/api/auth/register.js and
+# functions/api/auth/login.js for the check, and
+# tests/auth-endpoints.unit.test.mjs's "does not appear in wrangler.toml"
+# test for the guarantee that this can never reach production by accident.
+AUTH_TEST_BYPASS_RATE_LIMIT=1
+
+# Needed only for tests/generate.test.mjs / tests/generate.unit.test.mjs
+# (Instant mode). Makes the endpoint return a canned envelope instead of
+# calling OpenRouter — gate/quota/validation logic is fully exercised with
+# zero spend. See functions/api/generate.ts.
+# OPENROUTER_PROXY_KEY=dev-placeholder
+# INSTANT_TEST_ECHO=1

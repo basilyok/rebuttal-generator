@@ -10,6 +10,7 @@ import type { Citation } from '../../src/providers'
 import { getSession, jsonResponse } from '../_lib/session.js'
 import { INSTANT } from '../_lib/instant.js'
 import { isSameOriginBrowserRequest } from '../_lib/gate.js'
+import { makeFloodBrake } from '../_lib/ratelimit.js'
 
 // Structural types on purpose — the repo does not depend on
 // @cloudflare/workers-types, and these two methods are all we use.
@@ -29,33 +30,17 @@ interface Env {
 const DEVICE_COOKIE = 'rb_device'
 const LANG = /^[a-z]{2,3}(-[A-Za-z0-9]+)?$/
 
-// Best-effort flood brake, same shape as functions/api/share.js and
-// functions/api/article.js: per-isolate and per-colo, so a distributed
-// attacker walks around it, but it bounds what any single address can do.
-// This endpoint needs it more than either of those: with TURNSTILE_SECRET
-// unset (an anticipated deployment mode, not a misconfiguration — see the
-// acceptance criteria) the only quota identity an anonymous caller carries is
-// the rb_device cookie IT supplies. A caller that simply omits the Cookie
-// header gets a fresh crypto.randomUUID() every request, so consume() reports
-// `first: true` every time — meaning every such call routes to the PAID
-// model. The cap here is stricter than share.js's 6/60s because this
-// endpoint is the one that spends real money.
-const RATE_WINDOW_MS = 60_000
-const RATE_MAX = 5
-const recentHits = new Map<string, number[]>()
-function overRateLimit(request: Request): boolean {
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
-  const now = Date.now()
-  const hits = (recentHits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS)
-  hits.push(now)
-  recentHits.set(ip, hits)
-  if (recentHits.size > 5000) {
-    for (const [key, stamps] of recentHits) {
-      if (now - stamps[stamps.length - 1] >= RATE_WINDOW_MS) recentHits.delete(key)
-    }
-  }
-  return hits.length > RATE_MAX
-}
+// Flood brake, built from the same makeFloodBrake factory as functions/api/share.js
+// and functions/api/article.js (see functions/_lib/ratelimit.js for the shared
+// per-isolate, per-colo mechanics). This endpoint needs it more than either of those: with
+// TURNSTILE_SECRET unset (an anticipated deployment mode, not a
+// misconfiguration — see the acceptance criteria) the only quota identity an
+// anonymous caller carries is the rb_device cookie IT supplies. A caller that
+// simply omits the Cookie header gets a fresh crypto.randomUUID() every
+// request, so consume() reports `first: true` every time — meaning every such
+// call routes to the PAID model. The cap here is stricter than share.js's
+// 6/60s because this endpoint is the one that spends real money.
+const overRateLimit = makeFloodBrake({ windowMs: 60_000, max: 5 })
 
 function readDeviceId(request: Request): string | null {
   const cookies = request.headers.get('Cookie') || ''
@@ -156,7 +141,7 @@ async function callUpstream(env: Env, model: string, system: string, userContent
     headers: {
       Authorization: `Bearer ${env.OPENROUTER_PROXY_KEY}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://rebuttal.m36x.com',
+      'HTTP-Referer': 'https://rebut.m36x.com',
       'X-Title': 'Rebuttal Generator (Instant)',
     },
     body: JSON.stringify({

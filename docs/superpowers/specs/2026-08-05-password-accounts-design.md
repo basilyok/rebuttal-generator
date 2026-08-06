@@ -80,11 +80,14 @@ collide with a Google one:
 
 ```
 user:local:<lowercased-username>        the user record (provider: 'local')
-username:<lowercased-username>          → userId          (uniqueness index)
 password:local:<username>               → {salt, hash, iterations, version}
 vault:local:<username>                  ciphertext, unchanged shape
 history:local:<username>                ciphertext, unchanged shape
 ```
+
+(Amended at implementation: no separate `username:` uniqueness-index row — the
+user-record key above IS the index, since ids derive from the lowercased name.
+A second row would be a redundant write that can drift.)
 
 The user record reuses `upsertUser`'s field discipline — only named fields are
 persisted, never raw client JSON. `email` is stored when supplied, `name` defaults
@@ -111,6 +114,20 @@ to the username, `picture` is absent.
 - Register is additionally gated by the same-origin check (`functions/_lib/gate.js`).
 - Failed login returns one generic error for both "no such user" and "wrong
   password", so the endpoint is not a username oracle.
+- **Account switch without sign-out is refused** (amended at implementation):
+  while a user is signed in, the sign-in dialog rejects credentials belonging to
+  a different account and resets the device instead. Adopting a second account's
+  key without running sign-out hygiene would silently seal the first user's
+  still-in-localStorage API keys into the second account's vault, and merge the
+  first user's un-wiped device history into the second's — so the guard makes
+  deliberate sign-out the only account-switch path. The unlock dialog also
+  renders the username read-only, since it exists to re-derive the signed-in
+  account's key, not to switch accounts.
+- **Operator metrics require a Google session** (amended at implementation):
+  `/api/metrics` matches `OPERATOR_EMAIL` only for `provider: 'google'`
+  sessions. A password account's email is an unverified, self-reported claim —
+  without the provider check, anyone could register a local account bearing the
+  operator's public email and read the aggregate counters.
 
 ## Error handling
 

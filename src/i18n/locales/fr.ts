@@ -13,7 +13,6 @@ const fr = {
 
   // --- account ---------------------------------------------------------------
   'account.signIn': 'Se connecter',
-  'account.signInWithGoogle': 'Se connecter avec Google',
   'account.signInBlurb': 'Connectez-vous pour garder vos clés API et votre langue sur tous vos appareils.',
   'account.signOut': 'Se déconnecter',
   'account.signedInAs': 'Connecté en tant que {name}',
@@ -43,6 +42,39 @@ const fr = {
   'account.notNow': 'Pas maintenant',
   'account.syncing': 'Enregistrement…',
   'account.vaultSaved': 'Vos clés sont chiffrées et enregistrées.',
+  'account.signInOrUp': "Se connecter / S'inscrire",
+  'account.benefitsTitle': 'Pourquoi se connecter ?',
+  'account.benefitsKeys':
+    "Vos clés API vous suivent sur tous vos appareils — chiffrées afin que personne d'autre que vous ne puisse les lire.",
+  'account.benefitsHistory': 'Votre historique de réponses se synchronise aussi, chiffré de la même façon.',
+  'account.benefitsQuota': 'Six réponses instantanées gratuites par jour au lieu de trois.',
+  'account.benefitsLanguage': 'Votre choix de langue vous suit partout où vous vous connectez.',
+  'account.signUpTitle': 'Créez votre compte',
+  'account.signInTitle': 'Connectez-vous',
+  'account.continueWithGoogle': 'Continuer avec Google',
+  'account.orDivider': 'ou',
+  'account.username': "Nom d'utilisateur",
+  'account.usernamePlaceholder': '3–32 lettres, chiffres, - ou _',
+  'account.password': 'Mot de passe',
+  'account.confirmPassword': 'Confirmez le mot de passe',
+  'account.emailOptional': 'E-mail (facultatif)',
+  'account.noEmailWarning':
+    "Sans e-mail, aucun moyen de retrouver l'accès si vous oubliez un jour ce mot de passe — il n'y a rien pour le réinitialiser. Notez-le quelque part en lieu sûr.",
+  'account.createAccount': 'Créer un compte',
+  'account.signInAction': 'Se connecter',
+  'account.switchToSignIn': 'Déjà un compte ? Connectez-vous',
+  'account.switchToSignUp': 'Pas encore de compte ? Créez-en un',
+  'account.passwordShort': 'Utilisez au moins 10 caractères.',
+  'account.passwordMismatch': 'Les deux mots de passe ne correspondent pas.',
+  'account.usernameInvalid': "Les noms d'utilisateur font 3–32 caractères : lettres, chiffres, - ou _.",
+  'account.usernameTaken': "Ce nom d'utilisateur est déjà pris — essayez-en un autre.",
+  'account.badCredentials': "Ce nom d'utilisateur et ce mot de passe ne correspondent pas.",
+  'account.rateLimited': 'Trop de tentatives — attendez quelques minutes, puis réessayez.',
+  'account.emailInvalid': 'Cette adresse e-mail ne semble pas valide.',
+  'account.serverError': "Quelque chose s'est mal passé de notre côté. Réessayez dans un instant.",
+  'account.signOutFirst':
+    "Il s'agit d'un autre compte. Pour garder les comptes séparés, cet appareil a été déconnecté et l'historique présent sur cet appareil effacé — reconnectez-vous pour continuer.",
+  'account.authError': "La connexion n'a pas abouti. Réessayez.",
 
   // --- language --------------------------------------------------------------
   'language.label': 'Langue',
@@ -207,7 +239,6 @@ const fr = {
   'instant.done.title': "Plus de réponses gratuites pour aujourd'hui",
   'instant.done.body':
     'Elles reviennent à {time}. Connectez-vous pour en recevoir plus chaque jour, ou ajoutez votre propre clé API pour des réponses illimitées qui ne passent jamais par nos serveurs.',
-  'instant.done.signIn': 'Se connecter avec Google',
   'instant.done.byok': 'Utiliser plutôt ma propre clé API',
   'instant.turnstile': 'La vérification a échoué — rechargez la page et réessayez.',
   'instant.error': "Le mode instantané n'est pas disponible pour le moment — réessayez bientôt, ou utilisez votre propre clé API.",

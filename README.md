@@ -11,7 +11,7 @@ How it writes is governed by **[CONSTITUTION.md](CONSTITUTION.md)** — eleven r
 the research on what actually changes minds. Read that first if you plan to change the
 prompts.
 
-**🌍 Live at [rebuttal.m36x.com](https://rebuttal.m36x.com/) on Cloudflare Pages** • **📱 Fully PWA-enabled** • **⚡ [Deployment guide](DEPLOYMENT_GUIDE.md)**
+**🌍 Live at [rebut.m36x.com](https://rebut.m36x.com/) on Cloudflare Pages** • **📱 Fully PWA-enabled** • **⚡ [Deployment guide](DEPLOYMENT_GUIDE.md)**
 
 ## Features
 
@@ -283,7 +283,8 @@ first, any one of them reopens with a click, and you can delete a single entry
 or clear the lot. Without an account that is the whole story: history lives in
 this browser's IndexedDB and goes no further.
 
-Sign in, unlock your vault, and it syncs. The newest **100 entries** are
+Sign in and unlock your vault — with a password account that is one step, with
+Google it is the passphrase — and it syncs. The newest **100 entries** are
 encrypted in the browser under the same key that already protects your API keys
 and uploaded as a single blob, so your history follows you to a new device
 instead of being stranded on one. `functions/api/history.js` is a deliberate
@@ -313,6 +314,11 @@ Two consequences, stated plainly rather than buried:
   nobody can decrypt the blob for you — not the operator, not anyone with a full
   dump of the KV namespace. That is the design working as intended, and it is
   the honest price of it. Any device still holding its local copy is unaffected.
+  For a password account, the password plays the passphrase's role, so this
+  applies to it too — and if you signed up with no email on file, forgetting
+  that password costs you the account along with the history, not just the
+  history (see [Enabling sign-in on your own
+  deployment](#enabling-sign-in-on-your-own-deployment)).
 
 See [`src/history.ts`](src/history.ts) and
 [`functions/api/history.js`](functions/api/history.js).
@@ -357,10 +363,13 @@ request you should be suspicious of. Anthropic and OpenAI keys spend real money.
 
 So the server never sees them. When you set a passphrase, the browser derives an
 AES-256 key from it with PBKDF2 (600,000 iterations, SHA-256), encrypts your keys
-with AES-GCM, and uploads only the ciphertext, salt and IV. **The passphrase is
-never transmitted**, and there is no code path in `functions/api/vault.js` that
-could decrypt a vault — it stores three opaque strings and hands the same three
-back. A full dump of that KV namespace yields nothing spendable.
+with AES-GCM, and uploads only the ciphertext, salt and IV. A password account
+runs that identical derivation over your login password instead of a separate
+passphrase (`src/account.ts`) — one secret, no extra step, same guarantee.
+**Neither the passphrase nor the password is ever transmitted**, and there is
+no code path in `functions/api/vault.js` that could decrypt a vault — it
+stores three opaque strings and hands the same three back. A full dump of
+that KV namespace yields nothing spendable.
 
 The cost is one passphrase per new device. After that the derived key is cached in
 IndexedDB as a **non-extractable** `CryptoKey`: the browser will decrypt with it but
@@ -380,14 +389,26 @@ change to the app's privacy promise, not a refactor.
 
 ### Enabling sign-in on your own deployment
 
-Sign-in stays hidden until you configure it, so a fork with no OAuth credentials
-just works without it.
+Sign-in stays hidden until you configure it, so a fork with nothing set up just
+works without it. Password accounts and Google sign-in need different amounts
+of setup below.
 
 1. Create the accounts KV namespace and paste the id into `wrangler.toml`:
 
 ```bash
 npx wrangler kv namespace create ACCOUNTS
 ```
+
+**Password accounts** need only step 1 — with the `ACCOUNTS` KV namespace bound,
+"Sign in / Sign up" appears and username-password accounts work with no Google
+credentials at all. The password does double duty: the browser derives the
+vault key and the login proof from it separately (`src/account.ts`), so signing
+in unlocks your synced keys and history with no second passphrase — and the
+server still cannot read either. There is no password reset in this version:
+an account with no email on file and a forgotten password is gone for good,
+which the sign-up form says out loud.
+
+**Google sign-in** additionally needs steps 2–4:
 
 2. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
    create an **OAuth 2.0 Client ID** of type *Web application*. Add your origin to
@@ -406,19 +427,22 @@ npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name=m36x-rebuttal
 ```
 
 4. **Redeploy.** Pages binds environment variables at deploy time, so a secret
-   added afterwards is invisible to the deployment already serving traffic —
-   `/api/auth/me` keeps reporting `configured: false` and the sign-in button
-   never appears, with nothing in the logs to explain why. Publishing the same
-   commit again is enough:
+   added afterwards is invisible to the deployment already serving traffic. If
+   you already completed step 1, `configured` is already `true` and "Sign in /
+   Sign up" already works via password accounts — what's still missing is just
+   the Google option: `/api/auth/me`'s `providers` list won't include `google`
+   yet, so the dialog quietly has no "Continue with Google" button or divider,
+   with nothing in the logs to explain why. Publishing the same commit again
+   is enough:
 
 ```bash
 npm run build && npx wrangler pages deploy dist --project-name=m36x-rebuttal --branch=main
 ```
 
-   For a couple of minutes afterwards a small share of requests still land on the
-   previous deployment, so `configured` flaps between `true` and `false` before
-   settling. That is propagation, not a fault — wait it out rather than
-   redeploying again.
+   For a couple of minutes afterwards a small share of requests still land on
+   the previous deployment, so the Google button flickers in and out of the
+   dialog as `providers` flaps between including `google` and not. That is
+   propagation, not a fault — wait it out rather than redeploying again.
 
 Meta and Apple are not wired up. The session layer is provider-agnostic
 (`functions/_lib/session.js` namespaces user ids by provider), so adding them is
@@ -495,6 +519,22 @@ npm run build
 ```bash
 npm run preview
 ```
+
+### Testing
+
+```bash
+npm run test:offline
+```
+
+runs the nine suites that need nothing but Node — derivation, password
+hashing, rate limiting, prompts, history, Instant-mode units, auth-endpoint
+units, and locale parity. The full `npm test` additionally includes four
+suites that talk to live local servers: start `npx wrangler pages dev dist`
+first (after `npm run build`, and with a `.dev.vars` copied from
+`.dev.vars.example` so re-runs don't trip the auth flood brakes), and for the
+limiter suite run `npx wrangler dev --port 8787` inside `limiter/`. Without
+those servers running, only the four live suites fail — that is the expected
+signal, not a broken checkout.
 
 ## How to Use
 
@@ -637,7 +677,7 @@ device, and optionally synced encrypted — see [Your reply history](#your-reply
 ## Deployment
 
 The app is deployed on **Cloudflare Pages** (project `m36x-rebuttal`) and lives
-at **https://rebuttal.m36x.com/**. To ship an update:
+at **https://rebut.m36x.com/**. To ship an update:
 
 ```bash
 npm run build
@@ -658,8 +698,13 @@ Your API keys live in browser local storage, never in environment variables —
 that is what keeps them private. The deployment itself has a few operator-side
 secrets, all optional: `OPENROUTER_PROXY_KEY` (enables Instant mode),
 `TURNSTILE_SECRET` (enables bot checks on Instant mode), `OPERATOR_EMAIL` (lets
-that one account read the aggregate counts), and the Google OAuth pair (enables
-sign-in, and with it the encrypted vault and history sync). Each is set with
+you read the aggregate counts, signed in via Google with that address — a
+password account cannot satisfy this check, however its email is set, because
+that address is a self-reported claim rather than proven identity), and the
+Google OAuth pair (enables *Google* sign-in specifically — password accounts
+need only the `ACCOUNTS` KV namespace, [described
+earlier](#enabling-sign-in-on-your-own-deployment), and bring the same
+encrypted vault and history sync with them, no Google required). Each is set with
 `npx wrangler pages secret put`; [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) has
 the full table of what each one turns on and what breaks without it. With none
 of them set, the app is plain BYOK and works fine.

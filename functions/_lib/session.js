@@ -18,6 +18,7 @@ export const sessionKey = (id) => `session:${id}`
 export const userKey = (id) => `user:${id}`
 export const vaultKey = (id) => `vault:${id}`
 export const historyKey = (id) => `history:${id}`
+export const passwordKey = (id) => `password:${id}`
 export const oauthKey = (state) => `oauth:${state}`
 
 /** URL-safe random token. 32 bytes is well past guessing range. */
@@ -136,8 +137,28 @@ export async function destroySession(env, sessionId) {
  * never collide, and so adding Meta/Apple later cannot silently merge accounts.
  * Only fields we explicitly name are persisted — never the raw provider payload,
  * which carries more personal data than this app has any reason to keep.
+ *
+ * `refreshAfterMs` is an opt-in write-avoidance guard: when given, and the
+ * existing record's `lastSeenAt` is already newer than that window, this
+ * skips the `put` entirely and returns the existing record instead. It
+ * exists because `lastSeenAt` has no reader anywhere in this repo today — a
+ * write that only refreshes it is pure KV write-budget cost with no
+ * observable benefit (see functions/api/auth/login.js, which is the only
+ * caller that passes it: every successful login would otherwise cost a user
+ * write on top of the session write it can't avoid). Callers that omit
+ * `refreshAfterMs` keep the original always-write behaviour — in particular
+ * the Google callback, which must always land fresh profile fields
+ * (name/email/picture) and cannot skip on staleness alone.
+ *
+ * IMPORTANT: when the skip fires, every field the CALLER passed this
+ * invocation — email, name, picture, all of it — is silently discarded, not
+ * merged. Only `id` is corrected before returning (see below); nothing else
+ * from `existing` is touched. A future caller doing
+ * `upsertUser(env, { ..., name: 'New Name', refreshAfterMs })` expecting
+ * that name to land gets a silent no-op instead — this guard is only safe
+ * for callers (like login.js) that never pass fresh fields to begin with.
  */
-export async function upsertUser(env, { provider, subject, email, name, picture }) {
+export async function upsertUser(env, { provider, subject, email, name, picture, refreshAfterMs }) {
   const userId = `${provider}:${subject}`
   const existingRaw = await env.ACCOUNTS.get(userKey(userId))
   let existing = null
@@ -147,6 +168,20 @@ export async function upsertUser(env, { provider, subject, email, name, picture 
     } catch {
       existing = null
     }
+  }
+
+  if (
+    refreshAfterMs != null &&
+    existing &&
+    typeof existing.lastSeenAt === 'number' &&
+    Date.now() - existing.lastSeenAt < refreshAfterMs
+  ) {
+    // `id` must always be userId (provider:subject) — never trusted from
+    // storage. createSession(env, user.id) below is a privilege-binding
+    // call: it mints a session for whatever id it's handed. The write path
+    // (below) always derives id fresh; this skip path must match, not
+    // return whatever happens to already be sitting in the stored record.
+    return { ...existing, id: userId }
   }
 
   const user = {

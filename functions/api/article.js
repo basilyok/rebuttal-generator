@@ -9,6 +9,7 @@
 // browser and never pass through here.
 
 import { isSameOriginBrowserRequest } from '../_lib/gate.js'
+import { makeFloodBrake } from '../_lib/ratelimit.js'
 
 const MAX_CHARS = 20_000
 const MIN_WORDS = 120
@@ -76,25 +77,10 @@ const countWords = (text) => (text.trim().match(/\S+/g) || []).length
 // — real quotas arrive with the rate-limiter Durable Object (see the monetization
 // design).
 
-// Best-effort flood brake: per-isolate and per-colo, so it caps a single address,
-// not a botnet. Higher ceiling than the share endpoint because reading several
+// Flood brake (see functions/_lib/ratelimit.js for the shared per-isolate,
+// per-colo mechanics). Higher ceiling than share.js because reading several
 // articles in a row is a normal way to use the app.
-const RATE_WINDOW_MS = 60_000
-const RATE_MAX = 10
-const recentHits = new Map()
-function overRateLimit(request) {
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
-  const now = Date.now()
-  const hits = (recentHits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS)
-  hits.push(now)
-  recentHits.set(ip, hits)
-  if (recentHits.size > 5000) {
-    for (const [key, stamps] of recentHits) {
-      if (now - stamps[stamps.length - 1] >= RATE_WINDOW_MS) recentHits.delete(key)
-    }
-  }
-  return hits.length > RATE_MAX
-}
+const overRateLimit = makeFloodBrake({ windowMs: 60_000, max: 10 })
 
 /** Reject anything that is not a public http(s) address. */
 function validateUrl(input) {
