@@ -23,7 +23,8 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { hashAuth } from '../functions/_lib/password.js'
-import { passwordKey, upsertUser } from '../functions/_lib/session.js'
+import { createSession, passwordKey, upsertUser } from '../functions/_lib/session.js'
+import { onRequestGet as metricsGet } from '../functions/api/metrics.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ORIGIN = 'http://localhost'
@@ -207,4 +208,61 @@ test('login: timing does not betray whether the username exists', async () => {
     unknownAvg > wrongAvg / 5,
     `unknown-user path (${unknownAvg.toFixed(3)}ms) must not be more than 5x faster than wrong-password (${wrongAvg.toFixed(3)}ms) — timing-oracle regression guard`
   )
+})
+
+// Security regression guard for the /api/metrics operator gate
+// (functions/api/metrics.js). A password account's email is an unverified,
+// arbitrary claim register.js accepts as-is — nothing proves the registrant
+// owns it. Before the provider check, registering a local account with
+// email === OPERATOR_EMAIL (public in the git log) would pass the gate's
+// old `session.user?.email !== env.OPERATOR_EMAIL` check outright. Only a
+// google-provider session may have earned that email through Google's
+// email_verified check (google/callback.js).
+function metricsRequest(sessionId) {
+  return new Request('http://localhost/api/metrics', {
+    headers: sessionId ? { Cookie: `rb_session=${sessionId}` } : {},
+  })
+}
+
+test('metrics gate: a local account claiming the operator email is refused; a google account with it passes', async () => {
+  const env = { ACCOUNTS: fakeAccounts(), OPERATOR_EMAIL: 'operator@example.com' }
+
+  const impersonator = await upsertUser(env, {
+    provider: 'local',
+    subject: 'impersonator',
+    email: env.OPERATOR_EMAIL,
+  })
+  const impersonatorSession = await createSession(env, impersonator.id)
+  const impersonatorRes = await metricsGet({ request: metricsRequest(impersonatorSession), env })
+  assert.equal(
+    impersonatorRes.status,
+    404,
+    'a local (password) account claiming the operator email must be refused — this is the assertion that fails if the provider check is deleted'
+  )
+
+  const operator = await upsertUser(env, {
+    provider: 'google',
+    subject: 'g-operator-sub',
+    email: env.OPERATOR_EMAIL,
+  })
+  const operatorSession = await createSession(env, operator.id)
+  const operatorRes = await metricsGet({ request: metricsRequest(operatorSession), env })
+  // The gate's outcome, not metrics content: no LIMITER binding in this fake
+  // env, so a passed gate falls through to metrics.js's own `{ metrics: [] }`
+  // default (see its `if (!env.LIMITER)` branch) — status 200 either way.
+  assert.equal(operatorRes.status, 200, 'a real google-authenticated session with the operator email must pass the gate')
+
+  // The provider check must not have become sufficient on its own: a google
+  // account with a DIFFERENT email is still not the operator.
+  const otherGoogleUser = await upsertUser(env, {
+    provider: 'google',
+    subject: 'g-someone-else',
+    email: 'someone-else@example.com',
+  })
+  const otherSession = await createSession(env, otherGoogleUser.id)
+  const otherRes = await metricsGet({ request: metricsRequest(otherSession), env })
+  assert.equal(otherRes.status, 404, 'a google account with a non-matching email must still be refused')
+
+  const anonymousRes = await metricsGet({ request: metricsRequest(null), env })
+  assert.equal(anonymousRes.status, 404, 'no session at all must be refused')
 })

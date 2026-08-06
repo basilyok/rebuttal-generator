@@ -11,7 +11,16 @@ export async function onRequestGet(context) {
   const unconfigured = requireAccounts(env)
   if (unconfigured) return unconfigured
   const session = await getSession(request, env)
-  if (!session || session.user?.email !== env.OPERATOR_EMAIL) {
+  // provider === 'google' is load-bearing, not redundant with the email check:
+  // a password account's email (functions/api/auth/register.js) is an
+  // unverified, non-unique claim the sign-up form accepts as-is, never proven
+  // to belong to the registrant — anyone can register a local account with
+  // email set to OPERATOR_EMAIL (public in the git log) and pass an
+  // email-only check. Google's address IS proof of ownership: it is only
+  // ever stored when the ID token says email_verified (google/callback.js),
+  // and identity there is keyed on `sub`, not email, so this is the one
+  // provider where "email equals OPERATOR_EMAIL" means "is the operator".
+  if (!session || session.user?.provider !== 'google' || session.user?.email !== env.OPERATOR_EMAIL) {
     return jsonResponse({ error: 'Not found.' }, 404)
   }
   if (!env.LIMITER) return jsonResponse({ metrics: [] })
