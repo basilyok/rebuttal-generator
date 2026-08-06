@@ -3,7 +3,7 @@
 // signals distrust gets the interactive challenge. Tokens are single-use, so
 // every generation fetches a fresh one.
 //
-// The public sitekey for the rebuttal.m36x.com managed widget. Public and
+// The public sitekey for the rebut.m36x.com managed widget. Public and
 // committable by design (the secret key lives in TURNSTILE_SECRET, set via
 // wrangler). Empty string = Turnstile disabled end to end (the server skips
 // verification when TURNSTILE_SECRET is unset, so dev works with no setup).

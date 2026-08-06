@@ -1,7 +1,7 @@
 # Deployment Guide
 
 This app is deployed on **Cloudflare Pages** as project `m36x-rebuttal`, live at
-**https://rebuttal.m36x.com/** (also `m36x-rebuttal.pages.dev`).
+**https://rebut.m36x.com/** (also `m36x-rebuttal.pages.dev`).
 
 ## Deploying an Update
 
@@ -77,7 +77,7 @@ BYOK — nothing else breaks.
 ### 3. Create the Turnstile widget
 
 In the Cloudflare dashboard (account level) → **Turnstile → Add widget**:
-hostname `rebuttal.m36x.com`, mode **Managed**. The sitekey is public and lives
+hostnames `rebut.m36x.com` and `rebuttal.m36x.com`, mode **Managed**. The sitekey is public and lives
 in `src/turnstile.ts` (already committed); the secret goes in:
 
 ```bash
@@ -161,8 +161,25 @@ npx wrangler pages project create m36x-rebuttal
 npx wrangler pages deploy dist --project-name=m36x-rebuttal
 ```
 
-The custom domain `rebuttal.m36x.com` is attached in the Cloudflare dashboard
+The custom domain `rebut.m36x.com` is attached in the Cloudflare dashboard
 under **Workers & Pages → m36x-rebuttal → Custom domains**.
+
+### Primary domain
+
+The canonical domain is **rebut.m36x.com**. `rebuttal.m36x.com` remains
+attached and 301-redirects (path and query preserved) via a zone-level
+Redirect Rule, because distributed share links point there. The four
+dashboard pieces that must all know about a domain:
+
+1. **Pages → m36x-rebuttal → Custom domains** — both domains attached.
+2. **Turnstile → widget → Hostname management** — both hostnames listed;
+   a missing hostname fails the widget silently and every Instant reply 403s.
+3. **Google OAuth client → Authorised redirect URIs** — both
+   `https://<domain>/api/auth/google/callback` entries.
+4. **m36x.com zone → Rules → Redirect Rules** — "rebuttal-to-rebut":
+   when hostname equals `rebuttal.m36x.com`, 301 to dynamic
+   `concat("https://rebut.m36x.com", http.request.uri.path)`,
+   "Preserve query string" checked.
 
 ## Other Hosts
 

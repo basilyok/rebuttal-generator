@@ -141,7 +141,7 @@ async function callUpstream(env: Env, model: string, system: string, userContent
     headers: {
       Authorization: `Bearer ${env.OPENROUTER_PROXY_KEY}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://rebuttal.m36x.com',
+      'HTTP-Referer': 'https://rebut.m36x.com',
       'X-Title': 'Rebuttal Generator (Instant)',
     },
     body: JSON.stringify({

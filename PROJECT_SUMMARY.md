@@ -121,7 +121,7 @@ You now have a **fully-functional, deployable PWA** (Progressive Web App) that g
 - Service worker for caching & performance
 
 ✅ **Deployed on Cloudflare Pages**
-- Live at https://rebuttal.m36x.com/ (project `m36x-rebuttal`)
+- Live at https://rebut.m36x.com/ (project `m36x-rebuttal`)
 - `public/_headers` carries the cache/security header rules
 - Redeploy with `npm run build && npx wrangler pages deploy dist --project-name=m36x-rebuttal`
 
@@ -215,7 +215,7 @@ npm run build
 npx wrangler pages deploy
 ```
 
-Live at https://rebuttal.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
+Live at https://rebut.m36x.com/ — see `DEPLOYMENT_GUIDE.md` for details.
 
 ---
 

@@ -11,7 +11,7 @@ How it writes is governed by **[CONSTITUTION.md](CONSTITUTION.md)** — eleven r
 the research on what actually changes minds. Read that first if you plan to change the
 prompts.
 
-**🌍 Live at [rebuttal.m36x.com](https://rebuttal.m36x.com/) on Cloudflare Pages** • **📱 Fully PWA-enabled** • **⚡ [Deployment guide](DEPLOYMENT_GUIDE.md)**
+**🌍 Live at [rebut.m36x.com](https://rebut.m36x.com/) on Cloudflare Pages** • **📱 Fully PWA-enabled** • **⚡ [Deployment guide](DEPLOYMENT_GUIDE.md)**
 
 ## Features
 
@@ -283,7 +283,8 @@ first, any one of them reopens with a click, and you can delete a single entry
 or clear the lot. Without an account that is the whole story: history lives in
 this browser's IndexedDB and goes no further.
 
-Sign in, unlock your vault, and it syncs. The newest **100 entries** are
+Sign in and unlock your vault — with a password account that is one step, with
+Google it is the passphrase — and it syncs. The newest **100 entries** are
 encrypted in the browser under the same key that already protects your API keys
 and uploaded as a single blob, so your history follows you to a new device
 instead of being stranded on one. `functions/api/history.js` is a deliberate
@@ -380,14 +381,26 @@ change to the app's privacy promise, not a refactor.
 
 ### Enabling sign-in on your own deployment
 
-Sign-in stays hidden until you configure it, so a fork with no OAuth credentials
-just works without it.
+Sign-in stays hidden until you configure it, so a fork with nothing set up just
+works without it. Password accounts and Google sign-in need different amounts
+of setup below.
 
 1. Create the accounts KV namespace and paste the id into `wrangler.toml`:
 
 ```bash
 npx wrangler kv namespace create ACCOUNTS
 ```
+
+**Password accounts** need only step 1 — with the `ACCOUNTS` KV namespace bound,
+"Sign in / Sign up" appears and username-password accounts work with no Google
+credentials at all. The password does double duty: the browser derives the
+vault key and the login proof from it separately (`src/account.ts`), so signing
+in unlocks your synced keys and history with no second passphrase — and the
+server still cannot read either. There is no password reset in this version:
+an account with no email on file and a forgotten password is gone for good,
+which the sign-up form says out loud.
+
+**Google sign-in** additionally needs steps 2–4:
 
 2. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
    create an **OAuth 2.0 Client ID** of type *Web application*. Add your origin to
@@ -637,7 +650,7 @@ device, and optionally synced encrypted — see [Your reply history](#your-reply
 ## Deployment
 
 The app is deployed on **Cloudflare Pages** (project `m36x-rebuttal`) and lives
-at **https://rebuttal.m36x.com/**. To ship an update:
+at **https://rebut.m36x.com/**. To ship an update:
 
 ```bash
 npm run build
