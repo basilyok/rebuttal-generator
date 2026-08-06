@@ -18,6 +18,7 @@ export const sessionKey = (id) => `session:${id}`
 export const userKey = (id) => `user:${id}`
 export const vaultKey = (id) => `vault:${id}`
 export const historyKey = (id) => `history:${id}`
+export const passwordKey = (id) => `password:${id}`
 export const oauthKey = (state) => `oauth:${state}`
 
 /** URL-safe random token. 32 bytes is well past guessing range. */

@@ -7,6 +7,7 @@
 // API keys never reach this endpoint: the client sends only the finished text.
 
 import { isSameOriginBrowserRequest } from '../_lib/gate.js'
+import { makeFloodBrake } from '../_lib/ratelimit.js'
 
 const MAX_BYTES = 100_000
 const MAX_FIELD = 40_000
@@ -29,25 +30,10 @@ const json = (body, status = 200) =>
 // for what this catches and does not catch. Real per-user quotas arrive with the
 // rate-limiter Durable Object (see the monetization design).
 
-// Best-effort flood brake: per-isolate and per-colo, so a determined distributed
-// attacker walks around it — but it caps what any single address can do to the KV
-// write budget (1000/day on the free plan) between now and the Durable Object.
-const RATE_WINDOW_MS = 60_000
-const RATE_MAX = 6 // shares are a deliberate click; nobody legitimate does 7/min
-const recentHits = new Map()
-function overRateLimit(request) {
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
-  const now = Date.now()
-  const hits = (recentHits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS)
-  hits.push(now)
-  recentHits.set(ip, hits)
-  if (recentHits.size > 5000) {
-    for (const [key, stamps] of recentHits) {
-      if (now - stamps[stamps.length - 1] >= RATE_WINDOW_MS) recentHits.delete(key)
-    }
-  }
-  return hits.length > RATE_MAX
-}
+// Flood brake (see functions/_lib/ratelimit.js for the shared per-isolate,
+// per-colo mechanics): caps what any single address can do to the KV write
+// budget (1000/day on the free plan) between now and the Durable Object.
+const overRateLimit = makeFloodBrake({ windowMs: 60_000, max: 6 }) // shares are a deliberate click; nobody legitimate does 7/min
 
 /** Unguessable id — this is what makes an unlisted link unlisted. */
 function makeId() {

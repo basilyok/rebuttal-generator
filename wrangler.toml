@@ -11,7 +11,7 @@ binding = "SHARES"
 id = "3ba59116bf3a4f1190b27e16616d9f8e"
 
 # Accounts: sessions, profiles, language preference, and the ENCRYPTED key vault.
-# Keys are prefixed — session:<id>, user:<id>, vault:<id>, oauth:<state>.
+# Keys are prefixed — session:<id>, user:<id>, vault:<id>, oauth:<state>, password:<id>.
 #
 # The vault entries hold ciphertext only. The encryption key is derived in the
 # user's browser from a passphrase this server never receives, so a dump of this
