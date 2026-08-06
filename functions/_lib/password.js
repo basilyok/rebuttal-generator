@@ -89,15 +89,15 @@ function timingSafeEqual(a, b) {
  * automatically, for free. A v2 record SHAPE does not — if hashAuth() ever
  * grows a new field, dummyRecord() needs a matching hand-edit, same as any
  * other place that builds a record literal. The shape test in
- * password.test.mjs (below) catches drift in the fields that exist today;
- * it cannot catch a field neither side has been taught about yet.
+ * tests/password.test.mjs catches drift in the fields that exist today; it
+ * cannot catch a field neither side has been taught about yet.
  *
- * Trap this invites: bumping SERVER_ITERATIONS above verifyAuth's 100,000
- * ceiling does NOT show up as a drift between real and dummy records — both
- * sides move together, so the shape test still passes — but it breaks every
- * login, real and dummy alike, because verifyAuth rejects both once
- * iterations exceeds the ceiling. See the ceiling-headroom assertion in
- * password.test.mjs.
+ * Trap this invites: bumping SERVER_ITERATIONS above verifyAuth's ceiling
+ * (currently 15,000 — see below) does NOT show up as a drift between real
+ * and dummy records — both sides move together, so the shape test still
+ * passes — but it breaks every login, real and dummy alike, because
+ * verifyAuth rejects both once iterations exceeds the ceiling. See the
+ * ceiling-headroom assertion in tests/password.test.mjs.
  */
 export function dummyRecord() {
   return {
@@ -122,9 +122,22 @@ export async function verifyAuth(record, authHashBytes) {
   const iterations = Number.isInteger(record?.iterations) ? record.iterations : 0
   // Upper bound is headroom for a future re-hash upgrade (a record migrated to
   // more rounds than SERVER_ITERATIONS currently mints), not a security
-  // boundary — 100,000 rounds is still well inside the CPU budget. Without it,
-  // a stored value like 1e21 passes Number.isInteger and burns the isolate.
-  if (!salt || !expected || iterations < 1 || iterations > 100_000) return false
+  // boundary. Without it, a stored value like 1e21 passes Number.isInteger and
+  // burns the isolate.
+  //
+  // 15,000 was chosen by measurement, not guessed: this deployment is on
+  // Cloudflare's free plan, whose CPU-time limit is 10ms per request
+  // (Workers docs; Pages Functions run on Workers and draw the same quota —
+  // confirmed against developers.cloudflare.com, not assumed). A single
+  // PBKDF2-SHA256 derivation at 15,000 rounds measured ~6.2ms on the
+  // machine used to check this; at 20,000 rounds it was ~8.3ms, and at
+  // 100,000 rounds (the previous ceiling) it was ~40ms — 4x the ENTIRE
+  // per-request budget on its own, before any other work in the request.
+  // 15,000 leaves real headroom (~3.8ms) for the rest of the request's CPU
+  // time and for edge hardware slower than the measuring machine; a
+  // "sanity cap" set above what the runtime can actually execute is not a
+  // sanity cap, it is a way to turn a future re-hash upgrade into an outage.
+  if (!salt || !expected || iterations < 1 || iterations > 15_000) return false
   // record.version is informational for now — PASSWORD_RECORD_VERSION (1) is
   // the only version that has ever existed. When a v2 lands, branch on it here
   // instead of assuming v1 logic fits every record, or v2 records fail closed

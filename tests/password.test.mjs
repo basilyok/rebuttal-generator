@@ -76,22 +76,31 @@ test('malformed stored records verify false, never throw', async () => {
 })
 
 // The obvious way to test the ceiling — tamper a well-formed record's
-// iterations to something over 100_000 — doesn't distinguish "rejected by the
-// ceiling" from "rejected because the digest no longer matches at that count"
-// (PBKDF2 output at 100_000 rounds and at 100_001 rounds are unrelated
-// values). Only a record whose digest is genuinely correct at its stated
-// count can isolate the ceiling: both digests below are real PBKDF2 outputs,
-// computed independently with node:crypto, so the *only* thing that can make
-// the second assertion return false is the iterations > 100_000 guard itself.
+// iterations to something over the ceiling — doesn't distinguish "rejected
+// by the ceiling" from "rejected because the digest no longer matches at
+// that count" (PBKDF2 output at 15,000 rounds and at 15,001 rounds are
+// unrelated values). Only a record whose digest is genuinely correct at its
+// stated count can isolate the ceiling: both digests below are real PBKDF2
+// outputs, computed independently with node:crypto, so the *only* thing
+// that can make the second assertion return false is the
+// iterations > 15_000 guard itself.
+//
+// The ceiling is 15,000, not 100,000 — measured, not guessed: this
+// deployment is on Cloudflare's free plan (10ms CPU-time budget per
+// request; confirmed against current Workers/Pages docs, not assumed), and
+// a single PBKDF2-SHA256 derivation at 100,000 rounds measured ~40ms on the
+// machine used to check this — 4x the entire per-request budget on its
+// own. See password.js's comment at this exact guard for the full
+// measurement (15,000 rounds ≈ 6.2ms, 20,000 ≈ 8.3ms).
 test('the iteration ceiling refuses a record that would otherwise verify', async () => {
   const authHash = new Uint8Array(32).fill(7)
   const salt = 'c2FsdHNhbHRzYWx0c2FsdA=='
   assert.equal(
-    await verifyAuth({ salt, hash: '+2IQ6xPwXC+ZMPLKy7ESRTswEDBkAaBW97XojOKkG+E=', iterations: 100_000, version: 1 }, authHash),
+    await verifyAuth({ salt, hash: 'ljj4ovlWVBMhOHkj7iTpiCxTHw1HscfMdy+HC1ihLT4=', iterations: 15_000, version: 1 }, authHash),
     true
   )
   assert.equal(
-    await verifyAuth({ salt, hash: 'TZes1AjgL8lSxKUGHSnpZw14AhMYa1iNndTGxWswJe4=', iterations: 100_001, version: 1 }, authHash),
+    await verifyAuth({ salt, hash: 'sZ999KDt8ExKVNKCXt1ls0S6YAZqSoNRDfKZX8cUsyw=', iterations: 15_001, version: 1 }, authHash),
     false
   )
 })
@@ -118,7 +127,7 @@ test('dummyRecord matches the shape of a freshly-minted hashAuth record', async 
   assert.equal(dummy.version, real.version)
   // What actually keeps verifyAuth from short-circuiting BEFORE it runs
   // PBKDF2 is narrower than "looks like a digest": salt and hash must both
-  // decode as base64, and iterations must be an integer in [1, 100000] (see
+  // decode as base64, and iterations must be an integer in [1, 15000] (see
   // password.js's verifyAuth). Digest LENGTH is not part of that gate — it
   // is compared only inside timingSafeEqual, AFTER the derivation already
   // ran — so a dummy with a short or oddly-sized hash would still cost a
@@ -126,23 +135,23 @@ test('dummyRecord matches the shape of a freshly-minted hashAuth record', async 
   // salt/hash both decode successfully, and its iterations are in range.
   assert.notEqual(fromBase64(dummy.salt), null)
   assert.notEqual(fromBase64(dummy.hash), null)
-  assert.ok(dummy.iterations >= 1 && dummy.iterations <= 100_000)
+  assert.ok(dummy.iterations >= 1 && dummy.iterations <= 15_000)
 })
 
 // The shape test above cannot catch this specific regression: if
-// SERVER_ITERATIONS is ever bumped above verifyAuth's 100,000 ceiling,
+// SERVER_ITERATIONS is ever bumped above verifyAuth's 15,000 ceiling (see
+// password.js's measured, free-plan-CPU-budget rationale for that number),
 // dummyRecord() and a fresh hashAuth() record move together (both carry the
 // same, now-too-high iterations value), so their shapes still match and
 // that test still passes — right up until every login breaks, because
 // verifyAuth rejects ANY record whose iterations exceeds the ceiling, real
-// or dummy alike (see password.js's literal 100_000). This pins the
-// relationship directly: SERVER_ITERATIONS (read off a fresh hashAuth()
-// record, since the constant itself isn't exported) must stay strictly
-// inside that ceiling.
+// or dummy alike. This pins the relationship directly: SERVER_ITERATIONS
+// (read off a fresh hashAuth() record, since the constant itself isn't
+// exported) must stay strictly inside that ceiling.
 test('SERVER_ITERATIONS stays inside verifyAuth\'s ceiling', async () => {
   const real = await hashAuth(new Uint8Array(32).fill(4))
   assert.ok(
-    real.iterations < 100_000,
-    `SERVER_ITERATIONS (${real.iterations}) must stay strictly below verifyAuth's 100,000 ceiling, or every login (real and dummy alike) starts failing closed`
+    real.iterations < 15_000,
+    `SERVER_ITERATIONS (${real.iterations}) must stay strictly below verifyAuth's 15,000 ceiling, or every login (real and dummy alike) starts failing closed`
   )
 })

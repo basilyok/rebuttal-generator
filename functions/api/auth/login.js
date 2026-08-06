@@ -23,11 +23,12 @@ const MAX_BODY_BYTES = 4_096
 // ALSO cost a second write every time, unconditionally, because login called
 // upsertUser() the same way the Google callback does. But unlike Google,
 // login carries no fresh profile fields (no name/email/picture from a login
-// attempt) — that write only ever refreshed `lastSeenAt`, a field nothing in
-// this repo reads (grep it: functions/api/prefs.js:42 also writes it, and
-// there are zero readers). So it was a pure write-budget cost for no
-// observable benefit. refreshAfterMs makes upsertUser() a no-op read when the
-// existing record is already fresh — see functions/_lib/session.js.
+// attempt) — that write only ever refreshed `lastSeenAt`, a field with no
+// consumer other than the staleness guard right below (functions/api/prefs.js:42
+// also writes it, on an unrelated path). So the write was pure write-budget
+// cost for no observable benefit. refreshAfterMs makes upsertUser() a no-op
+// read when the existing record is already fresh — see
+// functions/_lib/session.js.
 //
 // Net KV-write cost of a successful login: 1 row (session only) whenever the
 // account was already touched within the last ~24h — which includes the
@@ -41,41 +42,69 @@ const REFRESH_AFTER_MS = 24 * 60 * 60 * 1000 // A placeholder, not a reasoned fi
 // Per IP, deliberately NOT per username: a per-username throttle would let
 // anyone lock a victim out by failing logins on their behalf.
 //
-// This is calibrated on writes, not on guessing. What actually makes online
-// guessing hopeless here is NOT the PBKDF2 round counts — an attacker
-// talking to this endpoint submits authHash directly, so the client's
-// 600,000 rounds are never in their path, and the server's own re-hash is
-// only 1,000 rounds, deliberately cheap (see password.js's header comment:
-// the re-hash exists to make a KV dump non-replayable, not to slow
-// guessing). What actually makes guessing hopeless is that authHash is
-// itself a uniform 256-bit value (password.js:5-8) — there is no dictionary
-// or human pattern to exploit, only a flat 2^256 search space, so a per-IP
-// attempt cap adds essentially nothing on top of that. What THIS brake
-// actually bounds is the free plan's 1000-writes/day KV budget. A FAILED
-// login costs zero writes (both failure paths return before any write — see
-// the oracle-property comment below), so the only writes that matter here
-// are from a caller who keeps succeeding, e.g. one IP hammering its OWN
-// valid account: at the old 10/min cap, with the old always-write
-// upsertUser() call, that was 10 x 2 = 20 writes/min = 1200/hour — over
-// budget in under an hour, which is the failure this brake exists to
-// prevent. At 5/5min with the write-skip above, that same sustained pattern
-// costs roughly 1 write/attempt in steady state (occasional 2-write hits,
-// when a gap exceeds ~24h, are a rounding error against the volume below) —
-// about 5 x 12 x 24 = 1440 writes/day if one address never stops. That
-// number is a FLOOR, not a cap: the brake is per-isolate and per-colo (see
-// functions/_lib/ratelimit.js), so a caller reaching multiple edge locations
-// clears multiple independent 5/5min buckets in parallel — real damage can
-// exceed this. Even at just the floor, 1440 against a 1000/day budget is
-// 144% of it: one address running flat out exhausts the ENTIRE daily budget
-// in roughly 17 hours (1000 writes / 60 writes-per-hour), not a slice of it.
-// The session write is irreducible per login; this brake does not eliminate
-// the problem, it narrows the window from under an hour to about seventeen.
-// The correct fix is per-caller quota enforcement in the rate-limiter
-// Durable Object this project already has (the LIMITER service binding —
-// see limiter/src/index.js and functions/api/generate.ts's use of it) —
-// deliberately not wired up here in v1; tracked as an explicit v2 item in
-// the plan (docs/superpowers/plans/2026-08-05-password-accounts.md). This
-// brake is a stopgap against the worst, easiest case, not the real control.
+// This brake is real, load-bearing defense against password guessing — not
+// merely a write-budget stopgap. (This paragraph has been rewritten twice
+// before and been wrong both times, including one version that dismissed
+// the brake's guessing-resistance value entirely. If you're about to touch
+// this again: verify the mechanism against src/account.ts and password.js
+// before you change the words.) The KDF salt is
+// 'rebuttal|v1|' + normalizeUsername(username) (src/account.ts) — entirely
+// public and derivable from nothing but a username, with no server-side
+// pepper. So a rational online attacker does NOT search authHash's raw
+// 2^256 space; they guess PASSWORDS — computing
+// masterKey = PBKDF2(guess, salt, 600k) then authHash = PBKDF2(masterKey,
+// guess, 1) themselves (exactly what deriveCredentials() runs client-side),
+// then POSTing the result here. That means the 600,000 client rounds ARE
+// fully in the attacker's path, paid once per candidate: measured directly
+// against deriveCredentials() (node --import tsx, this machine),
+// ~254ms/candidate, ~4 guesses/sec/core. That cost — not this brake, and
+// not the server's own re-hash — is the primary defense against a strong
+// password. SERVER_ITERATIONS = 1,000 adds only ~1ms on top of a
+// derivation that already cost ~254ms; it is real for making a KV dump
+// non-replayable (see password.js's header comment), not for slowing an
+// online guesser.
+//
+// So why does a per-IP cap on top of a ~4-guesses/sec/core wall matter?
+// Because PASSWORD_MIN_LENGTH (10 chars, src/account.ts) is enforced
+// CLIENT-SIDE ONLY — register.js's own header comment says so explicitly —
+// so nothing stops a caller who skips the browser and talks to this API
+// directly from registering a short, dictionary-guessable password. For
+// that account the 600k-round wall still taxes every guess, but a weak
+// enough password can sit inside a small enough dictionary that "~4/sec"
+// adds up. This brake is the only server-side limit on how many candidates
+// one address can throw at any single password here: 5 per 5 minutes caps
+// one IP at roughly 1440 login submissions/day, all of which could be aimed
+// at one account.
+//
+// It also bounds something unrelated: the free plan's 1000-writes/day KV
+// budget. A FAILED login costs zero writes (both failure paths return
+// before any write — see the oracle-property comment below), so the only
+// writes that matter here are from a caller who keeps succeeding, e.g. one
+// IP hammering its OWN valid account: at the old 10/min cap, with the old
+// always-write upsertUser() call, that was 10 x 2 = 20 writes/min =
+// 1200/hour — over budget in under an hour, which is one of the failures
+// this brake exists to prevent. At 5/5min with the write-skip above, that
+// same sustained pattern costs roughly 1 write/attempt in steady state
+// (occasional 2-write hits, when a gap exceeds ~24h, are a rounding error
+// against the volume below) — about 5 x 12 x 24 = 1440 writes/day if one
+// address never stops. That number is a FLOOR, not a cap: the brake is
+// per-isolate and per-colo (see functions/_lib/ratelimit.js), so a caller
+// reaching multiple edge locations clears multiple independent 5/5min
+// buckets in parallel — real damage can exceed this. Even at just the
+// floor, 1440 against a 1000/day budget is 144% of it: one address running
+// flat out exhausts the ENTIRE daily budget in roughly 17 hours (1000
+// writes / 60 writes-per-hour), not a slice of it. The session write is
+// irreducible per login; this brake does not eliminate that half of the
+// problem, it narrows the window from under an hour to about seventeen. The
+// correct fix for the write-budget half is per-caller quota enforcement in
+// the rate-limiter Durable Object this project already has (the LIMITER
+// service binding — see limiter/src/index.js and
+// functions/api/generate.ts's use of it) — deliberately not wired up here
+// in v1; tracked as an explicit v2 item in the plan
+// (docs/superpowers/plans/2026-08-05-password-accounts.md). For the
+// write-budget problem this brake is a stopgap against the worst, easiest
+// case. For the guessing problem above, it is not a stopgap — it is the
+// actual control, for as long as 5/5min per IP holds.
 //
 // Ordering note: like register.js, this checks the brake AFTER body
 // parsing and validation, not before — the inverse of share.js's order

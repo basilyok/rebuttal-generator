@@ -101,12 +101,14 @@ export async function onRequestPost({ request, env }) {
 
   // Test-only escape hatch: tests/auth-endpoints.test.mjs re-runs against the
   // same long-lived `wrangler pages dev` process, and local dev never sends
-  // CF-Connecting-IP, so every caller (the suite, the maintainer's browser,
-  // anything else hitting localhost) shares this brake's one "unknown"
-  // bucket — a second or third consecutive run would otherwise trip it. Same
-  // pattern as generate.ts's INSTANT_TEST_ECHO gate: set via a gitignored
-  // .dev.vars file, and production never sets it, so real traffic always
-  // passes through this brake.
+  // CF-Connecting-IP (verified directly: a throwaway handler under a running
+  // `wrangler pages dev` logged `request.headers.get('CF-Connecting-IP')` as
+  // null for a plain local request), so every caller (the suite, the
+  // maintainer's browser, anything else hitting localhost) shares this
+  // brake's one "unknown" bucket — a second or third consecutive run would
+  // otherwise trip it. Same pattern as generate.ts's INSTANT_TEST_ECHO gate:
+  // set via a gitignored .dev.vars file, and production never sets it, so
+  // real traffic always passes through this brake.
   if (!env.AUTH_TEST_BYPASS_RATE_LIMIT && overRateLimit(request)) {
     return jsonResponse({ error: 'Too many attempts — wait a few minutes and try again.', code: 'rate-limited' }, 429)
   }
