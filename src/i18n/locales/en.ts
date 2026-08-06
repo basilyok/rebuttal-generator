@@ -75,6 +75,8 @@ const en: Record<string, string> = {
   'account.rateLimited': 'Too many attempts — wait a minute and try again.',
   'account.emailInvalid': 'That email address does not look right.',
   'account.serverError': 'Something went wrong on our side. Please try again in a moment.',
+  'account.signOutFirst':
+    'That is a different account. To keep accounts separate, this device has been signed out and its synced history cleared — sign in again to continue.',
   'account.authError': 'Sign-in did not complete. Please try again.',
 
   // --- language --------------------------------------------------------------

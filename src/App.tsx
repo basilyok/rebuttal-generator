@@ -400,21 +400,28 @@ export default function App() {
    * login-derived key IS the vault key. Quietly does nothing when there are no
    * keys to save yet or no key survived (blocked IndexedDB + reload); the next
    * key change or sign-in repairs both.
+   *
+   * `isStale` mirrors onVaultOpened's: the vault effect passes its cancelled
+   * flag so a sign-out (or account switch) mid-seal neither uploads a vault
+   * for the departed session nor writes state over the new one's.
    */
-  const setupLocalVault = async () => {
+  const setupLocalVault = async (isStale: () => boolean = () => false) => {
     const key = await localVaultKey()
     const bundle = collectKeyBundle()
+    if (isStale()) return
     if (!key || !Object.keys(bundle).length) {
       setVaultState('none')
       return
     }
     try {
       const sealed = await sealJson(key, bundle)
+      if (isStale()) return
       await saveVault(sealed)
+      if (isStale()) return
       setVaultBlob(sealed)
       setVaultState('unlocked')
     } catch {
-      setVaultState('none')
+      if (!isStale()) setVaultState('none')
     }
   }
 
@@ -434,7 +441,7 @@ export default function App() {
         if (!blob) {
           // A password account seals silently: login already produced the key,
           // so the passphrase-setup dialog would be a second secret for nothing.
-          if (auth.user?.provider === 'local') void setupLocalVault()
+          if (auth.user?.provider === 'local') void setupLocalVault(() => cancelled)
           else setVaultState('none')
           return
         }
@@ -1069,6 +1076,26 @@ export default function App() {
         authDialog === 'signup'
           ? await registerAccount(username, password, email)
           : await loginLocal(username, password)
+      // REFUSE a different account while one is signed in. By this point the
+      // server has already minted the new session and its Set-Cookie has
+      // replaced the signed-in user's cookie — but nothing on this device has
+      // been handed over yet. Proceeding would: adopt the new key, refire the
+      // vault effect under the new user, and either seal collectKeyBundle()
+      // (the signed-in user's API keys, still in localStorage) into the new
+      // account's vault, or merge this device's un-wiped history into the new
+      // account's — both readable by whoever owns the new credentials. That
+      // is the account-switch leak, reached without any sign-out. The only
+      // honest recovery is a full reset: handleSignOut() destroys the session
+      // the cookie now holds (the just-minted one) and runs the same device
+      // hygiene a deliberate sign-out runs. The original session cookie is
+      // already gone (overwritten), so "still signed in as the old user"
+      // stopped being true the moment the response landed.
+      if (auth.user && result.user.id !== auth.user.id) {
+        await handleSignOut()
+        setAuthDialog('signin')
+        setAuthError(t('account.signOutFirst'))
+        return
+      }
       // Login IS unlock: the derived master key becomes this device's vault key
       localKeyRef.current = await adoptKey(result.masterKeyBytes)
       // Signed-in-but-locked (key lost to a blocked IndexedDB + reload): the
@@ -1084,7 +1111,13 @@ export default function App() {
       setAuthDialog(null)
       // Refetch rather than trusting the response: one source of truth for auth
       // state, and the change of auth.user.id is what fires the vault effect.
-      setAuth(await fetchAuthState())
+      const fresh = await fetchAuthState()
+      // fetchAuthState never throws — it swallows network failures into
+      // SIGNED_OUT. Right after a successful login that would present as
+      // "sign-in failed" while the session cookie is in fact set, so fall
+      // back to the user the register/login response itself vouched for.
+      if (fresh.user) setAuth(fresh)
+      else setAuth((current) => ({ ...current, user: result.user }))
     } catch (err) {
       setAuthError(t(authErrorKey(err)))
     } finally {
@@ -1297,11 +1330,21 @@ export default function App() {
 
       {authDialog && (
         <AuthDialog
+          // Keyed on the account context: when the refusal path signs the
+          // user out while the dialog stays mounted, the key change remounts
+          // it fresh (editable empty username) instead of leaving the old
+          // account's read-only name and typed password in component state.
+          key={auth.user?.id ?? 'signed-out'}
           t={t}
           mode={authDialog}
           hasGoogle={auth.providers.includes('google')}
           busy={authBusy}
           error={authError}
+          // The dialog can only be open while signed in via the locked-vault
+          // unlock route (the bar's sign-in button and the Instant CTA both
+          // require auth.user to be null), so a signed-in local user here
+          // means "re-enter your password": fix the username to the account's.
+          fixedUsername={auth.user?.provider === 'local' ? auth.user.name : undefined}
           onModeChange={(m) => {
             setAuthError('')
             setAuthDialog(m)

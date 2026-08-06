@@ -1045,10 +1045,18 @@ h1 {
   gap: 4px;
 }
 
-/* Auth dialog: mostly VaultDialog's clothes; only the divider is new. */
+/* Auth dialog: mostly VaultDialog's clothes; the Google button and the divider
+   are the new pieces. */
 .auth-google {
   width: 100%;
   margin-bottom: 4px;
+}
+
+/* The unlock route fixes the username to the signed-in account's; make the
+   field read as informational rather than as an input that ignores typing. */
+.auth-dialog .text-input[readonly] {
+  background: #eef1f6;
+  color: #4b5563;
 }
 
 .auth-divider {

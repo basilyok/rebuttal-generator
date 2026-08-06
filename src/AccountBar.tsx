@@ -89,14 +89,26 @@ export function AccountBar({
           ) : (
             <div
               className="signin-cluster"
-              onMouseEnter={() => setShowBenefits(true)}
-              onMouseLeave={() => setShowBenefits(false)}
+              // Gated on a real mouse pointer: a tap on a touch screen fires
+              // compatibility hover events, so an ungated enter-handler would
+              // open the popover a beat before the ⓘ click toggled it closed
+              // again — net closed on essentially every fresh tap.
+              onPointerEnter={(e) => e.pointerType === 'mouse' && setShowBenefits(true)}
+              onPointerLeave={(e) => e.pointerType === 'mouse' && setShowBenefits(false)}
             >
-              <button className="button button-secondary sign-in-button" onClick={onSignInClick}>
+              <button
+                className="button button-secondary sign-in-button"
+                onClick={() => {
+                  // Hover leaves the popover open; do not let it float over the
+                  // dialog this click just opened.
+                  setShowBenefits(false)
+                  onSignInClick()
+                }}
+              >
                 {t('account.signInOrUp')}
               </button>
-              {/* Hover opens the popover for mouse users; this toggle is the
-                  keyboard and touch path to the same content. */}
+              {/* Mouse users get the popover on hover (above); this click
+                  toggle is the touch and keyboard path to the same content. */}
               <button
                 className="link-button benefits-toggle"
                 aria-expanded={showBenefits}
