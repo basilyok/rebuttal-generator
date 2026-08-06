@@ -1,12 +1,22 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { hashAuth, verifyAuth, fromBase64 } from '../functions/_lib/password.js'
+import { hashAuth, verifyAuth, fromBase64, PASSWORD_RECORD_VERSION } from '../functions/_lib/password.js'
 
 const AUTH_HASH = crypto.getRandomValues(new Uint8Array(32))
 
 test('hash then verify round-trips', async () => {
   const record = await hashAuth(AUTH_HASH)
   assert.equal(await verifyAuth(record, AUTH_HASH), true)
+})
+
+// The round-trip test above cannot catch SERVER_ITERATIONS being silently
+// weakened: verifyAuth trusts whatever iterations value is stored in the
+// record, not the constant, so hashing and verifying would still agree at
+// iterations=1. Pin the value a fresh hashAuth() call actually produces.
+test('a fresh record uses the documented iteration count and version', async () => {
+  const record = await hashAuth(AUTH_HASH)
+  assert.equal(record.iterations, 1_000)
+  assert.equal(record.version, PASSWORD_RECORD_VERSION)
 })
 
 test('a different authHash fails verification', async () => {
