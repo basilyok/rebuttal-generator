@@ -53,17 +53,17 @@ Two deliberate deviations from the spec, both narrowings:
 - Test: `tests/account.test.ts`
 
 **Acceptance Criteria:**
-- [ ] `deriveCredentials` is deterministic, and changes with either username or password
-- [ ] Username case/whitespace do not change the derived values
-- [ ] `authHash` ≠ base64 of `masterKeyBytes`
-- [ ] Vault sealed via `adoptKey` + `sealJson` opens after re-derivation, fails with wrong password
-- [ ] `npm run build` passes (tsc + vite)
+- [x] `deriveCredentials` is deterministic, and changes with either username or password
+- [x] Username case/whitespace do not change the derived values
+- [x] `authHash` ≠ base64 of `masterKeyBytes`
+- [x] Vault sealed via `adoptKey` + `sealJson` opens after re-derivation, fails with wrong password
+- [x] `npm run build` passes (tsc + vite)
 
 **Verify:** `node --import tsx --test tests/account.test.ts` → all pass (expect a few seconds: each derivation really runs 600k PBKDF2 rounds)
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/account.test.ts`:
 
@@ -125,12 +125,12 @@ test('normalizeUsername lowercases and trims', () => {
 })
 ```
 
-- [ ] **Step 2: Run it to see it fail**
+- [x] **Step 2: Run it to see it fail**
 
 Run: `node --import tsx --test tests/account.test.ts`
 Expected: FAIL — cannot resolve `../src/account`.
 
-- [ ] **Step 3: Create `src/account.ts`**
+- [x] **Step 3: Create `src/account.ts`**
 
 ```ts
 // Password-account client: key derivation and the register/login calls.
@@ -258,7 +258,7 @@ export async function loginLocal(username: string, password: string): Promise<Au
 }
 ```
 
-- [ ] **Step 4: Add the two vault exports**
+- [x] **Step 4: Add the two vault exports**
 
 In `src/vault.ts`, directly after the `openJson` function (line ~244), add:
 
@@ -289,15 +289,15 @@ export async function unlockWithKey(blob: VaultBlob, key: CryptoKey): Promise<Ke
 
 (`cacheKey` degrades to a no-op where IndexedDB is blocked — `idb()` already swallows that — so `adoptKey` still returns a usable key for the session.)
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `node --import tsx --test tests/account.test.ts`
-Expected: 5 pass, 0 fail.
+Expected: 5 pass, 0 fail. (Extended in code review to 13 pass, 0 fail — see the known-answer, wire-safety, and non-extractability tests added to `tests/account.test.ts`.)
 
 Run: `npm run build`
 Expected: clean tsc + vite build.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/account.ts src/vault.ts tests/account.test.ts

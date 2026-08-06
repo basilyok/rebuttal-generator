@@ -19,8 +19,24 @@
 
 import type { AccountUser } from './auth'
 
-/** Matches PBKDF2_ITERATIONS in src/vault.ts — same OWASP guidance, same trade. */
+/**
+ * Frozen, not tunable. This value is baked into every stored authHash and every
+ * sealed vault blob the moment an account is created. Raising it later — even
+ * to track future OWASP guidance — does not take effect for existing accounts;
+ * it silently produces a different masterKey than the one the server verified
+ * against, locking the account out with no password reset to recover with.
+ * Changing it for real means a migration: re-derive under the new value at a
+ * known point (e.g. next successful login) and re-seal the vault, not a
+ * one-line bump here.
+ */
 const CLIENT_ITERATIONS = 600_000
+/**
+ * The "v1" is not decorative: it is the version of this exact derivation
+ * (this salt shape + CLIENT_ITERATIONS + the authHash construction below). A
+ * "v2" would derive a different masterKey for every current user, so shipping
+ * one requires the same migration as changing CLIENT_ITERATIONS — re-derive
+ * and re-seal — not a find-and-replace of the string.
+ */
 const SALT_PREFIX = 'rebuttal|v1|'
 
 export const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,32}$/
@@ -62,7 +78,16 @@ async function pbkdf2(secret: BufferSource, salt: BufferSource, iterations: numb
 }
 
 export interface DerivedCredentials {
-  /** Becomes this device's vault key. Never leaves the browser. */
+  /**
+   * Becomes this device's vault key. Never leaves the browser. Deliberately
+   * left un-zeroed after use: by the time a caller could `.fill(0)` it, the
+   * runtime (String/TypedArray internals, GC copies, JIT temporaries) may
+   * already hold copies script has no way to reach, so scrubbing this one
+   * array is theatre, not a guarantee. The real mitigation is keeping the
+   * window this exists as plain bytes short — adoptKey() in src/vault.ts
+   * immediately imports it as a non-extractable CryptoKey and nothing should
+   * hold a reference to these bytes past that call.
+   */
   masterKeyBytes: Uint8Array
   /** The only secret sent to the server. A one-way function of masterKey. */
   authHash: string
@@ -84,6 +109,12 @@ export async function deriveCredentials(username: string, password: string): Pro
 
 // --- server transport -------------------------------------------------------
 
+/**
+ * user is a plain loggable record; masterKeyBytes is the raw secret that opens
+ * the vault. This type carries both together for caller convenience, but that
+ * means it must never be logged, serialized, or persisted as a whole — only
+ * masterKeyBytes' single intended trip is into adoptKey().
+ */
 export interface AuthSuccess {
   user: AccountUser
   masterKeyBytes: Uint8Array
@@ -104,12 +135,20 @@ async function postAuth(path: string, body: Record<string, string>): Promise<Acc
   }
   if (data?.code === 'username-taken') throw new UsernameTakenError()
   if (data?.code === 'bad-credentials') throw new BadCredentialsError()
+  // Matched on status, not data?.code === 'rate-limited': a 429 thrown by an
+  // edge proxy or CDN in front of the API may carry no JSON body at all (or
+  // an HTML one), so data?.code would simply be undefined and this case
+  // would fall through to a generic AccountError instead of RateLimitedError.
   if (response.status === 429) throw new RateLimitedError()
   throw new AccountError(typeof data?.error === 'string' ? data.error : 'auth-failed')
 }
 
 export async function register(username: string, password: string, email: string): Promise<AuthSuccess> {
   const { masterKeyBytes, authHash } = await deriveCredentials(username, password)
+  // Sends the display-case username (only trimmed, not lowercased): the server
+  // wants to preserve what the user actually typed for display purposes and
+  // normalizes independently for the lookup/uniqueness check. Asymmetric with
+  // loginLocal below on purpose.
   const body: Record<string, string> = { username: username.trim(), authHash }
   if (email.trim()) body.email = email.trim()
   const user = await postAuth('/api/auth/register', body)
@@ -118,6 +157,9 @@ export async function register(username: string, password: string, email: string
 
 export async function loginLocal(username: string, password: string): Promise<AuthSuccess> {
   const { masterKeyBytes, authHash } = await deriveCredentials(username, password)
-  const user = await postAuth('/api/auth/login', { username: username.trim(), authHash })
+  // normalizeUsername(), not .trim(): login has no display purpose, so this
+  // makes the helper the single source of the normalization contract rather
+  // than re-deriving "trim + lowercase" ad hoc at each call site.
+  const user = await postAuth('/api/auth/login', { username: normalizeUsername(username), authHash })
   return { user, masterKeyBytes }
 }
