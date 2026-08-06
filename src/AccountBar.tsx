@@ -24,7 +24,7 @@ interface BarProps {
   onLanguageChange: (language: string) => void
   auth: AuthState
   vaultState: VaultUiState
-  onSignIn: () => void
+  onSignInClick: () => void
   onSignOut: () => void
   onUnlockClick: () => void
 }
@@ -37,10 +37,12 @@ export function AccountBar({
   onLanguageChange,
   auth,
   vaultState,
-  onSignIn,
+  onSignInClick,
   onSignOut,
   onUnlockClick,
 }: BarProps) {
+  const [showBenefits, setShowBenefits] = useState(false)
+
   return (
     <div className="account-bar">
       <div className="language-controls">
@@ -85,9 +87,37 @@ export function AccountBar({
               </button>
             </>
           ) : (
-            <button className="button button-secondary sign-in-button" onClick={onSignIn}>
-              {t('account.signInWithGoogle')}
-            </button>
+            <div
+              className="signin-cluster"
+              onMouseEnter={() => setShowBenefits(true)}
+              onMouseLeave={() => setShowBenefits(false)}
+            >
+              <button className="button button-secondary sign-in-button" onClick={onSignInClick}>
+                {t('account.signInOrUp')}
+              </button>
+              {/* Hover opens the popover for mouse users; this toggle is the
+                  keyboard and touch path to the same content. */}
+              <button
+                className="link-button benefits-toggle"
+                aria-expanded={showBenefits}
+                aria-controls="account-benefits"
+                onClick={() => setShowBenefits((v) => !v)}
+                title={t('account.benefitsTitle')}
+              >
+                ⓘ
+              </button>
+              {showBenefits && (
+                <div id="account-benefits" className="account-benefits" role="note">
+                  <strong>{t('account.benefitsTitle')}</strong>
+                  <ul>
+                    <li>{t('account.benefitsKeys')}</li>
+                    <li>{t('account.benefitsHistory')}</li>
+                    <li>{t('account.benefitsQuota')}</li>
+                    <li>{t('account.benefitsLanguage')}</li>
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

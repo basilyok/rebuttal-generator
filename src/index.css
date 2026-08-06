@@ -1001,6 +1001,74 @@ h1 {
   align-items: center;
 }
 
+/* Sign-in cluster: the button, its ⓘ toggle, and the benefits popover. */
+.signin-cluster {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.benefits-toggle {
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px;
+  color: #6366f1;
+}
+
+.account-benefits {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 30;
+  width: min(320px, 86vw);
+  padding: 12px 14px;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  background: #f5f7ff;
+  box-shadow: 0 8px 24px rgba(49, 46, 129, 0.12);
+  font-size: 13px;
+  color: #374151;
+  text-align: start;
+}
+
+.account-benefits strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #312e81;
+}
+
+.account-benefits ul {
+  margin: 0;
+  padding-inline-start: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+/* Auth dialog: mostly VaultDialog's clothes; only the divider is new. */
+.auth-google {
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  color: #6b7280;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid #c7d2fe;
+}
+
 /* Which language the reply itself will be written in — distinct from the UI
    language, and shown near the input because that is what determines it. */
 .reply-language {

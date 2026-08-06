@@ -9,6 +9,9 @@ import {
   UsernameTakenError,
   BadCredentialsError,
   RateLimitedError,
+  EmailInvalidError,
+  UsernameInvalidError,
+  AuthServerError,
 } from '../src/account'
 import { adoptKey, unlockWithKey, sealJson } from '../src/vault'
 
@@ -202,6 +205,72 @@ test('postAuth maps a 500 with no code to a generic AccountError', async (t) => 
   await assert.rejects(() => loginLocal('someone', 'a password here'), (err: unknown) => {
     assert.equal(err instanceof AccountError, true)
     assert.equal((err as Error).constructor, AccountError) // not one of the typed subclasses
+    return true
+  })
+})
+
+// --- error codes are the whole contract -------------------------------------
+//
+// The endpoints answer with BOTH a machine `code` and a hardcoded English
+// `error` sentence. This app renders twelve locales, so the sentence can never
+// be shown — an unmapped code that fell through to `data.error` would put
+// untranslatable English in front of a user reading Greek. Each case below
+// asserts the code produced its own type AND that the error's message is the
+// code rather than the sentence that arrived alongside it.
+const SERVER_CODES: Array<{ status: number; code: string; error: string; type: Function }> = [
+  // Genuinely reachable from the dialog: it validates the username but not the
+  // email, so a typo'd address is answered by the server, not caught locally.
+  {
+    status: 400,
+    code: 'email-invalid',
+    error: 'That email address does not look right.',
+    type: EmailInvalidError,
+  },
+  // Should be unreachable — the dialog tests USERNAME_PATTERN before submitting
+  // — but "unreachable" describes today's callers, not the wire contract.
+  {
+    status: 400,
+    code: 'username-invalid',
+    error: 'Usernames are 3–32 characters: letters, numbers, - or _.',
+    type: UsernameInvalidError,
+  },
+  // Reachable in production on any KV or crypto failure inside register/login.
+  {
+    status: 500,
+    code: 'server-error',
+    error: 'Something went wrong creating your account — try again.',
+    type: AuthServerError,
+  },
+]
+
+for (const { status, code, error, type } of SERVER_CODES) {
+  test(`postAuth maps ${status} {code: ${code}} to ${type.name} carrying the code, not the server's sentence`, async (t) => {
+    const originalFetch = globalThis.fetch
+    t.after(() => {
+      globalThis.fetch = originalFetch
+    })
+    globalThis.fetch = jsonResponse(status, { error, code })
+    await assert.rejects(() => register('someone', 'a password here', 'not-an-email'), (err: unknown) => {
+      assert.equal((err as Error).constructor, type)
+      // The message is the machine code. Asserting it is NOT `error` as well
+      // would be tautological — these two literals differ by construction.
+      assert.equal((err as Error).message, code)
+      return true
+    })
+  })
+}
+
+test('postAuth never surfaces the server\'s English text for a failure it has no code for', async (t) => {
+  const originalFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = originalFetch
+  })
+  // register.js/login.js answer exactly this — prose, no code — for a body that
+  // is too large, unparseable, or missing authHash.
+  globalThis.fetch = jsonResponse(400, { error: 'Malformed request.' })
+  await assert.rejects(() => loginLocal('someone', 'a password here'), (err: unknown) => {
+    assert.equal((err as Error).constructor, AccountError)
+    assert.equal((err as Error).message, 'auth-failed')
     return true
   })
 })

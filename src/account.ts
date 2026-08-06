@@ -49,6 +49,13 @@ export const PASSWORD_MIN_LENGTH = 10
  */
 export const normalizeUsername = (username: string) => username.trim().toLowerCase()
 
+/**
+ * Every error in this family carries a stable machine code as its `message`,
+ * never a sentence — the same contract src/instant.ts uses. The UI renders
+ * twelve locales, so a human-readable `message` would be an English string
+ * that no translation could reach. Callers switch on the type (or the code)
+ * and look up their own copy; nothing here is ever shown to a user verbatim.
+ */
 export class AccountError extends Error {}
 export class UsernameTakenError extends AccountError {
   constructor() {
@@ -63,6 +70,32 @@ export class BadCredentialsError extends AccountError {
 export class RateLimitedError extends AccountError {
   constructor() {
     super('rate-limited')
+  }
+}
+/**
+ * The email field is the one input the dialog does NOT pre-validate (the
+ * server owns the shape), so this is reached by ordinary typos, not just by
+ * callers bypassing the UI.
+ */
+export class EmailInvalidError extends AccountError {
+  constructor() {
+    super('email-invalid')
+  }
+}
+/**
+ * Should be unreachable from the dialog, which tests USERNAME_PATTERN before
+ * submitting. Mapped anyway: an unmapped code falls through to the server's
+ * English sentence, and "unreachable" is a claim about today's callers.
+ */
+export class UsernameInvalidError extends AccountError {
+  constructor() {
+    super('username-invalid')
+  }
+}
+/** A KV or crypto failure the server caught and shaped (register.js / login.js). */
+export class AuthServerError extends AccountError {
+  constructor() {
+    super('server-error')
   }
 }
 
@@ -133,14 +166,31 @@ async function postAuth(path: string, body: Record<string, string>): Promise<Acc
     if (data?.user) return data.user as AccountUser
     throw new AccountError('malformed-response')
   }
-  if (data?.code === 'username-taken') throw new UsernameTakenError()
-  if (data?.code === 'bad-credentials') throw new BadCredentialsError()
+  // Every code the endpoints emit gets a type. The alternative — falling
+  // through to `data.error` — surfaces the server's hardcoded English sentence
+  // in a twelve-locale app, which is worse than a generic translated message.
+  switch (data?.code) {
+    case 'username-taken':
+      throw new UsernameTakenError()
+    case 'bad-credentials':
+      throw new BadCredentialsError()
+    case 'email-invalid':
+      throw new EmailInvalidError()
+    case 'username-invalid':
+      throw new UsernameInvalidError()
+    case 'server-error':
+      throw new AuthServerError()
+  }
   // Matched on status, not data?.code === 'rate-limited': a 429 thrown by an
   // edge proxy or CDN in front of the API may carry no JSON body at all (or
   // an HTML one), so data?.code would simply be undefined and this case
   // would fall through to a generic AccountError instead of RateLimitedError.
   if (response.status === 429) throw new RateLimitedError()
-  throw new AccountError(typeof data?.error === 'string' ? data.error : 'auth-failed')
+  // Deliberately NOT data.error: the codeless failures (a 400 'Malformed
+  // request.', the 403 same-origin gate, the 501 unconfigured answer) all
+  // carry English prose, and none of them is something a user can act on
+  // differently from any other unexpected failure.
+  throw new AccountError('auth-failed')
 }
 
 export async function register(username: string, password: string, email: string): Promise<AuthSuccess> {
