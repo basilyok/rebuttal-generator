@@ -72,7 +72,7 @@ const en: Record<string, string> = {
   'account.usernameInvalid': 'Usernames are 3–32 characters: letters, numbers, - or _.',
   'account.usernameTaken': 'That username is taken — try another.',
   'account.badCredentials': 'That username and password did not match.',
-  'account.rateLimited': 'Too many attempts — wait a minute and try again.',
+  'account.rateLimited': 'Too many attempts — wait a few minutes and try again.',
   'account.emailInvalid': 'That email address does not look right.',
   'account.serverError': 'Something went wrong on our side. Please try again in a moment.',
   'account.signOutFirst':

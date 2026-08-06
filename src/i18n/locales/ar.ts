@@ -71,7 +71,7 @@ const ar = {
   'account.usernameInvalid': 'اسم المستخدم من 3–32 حرفاً: حروف أو أرقام أو - أو _.',
   'account.usernameTaken': 'هذا الاسم محجوز — جرّب اسماً آخر.',
   'account.badCredentials': 'اسم المستخدم وكلمة المرور غير متطابقين.',
-  'account.rateLimited': 'محاولات كثيرة جداً — انتظر دقيقة ثم حاول مرة أخرى.',
+  'account.rateLimited': 'محاولات كثيرة جداً — انتظر بضع دقائق ثم حاول مرة أخرى.',
   'account.emailInvalid': 'عنوان البريد الإلكتروني هذا لا يبدو صحيحاً.',
   'account.serverError': 'حدث خطأ من جهتنا. حاول مرة أخرى بعد قليل من فضلك.',
   'account.signOutFirst':

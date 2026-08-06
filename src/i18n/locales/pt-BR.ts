@@ -69,7 +69,7 @@ const pt_BR = {
   'account.usernameInvalid': 'Nomes de usuário têm 3–32 caracteres: letras, números, - ou _.',
   'account.usernameTaken': 'Esse nome de usuário já está em uso — tente outro.',
   'account.badCredentials': 'Esse nome de usuário e essa senha não conferem.',
-  'account.rateLimited': 'Tentativas demais — espere um minuto e tente de novo.',
+  'account.rateLimited': 'Tentativas demais — espere alguns minutos e tente de novo.',
   'account.emailInvalid': 'Esse endereço de e-mail não parece certo.',
   'account.serverError': 'Algo deu errado do nosso lado. Tente de novo em instantes.',
   'account.signOutFirst':

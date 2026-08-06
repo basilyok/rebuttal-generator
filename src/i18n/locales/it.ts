@@ -72,7 +72,7 @@ const it = {
   'account.usernameInvalid': 'I nomi utente hanno 3–32 caratteri: lettere, numeri, - o _.',
   'account.usernameTaken': 'Questo nome utente è già in uso — provane un altro.',
   'account.badCredentials': 'Nome utente e password non corrispondono.',
-  'account.rateLimited': 'Troppi tentativi — aspetta un minuto e riprova.',
+  'account.rateLimited': 'Troppi tentativi — aspetta qualche minuto e riprova.',
   'account.emailInvalid': 'Questo indirizzo email non sembra valido.',
   'account.serverError': 'Qualcosa è andato storto da parte nostra. Riprova tra poco.',
   'account.signOutFirst':

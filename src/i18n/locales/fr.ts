@@ -69,7 +69,7 @@ const fr = {
   'account.usernameInvalid': "Les noms d'utilisateur font 3–32 caractères : lettres, chiffres, - ou _.",
   'account.usernameTaken': "Ce nom d'utilisateur est déjà pris — essayez-en un autre.",
   'account.badCredentials': "Ce nom d'utilisateur et ce mot de passe ne correspondent pas.",
-  'account.rateLimited': 'Trop de tentatives — attendez une minute, puis réessayez.',
+  'account.rateLimited': 'Trop de tentatives — attendez quelques minutes, puis réessayez.',
   'account.emailInvalid': 'Cette adresse e-mail ne semble pas valide.',
   'account.serverError': "Quelque chose s'est mal passé de notre côté. Réessayez dans un instant.",
   'account.signOutFirst':

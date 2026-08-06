@@ -72,7 +72,7 @@ const zh_Hans = {
   'account.usernameInvalid': '用户名要 3–32 个字符：字母、数字、- 或 _。',
   'account.usernameTaken': '这个用户名已经有人用了——换一个试试。',
   'account.badCredentials': '这个用户名和密码对不上。',
-  'account.rateLimited': '试的次数太多了——等一分钟再试。',
+  'account.rateLimited': '试的次数太多了——等几分钟再试。',
   'account.emailInvalid': '这个邮箱地址看起来不太对。',
   'account.serverError': '我们这边出了点问题。请过一会儿再试一次。',
   'account.signOutFirst':

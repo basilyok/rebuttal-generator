@@ -71,7 +71,7 @@ const ko = {
   'account.usernameInvalid': '사용자 이름은 3–32자의 영문, 숫자, - 또는 _만 쓸 수 있어요.',
   'account.usernameTaken': '그 사용자 이름은 이미 쓰이고 있어요 — 다른 이름을 골라 주세요.',
   'account.badCredentials': '그 사용자 이름과 비밀번호가 맞지 않았어요.',
-  'account.rateLimited': '시도가 너무 많았어요 — 잠깐 기다렸다가 다시 시도해 주세요.',
+  'account.rateLimited': '시도가 너무 많았어요 — 몇 분 기다렸다가 다시 시도해 주세요.',
   'account.emailInvalid': '이메일 주소가 올바르지 않은 것 같아요.',
   'account.serverError': '저희 쪽에서 문제가 생겼어요. 잠시 후 다시 시도해 주세요.',
   'account.signOutFirst':

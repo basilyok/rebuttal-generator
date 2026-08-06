@@ -31,6 +31,13 @@ interface AuthDialogProps {
    * credentials would mint them a session while this device still holds the
    * signed-in user's data. App's handleAuthSubmit refuses that mismatch as
    * well; this prop closes the accidental version of it.
+   *
+   * That means the unlock dialog must offer NO path that changes accounts —
+   * including Google, which is also hidden when this is set. Do not assume
+   * "the guard covers it": onGoogle is a full-page OAuth redirect, so the
+   * page (and handleAuthSubmit's id check with it) is gone before any result
+   * comes back — whoever completes OAuth lands signed in over this device's
+   * still-unwiped data.
    */
   fixedUsername?: string
   onModeChange: (mode: AuthMode) => void
@@ -95,7 +102,10 @@ export function AuthDialog({
         {isSignup ? t('account.signUpTitle') : t('account.signInTitle')}
       </h3>
 
-      {hasGoogle && (
+      {/* Hidden alongside the username lock: OAuth is a full-page redirect,
+          so it would bypass handleAuthSubmit's account-switch refusal — see
+          the fixedUsername doc comment. */}
+      {hasGoogle && !fixedUsername && (
         <>
           <button type="button" className="button button-secondary auth-google" onClick={onGoogle} disabled={busy}>
             {t('account.continueWithGoogle')}

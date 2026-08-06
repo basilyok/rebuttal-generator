@@ -520,6 +520,22 @@ npm run build
 npm run preview
 ```
 
+### Testing
+
+```bash
+npm run test:offline
+```
+
+runs the nine suites that need nothing but Node — derivation, password
+hashing, rate limiting, prompts, history, Instant-mode units, auth-endpoint
+units, and locale parity. The full `npm test` additionally includes four
+suites that talk to live local servers: start `npx wrangler pages dev dist`
+first (after `npm run build`, and with a `.dev.vars` copied from
+`.dev.vars.example` so re-runs don't trip the auth flood brakes), and for the
+limiter suite run `npx wrangler dev --port 8787` inside `limiter/`. Without
+those servers running, only the four live suites fail — that is the expected
+signal, not a broken checkout.
+
 ## How to Use
 
 1. **Pick an AI**: the collapsed summary names the model and what it is good at; open it to change provider or model. For zero-cost, zero-signup use, pick **Local in-browser (FREE, no key)** — the model downloads once and runs on your GPU

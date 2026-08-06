@@ -72,7 +72,7 @@ const ja = {
   'account.usernameInvalid': 'ユーザー名は 3–32 文字で、使えるのは英字、数字、- か _ です。',
   'account.usernameTaken': 'そのユーザー名はすでに使われています。別の名前を試してみてください。',
   'account.badCredentials': 'そのユーザー名とパスワードは一致しませんでした。',
-  'account.rateLimited': '試行回数が多すぎます。1 分ほど待ってから、もう一度お試しください。',
+  'account.rateLimited': '試行回数が多すぎます。数分待ってから、もう一度お試しください。',
   'account.emailInvalid': 'そのメールアドレスは正しくないようです。',
   'account.serverError': 'こちら側で問題が起きました。少し待ってから、もう一度お試しください。',
   'account.signOutFirst':

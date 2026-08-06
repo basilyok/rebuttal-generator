@@ -44,7 +44,7 @@ const de = {
   'account.usernameInvalid': 'Benutzernamen haben 3–32 Zeichen: Buchstaben, Zahlen, - oder _.',
   'account.usernameTaken': 'Dieser Benutzername ist schon vergeben — probier einen anderen.',
   'account.badCredentials': 'Benutzername und Passwort passen nicht zusammen.',
-  'account.rateLimited': 'Zu viele Versuche — warte eine Minute und versuch es dann noch einmal.',
+  'account.rateLimited': 'Zu viele Versuche — warte ein paar Minuten und versuch es dann noch einmal.',
   'account.emailInvalid': 'Diese E-Mail-Adresse sieht nicht richtig aus.',
   'account.serverError': 'Bei uns ist etwas schiefgelaufen. Versuch es bitte gleich noch einmal.',
   'account.signOutFirst':

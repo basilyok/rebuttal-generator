@@ -68,7 +68,7 @@ const hi = {
   'account.usernameInvalid': 'यूज़रनेम 3–32 अक्षरों का होता है: अक्षर, अंक, - या _।',
   'account.usernameTaken': 'यह यूज़रनेम पहले से लिया हुआ है — कोई और आज़मा लें।',
   'account.badCredentials': 'यह यूज़रनेम और पासवर्ड आपस में मेल नहीं खाए।',
-  'account.rateLimited': 'बहुत सारी कोशिशें हो गईं — एक मिनट रुककर फिर कोशिश करें।',
+  'account.rateLimited': 'बहुत सारी कोशिशें हो गईं — कुछ मिनट रुककर फिर कोशिश करें।',
   'account.emailInvalid': 'यह ईमेल पता ठीक नहीं लग रहा।',
   'account.serverError': 'हमारी तरफ़ से कुछ गड़बड़ हो गई। थोड़ी देर बाद फिर कोशिश करें।',
   'account.signOutFirst':
