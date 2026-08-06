@@ -1,10 +1,12 @@
 // Direct-import tests for functions/api/auth/register.js and login.js,
-// covering two things the HTTP-level suite (tests/auth-endpoints.test.mjs)
+// covering things the HTTP-level suite (tests/auth-endpoints.test.mjs)
 // cannot reach cleanly: actually tripping a brake (doing that against the
 // live `wrangler pages dev` process would corrupt every other assertion in
 // that suite for the rest of its run — see AUTH_TEST_BYPASS_RATE_LIMIT there)
 // and measuring timing (HTTP + a real dev server adds noise the property
-// being checked doesn't need).
+// being checked doesn't need). It also carries a few narrow regression
+// guards (a homoglyph username, a config-leak check) that don't need a live
+// server either.
 //
 // No wrangler dev server is required to run this file — same approach as
 // tests/generate.unit.test.mjs: call onRequestPost() directly with a
@@ -17,9 +19,13 @@
 // next (or into the timing test, which needs many real, non-429 attempts).
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 import { hashAuth } from '../functions/_lib/password.js'
 import { passwordKey, upsertUser } from '../functions/_lib/session.js'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ORIGIN = 'http://localhost'
 
 function makeRequest(path, body) {
@@ -56,36 +62,99 @@ function freshImport(relativePath) {
   return import(`${relativePath}?case=${importCounter}-${Date.now()}`)
 }
 
-test('register: the brake trips and answers with code "rate-limited"', async () => {
+test('register: the brake trips at exactly the 6th request (max is 5) and answers with code "rate-limited"', async () => {
   const { onRequestPost } = await freshImport('../functions/api/auth/register.js')
   const env = { ACCOUNTS: fakeAccounts() }
-  let limited
-  for (let i = 0; i < 8 && !limited; i++) {
+  for (let i = 0; i < 6; i++) {
     const res = await onRequestPost({
       request: makeRequest('/api/auth/register', { username: `regbrake${i}`, authHash: authHashB64(1) }),
       env,
     })
-    if (res.status === 429) limited = res
+    if (i === 5) {
+      // Pinning the boundary, not just "a 429 showed up somewhere": calls
+      // 1-5 (i=0..4) are within the cap and must NOT be 429 (asserted in the
+      // else branch below); call 6 (i=5) is the first that can be. A brake
+      // whose comparison drifted from `>` to `>=` (tripping one call early)
+      // would still satisfy a bare assert.ok(limited) — it would not
+      // satisfy this.
+      assert.equal(res.status, 429, 'the 6th request must be the first to trip the brake (max is 5)')
+      assert.equal((await res.json()).code, 'rate-limited')
+    } else {
+      assert.notEqual(res.status, 429, `request ${i + 1} of 6 must not be rate-limited yet (max is 5)`)
+    }
   }
-  assert.ok(limited, 'expected the register brake (max 5/window) to trip within 8 requests')
-  const data = await limited.json()
-  assert.equal(data.code, 'rate-limited')
 })
 
-test('login: the brake trips and answers with code "rate-limited"', async () => {
+test('login: the brake trips at exactly the 6th request (max is 5) and answers with code "rate-limited"', async () => {
   const { onRequestPost } = await freshImport('../functions/api/auth/login.js')
   const env = { ACCOUNTS: fakeAccounts() }
-  let limited
-  for (let i = 0; i < 8 && !limited; i++) {
+  for (let i = 0; i < 6; i++) {
     const res = await onRequestPost({
       request: makeRequest('/api/auth/login', { username: 'nobody', authHash: authHashB64(1) }),
       env,
     })
-    if (res.status === 429) limited = res
+    if (i === 5) {
+      assert.equal(res.status, 429, 'the 6th request must be the first to trip the brake (max is 5)')
+      assert.equal((await res.json()).code, 'rate-limited')
+    } else {
+      assert.notEqual(res.status, 429, `request ${i + 1} of 6 must not be rate-limited yet (max is 5)`)
+    }
   }
-  assert.ok(limited, 'expected the login brake (max 5/window) to trip within 8 requests')
-  const data = await limited.json()
-  assert.equal(data.code, 'rate-limited')
+})
+
+// register.js has this test (tests/auth-endpoints.test.mjs, "cross-site
+// registration is refused"); login.js did not. Both call the identical
+// isSameOriginBrowserRequest() gate, so this is not testing the gate itself
+// (that's gate.js's own concern) — it's testing that login.js still makes
+// the call. A future refactor that drops the check from one of the two
+// files (a copy-paste edit, an "obviously equivalent" cleanup) would read
+// as safe as long as only register.js was exercised.
+test('login is refused cross-site', async () => {
+  const { onRequestPost } = await freshImport('../functions/api/auth/login.js')
+  const env = { ACCOUNTS: fakeAccounts() }
+  const res = await onRequestPost({
+    request: new Request(`${ORIGIN}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, // no Origin, no Sec-Fetch-Site, no Referer
+      body: JSON.stringify({ username: 'whoever', authHash: authHashB64(1) }),
+    }),
+    env,
+  })
+  assert.equal(res.status, 403)
+})
+
+// M-1 regression guard. Verified directly (node -e) before writing this:
+// /^[a-z0-9_-]{3,32}$/i.test('Kelvin') is false (rejects — correct);
+// /^[a-z0-9_-]{3,32}$/iu.test('Kelvin') is true (accepts — the hole
+// this test exists to keep closed). See the comment on USERNAME_PATTERN in
+// register.js: adding the `u` flag reads as an unrelated, harmless
+// modernization anywhere else in this codebase's style, and it is the one
+// change that silently reopens this specific homoglyph hole.
+test('register rejects a KELVIN SIGN (U+212A) homoglyph username', async () => {
+  const { onRequestPost } = await freshImport('../functions/api/auth/register.js')
+  const env = { ACCOUNTS: fakeAccounts() }
+  const kelvinName = 'K' + 'elvin' + Date.now().toString(36) // renders as "Kelvin...", but that first char is U+212A KELVIN SIGN, not ASCII 'K'
+  const res = await onRequestPost({
+    request: makeRequest('/api/auth/register', { username: kelvinName, authHash: authHashB64(1) }),
+    env,
+  })
+  assert.equal(res.status, 400)
+  assert.equal((await res.json()).code, 'username-invalid')
+})
+
+// G: AUTH_TEST_BYPASS_RATE_LIMIT is only meant to exist in a gitignored,
+// per-machine .dev.vars file (see .dev.vars.example). Unlike
+// INSTANT_TEST_ECHO — whose leak would be obvious (free traffic, no
+// spend) — this seam's production failure mode is silent: the brakes would
+// just quietly stop doing anything. This is the guard against it ending up
+// in the one file that also configures production.
+test('AUTH_TEST_BYPASS_RATE_LIMIT never appears in wrangler.toml', () => {
+  const wranglerToml = readFileSync(path.join(__dirname, '../wrangler.toml'), 'utf8')
+  assert.doesNotMatch(
+    wranglerToml,
+    /AUTH_TEST_BYPASS_RATE_LIMIT/,
+    'this test-only seam must only ever be set via a local, gitignored .dev.vars file — never in wrangler.toml'
+  )
 })
 
 // I-3 regression guard: protects the oracle property at login.js's

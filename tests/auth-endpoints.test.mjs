@@ -17,10 +17,14 @@
 //
 // State left in .wrangler/state after a run: one `local:<name>` user row and
 // its password row per successful registration this file performs (NAME and
-// the mixed-case name below), plus whatever sessions were minted and later
-// cleared by the final logout test. Names are fresh per run (see NAME
-// below), so re-runs never collide on identity — they just accumulate
-// harmlessly until `.wrangler/state` is wiped.
+// the mixed-case name below). Sessions: this file mints four over a run —
+// register(NAME), register(mixedName), the successful login in test 4, and
+// the login in test 7 (logout) — and the logout test clears exactly one of
+// them (its own). The other three are NOT cleaned up; they sit in KV until
+// their TTL (30 days — see session.js's SESSION_TTL_SECONDS) expires them.
+// Names are fresh per run (see NAME below), so re-runs never collide on
+// identity — they just accumulate harmlessly until `.wrangler/state` is
+// wiped.
 //
 // Order dependence: these tests run in file order and are NOT independent.
 // Test 2 ("register → cookie session...") creates the NAME account that

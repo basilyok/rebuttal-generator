@@ -27,7 +27,18 @@ const MAX_BODY_BYTES = 4_096
 // sign instead of 'K' would pass a pattern check run AFTER lowercasing, and
 // then get stored verbatim as the display name rendered in the UI. Checking
 // the untouched display form rejects it, because U+212A is not itself in
-// [A-Za-z] under case-insensitive matching.
+// [A-Za-z] under case-insensitive (`i`) matching.
+//
+// That protection depends on this NOT also carrying the `u` flag. Verified:
+// /^[a-z0-9_-]{3,32}$/i.test('Kelvin') is false, but
+// /^[a-z0-9_-]{3,32}$/iu.test('Kelvin') is true — `u` switches matching
+// to full Unicode case folding, which (unlike the ASCII-only folding `i`
+// alone uses) DOES map U+212A to 'k', reopening exactly the hole this
+// pattern exists to close. "Modernize the regex with `u`" is a real trap:
+// it reads as a harmless correctness improvement everywhere else in this
+// file's spirit, and it is the one change that silently defeats this
+// specific check. See the Kelvin-sign rejection test in
+// tests/auth-endpoints.unit.test.mjs before touching this flag.
 const USERNAME_PATTERN = /^[a-z0-9_-]{3,32}$/i
 const EMAIL_PATTERN = /^[^\s@]{1,64}@[^\s@]{1,255}$/
 
@@ -128,11 +139,17 @@ export async function onRequestPost({ request, env }) {
       name: displayName,
     })
     sessionId = await createSession(env, user.id)
-  } catch {
+  } catch (err) {
     // A KV outage or a thrown crypto call here would otherwise surface as a
     // bare platform 500 with no JSON body — the client can only render that
     // as a blank failure. Same idiom as google/callback.js's exchange-failure
-    // handling: catch it, answer with our own shape.
+    // handling: catch it, answer with our own shape. But that shape is also
+    // why it would otherwise be invisible on our side: an uncaught throw used
+    // to surface in `wrangler tail` / Workers Logs and count as a failed
+    // invocation; a clean caught 500 doesn't, on its own. Log a marker — the
+    // error's NAME only, never the object or its message (a WebCrypto
+    // DataError is the one thing on this path that could carry input detail).
+    console.error('auth/register failed', err?.name)
     return jsonResponse({ error: 'Something went wrong creating your account — try again.', code: 'server-error' }, 500)
   }
 

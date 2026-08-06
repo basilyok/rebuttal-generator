@@ -140,7 +140,7 @@ export async function destroySession(env, sessionId) {
  *
  * `refreshAfterMs` is an opt-in write-avoidance guard: when given, and the
  * existing record's `lastSeenAt` is already newer than that window, this
- * returns the existing record UNCHANGED and skips the `put` entirely. It
+ * skips the `put` entirely and returns the existing record instead. It
  * exists because `lastSeenAt` has no reader anywhere in this repo today — a
  * write that only refreshes it is pure KV write-budget cost with no
  * observable benefit (see functions/api/auth/login.js, which is the only
@@ -149,6 +149,14 @@ export async function destroySession(env, sessionId) {
  * `refreshAfterMs` keep the original always-write behaviour — in particular
  * the Google callback, which must always land fresh profile fields
  * (name/email/picture) and cannot skip on staleness alone.
+ *
+ * IMPORTANT: when the skip fires, every field the CALLER passed this
+ * invocation — email, name, picture, all of it — is silently discarded, not
+ * merged. Only `id` is corrected before returning (see below); nothing else
+ * from `existing` is touched. A future caller doing
+ * `upsertUser(env, { ..., name: 'New Name', refreshAfterMs })` expecting
+ * that name to land gets a silent no-op instead — this guard is only safe
+ * for callers (like login.js) that never pass fresh fields to begin with.
  */
 export async function upsertUser(env, { provider, subject, email, name, picture, refreshAfterMs }) {
   const userId = `${provider}:${subject}`
@@ -168,7 +176,12 @@ export async function upsertUser(env, { provider, subject, email, name, picture,
     typeof existing.lastSeenAt === 'number' &&
     Date.now() - existing.lastSeenAt < refreshAfterMs
   ) {
-    return existing
+    // `id` must always be userId (provider:subject) — never trusted from
+    // storage. createSession(env, user.id) below is a privilege-binding
+    // call: it mints a session for whatever id it's handed. The write path
+    // (below) always derives id fresh; this skip path must match, not
+    // return whatever happens to already be sitting in the stored record.
+    return { ...existing, id: userId }
   }
 
   const user = {

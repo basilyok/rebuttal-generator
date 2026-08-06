@@ -547,7 +547,7 @@ git commit -m "feat: server credential store for password accounts; extract the 
 - [x] Cross-site requests → 403; `me` lists `local` in `providers` with no Google secrets configured
 - [x] Logout still works for local sessions
 
-**Verify:** with `npx wrangler pages dev dist` running: `node --import tsx --test tests/auth-endpoints.test.mjs` → all pass
+**Verify:** copy `.dev.vars.example` to `.dev.vars` first (sets `AUTH_TEST_BYPASS_RATE_LIMIT=1` — without it, a second consecutive run of the suite below trips the register/login flood brakes and fails on an unrelated 429; see `.dev.vars.example` and the seam's call sites in `register.js`/`login.js`). Then, with `npx wrangler pages dev dist` running: `node --import tsx --test tests/auth-endpoints.test.mjs` → all pass, repeatably.
 
 **Steps:**
 
@@ -1751,6 +1751,30 @@ git push origin main
 ```
 
 ---
+
+## v2 follow-ups (deferred on purpose, not forgotten)
+
+**Wire per-caller KV write quotas into the rate-limiter Durable Object.**
+`functions/api/auth/register.js` and `functions/api/auth/login.js` each use a
+per-isolate, per-colo in-memory flood brake (`makeFloodBrake`) as a stopgap
+against the free plan's 1000-writes/day KV budget — not real per-caller
+enforcement. The brakes narrow the worst case (one address hammering its own
+valid account) from exhausting the daily budget in under an hour to roughly
+seventeen, and that number is a floor: because the brake is per-isolate and
+per-colo, an address reaching multiple edge locations clears multiple
+independent buckets in parallel, so real damage can exceed it. See the
+write-budget comment above `login.js`'s `overRateLimit` for the arithmetic.
+This project already has the right primitive for real enforcement — the
+`LIMITER` service binding (Durable Object; see `limiter/src/index.js` and
+`functions/api/generate.ts`'s `consume()`/quota use of it) — it is just not
+wired up to auth's writes yet.
+
+**Priority note:** this should be the FIRST thing addressed once the app has
+real users, not a someday item. Once there are real accounts, the same
+1000-writes/day KV budget this stopgap protects is also carrying legitimate
+vault saves and history sync for every signed-in user — a write-budget
+exhaustion at that point takes down real user data flows, not just a
+theoretical attack surface on an empty deployment.
 
 ## Explicitly not in this plan (matching the spec's out-of-scope list)
 

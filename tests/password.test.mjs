@@ -128,3 +128,21 @@ test('dummyRecord matches the shape of a freshly-minted hashAuth record', async 
   assert.notEqual(fromBase64(dummy.hash), null)
   assert.ok(dummy.iterations >= 1 && dummy.iterations <= 100_000)
 })
+
+// The shape test above cannot catch this specific regression: if
+// SERVER_ITERATIONS is ever bumped above verifyAuth's 100,000 ceiling,
+// dummyRecord() and a fresh hashAuth() record move together (both carry the
+// same, now-too-high iterations value), so their shapes still match and
+// that test still passes — right up until every login breaks, because
+// verifyAuth rejects ANY record whose iterations exceeds the ceiling, real
+// or dummy alike (see password.js's literal 100_000). This pins the
+// relationship directly: SERVER_ITERATIONS (read off a fresh hashAuth()
+// record, since the constant itself isn't exported) must stay strictly
+// inside that ceiling.
+test('SERVER_ITERATIONS stays inside verifyAuth\'s ceiling', async () => {
+  const real = await hashAuth(new Uint8Array(32).fill(4))
+  assert.ok(
+    real.iterations < 100_000,
+    `SERVER_ITERATIONS (${real.iterations}) must stay strictly below verifyAuth's 100,000 ceiling, or every login (real and dummy alike) starts failing closed`
+  )
+})

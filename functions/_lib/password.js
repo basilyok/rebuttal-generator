@@ -84,10 +84,20 @@ function timingSafeEqual(a, b) {
  * exactly what property this depends on).
  *
  * Built from SERVER_ITERATIONS and PASSWORD_RECORD_VERSION rather than
- * hardcoded, so it cannot drift from what hashAuth actually produces: a
- * future re-hash upgrade (SERVER_ITERATIONS bump) or a v2 record shape lands
- * here automatically. See the "matches a freshly-minted record" test in
- * password.test.mjs, which is the guard against that drift.
+ * hardcoded, so it cannot drift from what hashAuth actually produces on
+ * THOSE two fields: a future SERVER_ITERATIONS bump lands here
+ * automatically, for free. A v2 record SHAPE does not — if hashAuth() ever
+ * grows a new field, dummyRecord() needs a matching hand-edit, same as any
+ * other place that builds a record literal. The shape test in
+ * password.test.mjs (below) catches drift in the fields that exist today;
+ * it cannot catch a field neither side has been taught about yet.
+ *
+ * Trap this invites: bumping SERVER_ITERATIONS above verifyAuth's 100,000
+ * ceiling does NOT show up as a drift between real and dummy records — both
+ * sides move together, so the shape test still passes — but it breaks every
+ * login, real and dummy alike, because verifyAuth rejects both once
+ * iterations exceeds the ceiling. See the ceiling-headroom assertion in
+ * password.test.mjs.
  */
 export function dummyRecord() {
   return {
