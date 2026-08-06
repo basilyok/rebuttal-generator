@@ -1490,14 +1490,14 @@ git commit -m "feat: sign in / sign up dialog — password login doubles as vaul
 
 ### Task 5: Locale translations (11 files) with a parity test
 
-**Goal:** All 11 non-English locales carry the 27 new `account.*` keys, translated to match each file's existing tone, and none still carries `account.signInWithGoogle`.
+**Goal:** All 11 non-English locales carry the **29** new `account.*` keys (Task 4 added `account.emailInvalid` and `account.serverError` beyond the original 27, for the carried-forward error mapping), translated to match each file's existing tone, and none still carries the removed keys `account.signInWithGoogle` or `instant.done.signIn`.
 
 **Files:**
 - Modify: `src/i18n/locales/{es,fr,de,pt-BR,it,ja,ko,zh-Hans,ar,hi,el}.ts`
 - Test: `tests/i18n-account.test.mjs`
 
 **Acceptance Criteria:**
-- [ ] Parity test passes: every locale defines all 27 keys, none defines the removed key
+- [ ] Parity test passes: every locale defines all 29 keys, none defines either removed key (`account.signInWithGoogle`, `instant.done.signIn`)
 - [ ] Translations are real translations (not English copies), keeping `-` / `_` / digit literals intact in `usernamePlaceholder`/`usernameInvalid`
 - [ ] `npm run build` clean
 
@@ -1530,6 +1530,8 @@ const REQUIRED = [
   'account.createAccount', 'account.signInAction', 'account.switchToSignIn', 'account.switchToSignUp',
   'account.passwordShort', 'account.passwordMismatch', 'account.usernameInvalid', 'account.usernameTaken',
   'account.badCredentials', 'account.rateLimited', 'account.authError',
+  // Added in Task 4's carried-forward error mapping — not in the original 27:
+  'account.emailInvalid', 'account.serverError',
 ]
 
 for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
@@ -1539,6 +1541,7 @@ for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
       assert.ok(text.includes(`'${key}'`), `${file} is missing ${key}`)
     }
     assert.ok(!text.includes(`'account.signInWithGoogle'`), `${file} still defines the removed signInWithGoogle key`)
+    assert.ok(!text.includes(`'instant.done.signIn'`), `${file} still defines the removed instant.done.signIn key`)
   })
 }
 ```
@@ -1548,7 +1551,7 @@ Expected: `en.ts` passes (Task 4 added its strings); the other 11 FAIL.
 
 - [ ] **Step 2: Translate**
 
-For each of the 11 files, add the 27 keys in the file's `--- account ---` section and delete its `account.signInWithGoogle` line. Translate from the English strings in Task 4 Step 1, with these constraints:
+For each of the 11 files, add the 29 keys in the file's `--- account ---` section and delete its `account.signInWithGoogle` **and** `instant.done.signIn` lines (both keys were removed from `en.ts` in Task 4; the Instant-exhausted CTA now reuses `account.signInOrUp`). Translate from the English strings in Task 4 Step 1 plus the two error keys `account.emailInvalid` / `account.serverError` added by the carry-forward, with these constraints:
 
 - Match the file's existing register (each locale already has translated `account.*` strings to imitate for tone and formality — e.g. formal-you vs informal-you must match what the file already uses).
 - Keep `3–32`, the literal characters `-` and `_`, and "Google" untranslated.
