@@ -12,6 +12,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { onRequestPost } from '../functions/api/generate.ts'
+import { INSTANT } from '../functions/_lib/instant.js'
 
 const ORIGIN = 'http://localhost'
 
@@ -69,4 +70,41 @@ test('burst limiter is a distinct 429 from quota exhaustion: no resetAt/signedIn
   assert.equal(data.resetAt, undefined)
   assert.equal(data.signedIn, undefined)
   assert.equal(typeof data.error, 'string')
+})
+
+test('limiter outage: LIMITER.fetch rejects -> fail open, reply still served on the FREE model', async () => {
+  // A service-binding fetch that rejects is the same outage as a non-OK
+  // answer, and consume() documents fail-open as its posture for both. The
+  // model assertion locks in `first: false`: an outage must not read every
+  // caller as brand new and route them all to the paid model.
+  const env = {
+    OPENROUTER_PROXY_KEY: 'test-key',
+    INSTANT_TEST_ECHO: '1',
+    LIMITER: {
+      async fetch() {
+        throw new Error('service binding down')
+      },
+    },
+  }
+  const res = await call(env, VALID)
+  assert.equal(res.status, 200)
+  const data = await res.json()
+  assert.ok(typeof data.text === 'string' && data.text.length > 0)
+  assert.equal(data.model, INSTANT.freeModel)
+})
+
+test('limiter outage: OK answer with a malformed JSON body -> fail open, reply still served', async () => {
+  const env = {
+    OPENROUTER_PROXY_KEY: 'test-key',
+    INSTANT_TEST_ECHO: '1',
+    LIMITER: {
+      async fetch() {
+        return new Response('not json', { status: 200 })
+      },
+    },
+  }
+  const res = await call(env, VALID)
+  assert.equal(res.status, 200)
+  const data = await res.json()
+  assert.ok(typeof data.text === 'string' && data.text.length > 0)
 })

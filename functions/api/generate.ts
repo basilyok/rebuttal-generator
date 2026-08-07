@@ -98,16 +98,28 @@ async function consume(env: Env, key: string, cap: number) {
     // legitimately-new caller gets the free model instead of paid once.
     return { allowed: true, remaining: cap - 1, first: false, resetAt: '' }
   }
-  const res = await env.LIMITER.fetch('https://limiter/consume', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, cap }),
-  })
-  // Same reasoning as above: an erroring limiter must not be read as "brand
-  // new" — `first: false` avoids a paid-model stampede for the outage's
-  // duration.
-  if (!res.ok) return { allowed: true, remaining: cap - 1, first: false, resetAt: '' }
-  return (await res.json()) as { allowed: boolean; remaining: number; first: boolean; resetAt: string }
+  // Same reasoning as above for every failure mode past this point (non-OK
+  // answer, thrown fetch, malformed JSON): an erroring limiter must not be
+  // read as "brand new" — `first: false` avoids a paid-model stampede for the
+  // outage's duration. The catch matters as much as the branch: this call
+  // site sits outside any try, so an uncaught throw here would be a platform
+  // 500 — a limiter outage taking down the endpoint the fail-open exists to
+  // keep up.
+  try {
+    const res = await env.LIMITER.fetch('https://limiter/consume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, cap }),
+    })
+    if (!res.ok) return { allowed: true, remaining: cap - 1, first: false, resetAt: '' }
+    return (await res.json()) as { allowed: boolean; remaining: number; first: boolean; resetAt: string }
+  } catch (err) {
+    // Same marker discipline as overDurableBrake: fail-open's own failure
+    // mode is silence, so log the outage — the error's NAME only, never the
+    // object or its message.
+    console.error('instant limiter unavailable', (err as { name?: string })?.name)
+    return { allowed: true, remaining: cap - 1, first: false, resetAt: '' }
+  }
 }
 
 function metric(ctx: { waitUntil(p: Promise<unknown>): void }, env: Env, name: string) {
