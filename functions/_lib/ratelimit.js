@@ -29,3 +29,33 @@ export function makeFloodBrake({ windowMs, max }) {
     return hits.length > max
   }
 }
+
+// The durable second layer over makeFloodBrake, backed by the LIMITER
+// Durable Object (limiter/src/index.js, POST /brake): one global SQLite
+// counter, so its verdict holds across isolates and colos — the cap the
+// in-memory layer above can only floor. Layering contract: callers run this
+// AFTER their in-memory brake passes (and after validation) — the free local
+// check absorbs single-isolate floods without spending a subrequest, and
+// this settles what leaks past it.
+//
+// Fail-open on every failure mode (no binding, non-OK answer, thrown fetch,
+// malformed JSON): a limiter outage must degrade to today's per-isolate
+// behavior, never escalate into an auth lockout — login is the only door to
+// the vault, and the in-memory brake still stands either way. Same posture
+// and same reasoning as generate.ts's consume().
+export async function overDurableBrake(env, request, { name, windowMs, max }) {
+  if (!env.LIMITER) return false
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
+  try {
+    const res = await env.LIMITER.fetch('https://limiter/brake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: `${name}:${ip}`, windowMs, max }),
+    })
+    if (!res.ok) return false
+    const data = await res.json()
+    return data?.limited === true
+  } catch {
+    return false
+  }
+}

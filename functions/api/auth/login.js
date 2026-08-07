@@ -12,7 +12,7 @@ import {
   upsertUser,
 } from '../../_lib/session.js'
 import { isSameOriginBrowserRequest } from '../../_lib/gate.js'
-import { makeFloodBrake } from '../../_lib/ratelimit.js'
+import { makeFloodBrake, overDurableBrake } from '../../_lib/ratelimit.js'
 import { dummyRecord, fromBase64, verifyAuth } from '../../_lib/password.js'
 
 const MAX_BODY_BYTES = 4_096
@@ -71,10 +71,16 @@ const REFRESH_AFTER_MS = 24 * 60 * 60 * 1000 // A placeholder, not a reasoned fi
 // directly from registering a short, dictionary-guessable password. For
 // that account the 600k-round wall still taxes every guess, but a weak
 // enough password can sit inside a small enough dictionary that "~4/sec"
-// adds up. This brake is the only server-side limit on how many candidates
-// one address can throw at any single password here: 5 per 5 minutes caps
-// one IP at roughly 1440 login submissions/day, all of which could be aimed
-// at one account.
+// adds up. The brakes here are the only server-side limit on how many
+// candidates one address can throw at any single password, and they come in
+// two layers with different guarantees. This in-memory one: 5 per 5
+// minutes, ~1440 login submissions/day — per ISOLATE, so for a caller who
+// reaches multiple colos (or waits out isolate recycling) it is a floor,
+// not a cap. The durable one (overDurableBrake below, backed by the LIMITER
+// Durable Object): the same 5/5min counted once, globally, atomically —
+// that IS a cap, for as long as the limiter is up. When it isn't, the
+// durable check fails open (see ratelimit.js for why that direction) and
+// the per-isolate floor is what remains.
 //
 // It also bounds something unrelated: the free plan's 1000-writes/day KV
 // budget. A FAILED login costs zero writes (both failure paths return
@@ -87,31 +93,35 @@ const REFRESH_AFTER_MS = 24 * 60 * 60 * 1000 // A placeholder, not a reasoned fi
 // same sustained pattern costs roughly 1 write/attempt in steady state
 // (occasional 2-write hits, when a gap exceeds ~24h, are a rounding error
 // against the volume below) — about 5 x 12 x 24 = 1440 writes/day if one
-// address never stops. That number is a FLOOR, not a cap: the brake is
-// per-isolate and per-colo (see functions/_lib/ratelimit.js), so a caller
-// reaching multiple edge locations clears multiple independent 5/5min
-// buckets in parallel — real damage can exceed this. Even at just the
-// floor, 1440 against a 1000/day budget is 144% of it: one address running
-// flat out exhausts the ENTIRE daily budget in roughly 17 hours (1000
-// writes / 60 writes-per-hour), not a slice of it. The session write is
-// irreducible per login; this brake does not eliminate that half of the
-// problem, it narrows the window from under an hour to about seventeen. The
-// correct fix for the write-budget half is per-caller quota enforcement in
-// the rate-limiter Durable Object this project already has (the LIMITER
-// service binding — see limiter/src/index.js and
-// functions/api/generate.ts's use of it) — deliberately not wired up here
-// in v1; tracked as an explicit v2 item in the plan
-// (docs/superpowers/plans/2026-08-05-password-accounts.md). For the
-// write-budget problem this brake is a stopgap against the worst, easiest
-// case. For the guessing problem above, it is not a stopgap — it is the
-// actual control, for as long as 5/5min per IP holds.
+// address never stops. For this in-memory brake alone that number is a
+// FLOOR, not a cap: it is per-isolate and per-colo (see
+// functions/_lib/ratelimit.js), so a caller reaching multiple edge
+// locations clears multiple independent 5/5min buckets in parallel — real
+// damage can exceed it. The durable layer (overDurableBrake below, backed
+// by the LIMITER Durable Object — the v2 item earlier versions of this
+// comment tracked from docs/superpowers/plans/2026-08-05-password-accounts.md;
+// it shipped here) closes exactly that gap: one global atomic 5/5min window
+// per address makes 1440/day a genuine per-address CEILING — but ONLY while
+// the limiter is healthy, because the durable check fails open on any
+// limiter failure (see ratelimit.js) and an outage drops us back to the
+// per-isolate floor. Even AT the ceiling, 1440 against a 1000/day budget is
+// 144% of it: one address running flat out exhausts the ENTIRE daily budget
+// in roughly 17 hours (1000 writes / 60 writes-per-hour), not a slice of
+// it. The session write is irreducible per login; neither layer eliminates
+// that half of the problem — the in-memory brake narrows the window from
+// under an hour to about seventeen, and the durable one keeps a distributed
+// or isolate-cycling caller from shrinking it back down. For the guessing
+// problem above, this pair is not a stopgap — it is the actual control, for
+// as long as 5/5min per address holds.
 //
-// Ordering note: like register.js, this checks the brake AFTER body
+// Ordering note: like register.js, this checks the brakes AFTER body
 // parsing and validation, not before — the inverse of share.js's order
 // (brake first, body read second). That is deliberate here too: a stream of
 // malformed junk should not lock out humans from the only path that writes.
 // If you are comparing this file to share.js and wondering why the order
-// differs, that is why — not an oversight.
+// differs, that is why — not an oversight. Both layers follow this order;
+// the durable one is additionally pinned BEFORE the per-username KV read —
+// see the comment at its call site for what that placement protects.
 const overRateLimit = makeFloodBrake({ windowMs: 300_000, max: 5 })
 
 const failure = () =>
@@ -143,9 +153,25 @@ export async function onRequestPost({ request, env }) {
   }
 
   // Test-only escape hatch — see the identical seam and rationale in
-  // register.js. Production never sets it.
-  if (!env.AUTH_TEST_BYPASS_RATE_LIMIT && overRateLimit(request)) {
-    return jsonResponse({ error: 'Too many attempts — wait a few minutes and try again.', code: 'rate-limited' }, 429)
+  // register.js. It gates BOTH brake layers: the durable one persists in the
+  // limiter's SQLite across dev-server restarts, so without the bypass a
+  // test run would poison the next in a way the in-memory brake never could.
+  // Production never sets it.
+  if (!env.AUTH_TEST_BYPASS_RATE_LIMIT) {
+    if (overRateLimit(request)) {
+      return jsonResponse({ error: 'Too many attempts — wait a few minutes and try again.', code: 'rate-limited' }, 429)
+    }
+    // Durable layer, consulted only once the free in-memory check passes.
+    // Placement is load-bearing: it sits BEFORE the ACCOUNTS read below so
+    // every request — real username or not — does identical work in the same
+    // order up to the failure() line, keeping the durable subrequest's
+    // latency out of the timing-oracle picture entirely; and AFTER
+    // validation, so malformed junk cannot burn a global slot. Same 429
+    // shape as the in-memory path on purpose: the client mapping cannot and
+    // should not tell the layers apart.
+    if (await overDurableBrake(env, request, { name: 'auth-login', windowMs: 300_000, max: 5 })) {
+      return jsonResponse({ error: 'Too many attempts — wait a few minutes and try again.', code: 'rate-limited' }, 429)
+    }
   }
 
   const userId = `local:${username}`

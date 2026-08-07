@@ -8,7 +8,10 @@
 # register/login flood brakes. Local dev never sends CF-Connecting-IP, so
 # every caller shares one "unknown" bucket per brake — without this, a
 # second or third consecutive run fails on a 429 that has nothing to do with
-# the change you're testing. See functions/api/auth/register.js and
+# the change you're testing. The seam gates BOTH brake layers — the durable
+# one (the LIMITER Durable Object's /brake counter) persists in .wrangler
+# state across dev-server restarts, so without this even a restart wouldn't
+# clear a tripped brake. See functions/api/auth/register.js and
 # functions/api/auth/login.js for the check, and
 # tests/auth-endpoints.unit.test.mjs's "does not appear in wrangler.toml"
 # test for the guarantee that this can never reach production by accident.
