@@ -104,12 +104,18 @@ test('brake: separate keys do not interfere', async () => {
 
 test('brake: a new window starts a fresh count', async () => {
   const key = rand()
-  const windowMs = 1_500 // smallest the endpoint allows is 1s; 1.5s keeps the single sleep short
+  const windowMs = 1_500 // smallest the endpoint allows is 1s; 1.5s keeps the main sleep short
+  // Buckets align to the epoch, not to the first call — if that call landed
+  // in a bucket's dying milliseconds, the second hit below would count in a
+  // FRESH bucket and never be limited. Wait out the tail end first when the
+  // boundary is close.
+  const msLeftInBucket = windowMs - (Date.now() % windowMs)
+  if (msLeftInBucket < 300) await new Promise((resolve) => setTimeout(resolve, msLeftInBucket + 20))
   await brake(key, windowMs, 1)
   const second = await brake(key, windowMs, 1).then((r) => r.json())
   assert.equal(second.limited, true, 'second hit in the same window must be limited (max is 1)')
-  // One sleep, slightly longer than the whole window: wherever inside the
-  // current bucket these first hits landed, now + windowMs + 100ms is
+  // One main sleep, slightly longer than the whole window: wherever inside
+  // the current bucket these first hits landed, now + windowMs + 100ms is
   // guaranteed to fall in a LATER bucket.
   await new Promise((resolve) => setTimeout(resolve, windowMs + 100))
   const afterRollover = await brake(key, windowMs, 1).then((r) => r.json())

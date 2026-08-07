@@ -32,6 +32,12 @@ just means the durable layer silently stands down and only the in-memory
 brakes apply. Nothing breaks; the limits are merely softer until the limiter
 catches up.
 
+When verifying a deploy, also confirm the Pages project's dashboard
+environment variables do **not** define `AUTH_TEST_BYPASS_RATE_LIMIT`: a
+dashboard-set value would disable **both** brake layers, and the in-repo
+guard (`tests/auth-endpoints.unit.test.mjs`) can only prove it absent from
+`wrangler.toml`, not from the dashboard.
+
 ### Share-link storage (one-time)
 
 Share links live in a Cloudflare KV namespace bound as `SHARES`. It already

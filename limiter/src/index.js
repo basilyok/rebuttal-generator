@@ -36,10 +36,16 @@ export class Limiter {
     )
     // Fixed-window brake counters for the auth endpoints (/brake below).
     // These rows are keyed per caller IP (`auth-login:<ip>`) — the only
-    // place in this DO that stores an address — so they are deliberately
-    // transient: each row carries its own absolute expiry, stamped at
-    // insert, and /brake prunes on it every call. An address lives here for
-    // at most one window.
+    // place in this DO that stores an address. Retention, stated precisely
+    // because addresses are personal data: each row carries its absolute
+    // expiry, stamped at insert, and every /brake call — for any key —
+    // deletes ALL expired rows before counting. Nothing else runs the prune
+    // (no alarm, no timer), so an expired row survives exactly as long as
+    // auth traffic stays at zero, and the first request after any quiet
+    // spell clears the leftovers before counting itself. Verified directly
+    // against a dev instance: an expired row was still on disk after the
+    // window passed with no further calls, and gone after one unrelated
+    // /brake call.
     this.sql.exec(
       `CREATE TABLE IF NOT EXISTS brakes (
          k TEXT NOT NULL, bucket INTEGER NOT NULL, n INTEGER NOT NULL DEFAULT 0,
@@ -114,6 +120,18 @@ export class Limiter {
 
       const bucket = Math.floor(now / windowMs)
       const windowEndsAt = (bucket + 1) * windowMs
+      // Opportunistic prune, same posture as /consume's — but keyed on an
+      // absolute expiry stamped at insert, because bucket numbers from
+      // different windowMs values are not comparable to each other (bucket
+      // 12 of a 5-minute window and bucket 12 of a 10-minute window are
+      // different moments). It runs BEFORE the upsert on purpose: window
+      // sizes share the (k, bucket) key space and the ON CONFLICT arm never
+      // refreshes expiresAt, so a key that changed its windowMs could
+      // otherwise land on — and increment — a stale expired row. No caller
+      // does that today (both auth endpoints pin constant windows), but this
+      // order closes it at zero cost. It is also what keeps the IP-keyed
+      // rows above transient rather than an address log.
+      this.sql.exec(`DELETE FROM brakes WHERE expiresAt <= ?`, now)
       const row = this.sql
         .exec(
           `INSERT INTO brakes (k, bucket, n, expiresAt) VALUES (?, ?, 1, ?)
@@ -124,15 +142,6 @@ export class Limiter {
           windowEndsAt
         )
         .one()
-      // Opportunistic prune, same posture as /consume's — but keyed on an
-      // absolute expiry stamped at insert, because bucket numbers from
-      // different windowMs values are not comparable to each other (bucket
-      // 12 of a 5-minute window and bucket 12 of a 10-minute window are
-      // different moments). Once `now` passes a row's window end that
-      // (k, bucket) pair can never be incremented again, so deleting at that
-      // instant is exact, not a heuristic — and it is what keeps the
-      // IP-keyed rows above transient rather than an address log.
-      this.sql.exec(`DELETE FROM brakes WHERE expiresAt <= ?`, now)
 
       return json({
         limited: row.n > max,
