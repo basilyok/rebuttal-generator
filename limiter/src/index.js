@@ -34,6 +34,24 @@ export class Limiter {
          day TEXT NOT NULL, name TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0,
          PRIMARY KEY (day, name))`
     )
+    // Fixed-window brake counters for the auth endpoints (/brake below).
+    // These rows are keyed per caller IP (`auth-login:<ip>`) — the only
+    // place in this DO that stores an address. Retention, stated precisely
+    // because addresses are personal data: each row carries its absolute
+    // expiry, stamped at insert, and every /brake call — for any key —
+    // deletes ALL expired rows before counting. Nothing else runs the prune
+    // (no alarm, no timer), so an expired row survives exactly as long as
+    // auth traffic stays at zero, and the first request after any quiet
+    // spell clears the leftovers before counting itself. Verified directly
+    // against a dev instance: an expired row was still on disk after the
+    // window passed with no further calls, and gone after one unrelated
+    // /brake call.
+    this.sql.exec(
+      `CREATE TABLE IF NOT EXISTS brakes (
+         k TEXT NOT NULL, bucket INTEGER NOT NULL, n INTEGER NOT NULL DEFAULT 0,
+         expiresAt INTEGER NOT NULL,
+         PRIMARY KEY (k, bucket))`
+    )
   }
 
   async fetch(request) {
@@ -78,6 +96,57 @@ export class Limiter {
         remaining: Math.max(0, cap - row.n),
         first: total.n === 1,
         resetAt: nextUtcMidnight(now),
+      })
+    }
+
+    if (request.method === 'POST' && url.pathname === '/brake') {
+      // Durable half of the per-IP auth flood brakes (functions/api/auth/*):
+      // the in-memory brake in each Function is per-isolate and per-colo, so
+      // its cap is really a floor; this counter is global and atomic, so it
+      // can be an actual cap. Fixed-window on purpose — coarser than the
+      // in-memory brake's sliding window, but one UPSERT per call and never
+      // more than one live row per (key, window).
+      let body
+      try {
+        body = await request.json()
+      } catch {
+        return json({ error: 'Malformed request.' }, 400)
+      }
+      const key = typeof body?.key === 'string' && body.key.length > 0 && body.key.length <= 200 ? body.key : null
+      const windowMs =
+        Number.isInteger(body?.windowMs) && body.windowMs >= 1_000 && body.windowMs <= DAY_MS ? body.windowMs : null
+      const max = Number.isInteger(body?.max) && body.max >= 1 && body.max <= 1000 ? body.max : null
+      if (!key || !windowMs || !max) return json({ error: 'key, windowMs, and max are required.' }, 400)
+
+      const bucket = Math.floor(now / windowMs)
+      const windowEndsAt = (bucket + 1) * windowMs
+      // Opportunistic prune, same posture as /consume's — but keyed on an
+      // absolute expiry stamped at insert, because bucket numbers from
+      // different windowMs values are not comparable to each other (bucket
+      // 12 of a 5-minute window and bucket 12 of a 10-minute window are
+      // different moments). It runs BEFORE the upsert on purpose: window
+      // sizes share the (k, bucket) key space and the ON CONFLICT arm never
+      // refreshes expiresAt, so a key that changed its windowMs could
+      // otherwise land on — and increment — a stale expired row. No caller
+      // does that today (both auth endpoints pin constant windows), but this
+      // order closes it at zero cost. It is also what keeps the IP-keyed
+      // rows above transient rather than an address log.
+      this.sql.exec(`DELETE FROM brakes WHERE expiresAt <= ?`, now)
+      const row = this.sql
+        .exec(
+          `INSERT INTO brakes (k, bucket, n, expiresAt) VALUES (?, ?, 1, ?)
+           ON CONFLICT (k, bucket) DO UPDATE SET n = n + 1
+           RETURNING n`,
+          key,
+          bucket,
+          windowEndsAt
+        )
+        .one()
+
+      return json({
+        limited: row.n > max,
+        count: row.n,
+        retryAfterMs: windowEndsAt - now,
       })
     }
 

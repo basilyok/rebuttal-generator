@@ -16,7 +16,7 @@ import {
   userKey,
 } from '../../_lib/session.js'
 import { isSameOriginBrowserRequest } from '../../_lib/gate.js'
-import { makeFloodBrake } from '../../_lib/ratelimit.js'
+import { makeFloodBrake, overDurableBrake } from '../../_lib/ratelimit.js'
 import { fromBase64, hashAuth } from '../../_lib/password.js'
 
 const MAX_BODY_BYTES = 4_096
@@ -56,7 +56,12 @@ const RESERVED = new Set([
 // guessing (there is nothing to guess here). It sits AFTER validation so a
 // stream of malformed junk cannot lock humans out of the only path that
 // actually writes. 5 per 10 minutes is generous for a household NAT and
-// useless for a single-address bot.
+// useless for a single-address bot. In-memory means per-isolate and
+// per-colo, so on its own this is a floor, not a cap; the durable check
+// below (overDurableBrake → the LIMITER Durable Object) counts the same
+// 5/10min window once, globally, and is the real per-address cap while the
+// limiter is healthy. It fails open (see ratelimit.js) so a limiter outage
+// degrades to this floor instead of locking sign-up.
 const overRateLimit = makeFloodBrake({ windowMs: 600_000, max: 5 })
 
 export async function onRequestPost({ request, env }) {
@@ -108,9 +113,22 @@ export async function onRequestPost({ request, env }) {
   // brake's one "unknown" bucket — a second or third consecutive run would
   // otherwise trip it. Same pattern as generate.ts's INSTANT_TEST_ECHO gate:
   // set via a gitignored .dev.vars file, and production never sets it, so
-  // real traffic always passes through this brake.
-  if (!env.AUTH_TEST_BYPASS_RATE_LIMIT && overRateLimit(request)) {
-    return jsonResponse({ error: 'Too many attempts — wait a few minutes and try again.', code: 'rate-limited' }, 429)
+  // real traffic always passes through this brake. The seam gates BOTH
+  // layers below: the durable one persists in the limiter's SQLite across
+  // dev-server restarts, so without the bypass a test run would poison the
+  // next in a way the in-memory brake never could.
+  if (!env.AUTH_TEST_BYPASS_RATE_LIMIT) {
+    if (overRateLimit(request)) {
+      return jsonResponse({ error: 'Too many attempts — wait a few minutes and try again.', code: 'rate-limited' }, 429)
+    }
+    // Durable layer, consulted only once the free in-memory check passes,
+    // and BEFORE the username claim-check read below — a request the durable
+    // brake refuses should cost zero KV operations. Same 429 shape as the
+    // in-memory path on purpose: the client mapping cannot and should not
+    // tell the layers apart.
+    if (await overDurableBrake(env, request, { name: 'auth-register', windowMs: 600_000, max: 5 })) {
+      return jsonResponse({ error: 'Too many attempts — wait a few minutes and try again.', code: 'rate-limited' }, 429)
+    }
   }
 
   // Claim check. The user record's key doubles as the uniqueness index — ids

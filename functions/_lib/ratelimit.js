@@ -29,3 +29,47 @@ export function makeFloodBrake({ windowMs, max }) {
     return hits.length > max
   }
 }
+
+// The durable second layer over makeFloodBrake, backed by the LIMITER
+// Durable Object (limiter/src/index.js, POST /brake): one global SQLite
+// counter, so its verdict holds across isolates and colos — the cap the
+// in-memory layer above can only floor. Layering contract: callers run this
+// AFTER their in-memory brake passes (and after validation) — the free local
+// check absorbs single-isolate floods without spending a subrequest, and
+// this settles what leaks past it.
+//
+// Fail-open on every failure mode (no binding, non-OK answer, thrown fetch,
+// malformed JSON): a limiter outage must degrade to today's per-isolate
+// behavior, never escalate into an auth lockout — login is the only door to
+// the vault, and the in-memory brake still stands either way. Same
+// direction as generate.ts's consume(), and deliberately further: consume()
+// fails open only on a missing binding and a non-OK answer, while its fetch
+// and json calls are uncaught — its call site sits outside any try, so a
+// throw there is a platform 500 for /api/generate. Here a throw also fails
+// open, because "the limiter broke" turning into "nobody can sign in" is
+// precisely the failure this posture exists to rule out.
+export async function overDurableBrake(env, request, { name, windowMs, max }) {
+  if (!env.LIMITER) return false
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
+  try {
+    const res = await env.LIMITER.fetch('https://limiter/brake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: `${name}:${ip}`, windowMs, max }),
+    })
+    if (!res.ok) {
+      // Fail-open's own failure mode is silence — unmarked, a persistent
+      // limiter outage just looks like softer caps. Log the status code
+      // only, never response content.
+      console.error('durable brake unavailable', res.status)
+      return false
+    }
+    const data = await res.json()
+    return data?.limited === true
+  } catch (err) {
+    // Same marker discipline as login.js's catch: the error's NAME only,
+    // never the object or its message.
+    console.error('durable brake unavailable', err?.name)
+    return false
+  }
+}

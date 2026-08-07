@@ -103,6 +103,150 @@ test('login: the brake trips at exactly the 6th request (max is 5) and answers w
   }
 })
 
+// --- The durable brake layer (overDurableBrake → the LIMITER service binding) ---
+// The fakes below stand in for the service binding the same way fakeAccounts()
+// stands in for KV: overDurableBrake only calls `env.LIMITER.fetch(url, init)`
+// and reads back JSON, so an object with an async fetch is the whole contract.
+
+/** Fake LIMITER binding: records every call, answers with one canned JSON reply. */
+function fakeLimiter(reply = { limited: false, count: 1, retryAfterMs: 1000 }, { status = 200 } = {}) {
+  const calls = []
+  return {
+    calls,
+    async fetch(url, init) {
+      calls.push({ url: String(url), body: JSON.parse(init.body) })
+      return new Response(JSON.stringify(reply), { status, headers: { 'Content-Type': 'application/json' } })
+    },
+  }
+}
+
+/** fakeAccounts() plus a read counter — for proving the durable check runs BEFORE any per-username KV read. */
+function countingAccounts() {
+  const inner = fakeAccounts()
+  const counter = { reads: 0 }
+  return {
+    counter,
+    async get(key) {
+      counter.reads += 1
+      return inner.get(key)
+    },
+    put: inner.put,
+    delete: inner.delete,
+  }
+}
+
+/** Like makeRequest, but with a concrete client address, so the durable key under test is a real `name:<ip>`, not the 'unknown' fallback. */
+function makeRequestWithIp(path, body) {
+  return new Request(`${ORIGIN}${path}`, {
+    method: 'POST',
+    headers: { Origin: ORIGIN, 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9' },
+    body: JSON.stringify(body),
+  })
+}
+
+test('login: a durable "limited" verdict is a 429 with code "rate-limited", issued before ANY ACCOUNTS read', async () => {
+  const { onRequestPost } = await freshImport('../functions/api/auth/login.js')
+  const accounts = countingAccounts()
+  const limiter = fakeLimiter({ limited: true, count: 6, retryAfterMs: 12_345 })
+  const res = await onRequestPost({
+    request: makeRequestWithIp('/api/auth/login', { username: 'whoever', authHash: authHashB64(1) }),
+    env: { ACCOUNTS: accounts, LIMITER: limiter },
+  })
+  // This 429 can ONLY have come from the durable layer: the in-memory brake
+  // is at count 1 of 5 on this fresh import. Deleting the overDurableBrake
+  // call from login.js turns this into a 401 and fails here.
+  assert.equal(res.status, 429)
+  assert.equal((await res.json()).code, 'rate-limited')
+  // The exact contract login.js owes the limiter: per-IP key (never
+  // per-username — see the brake comment there), and the shipped budget.
+  assert.equal(limiter.calls.length, 1)
+  assert.equal(limiter.calls[0].url, 'https://limiter/brake')
+  assert.deepEqual(limiter.calls[0].body, { key: 'auth-login:203.0.113.9', windowMs: 300_000, max: 5 })
+  // Placement proof (the oracle property): a durable-refused login read
+  // NOTHING from ACCOUNTS, so the durable check demonstrably runs before the
+  // per-username lookup — both login failure paths (unknown user / wrong
+  // password) still perform identical work in identical order.
+  assert.equal(accounts.counter.reads, 0, 'the durable check must run before any per-username KV read')
+})
+
+test('register: a durable "limited" verdict is a 429 with code "rate-limited", issued before the claim-check read', async () => {
+  const { onRequestPost } = await freshImport('../functions/api/auth/register.js')
+  const accounts = countingAccounts()
+  const limiter = fakeLimiter({ limited: true, count: 6, retryAfterMs: 12_345 })
+  const res = await onRequestPost({
+    request: makeRequestWithIp('/api/auth/register', { username: 'durablereg', authHash: authHashB64(1) }),
+    env: { ACCOUNTS: accounts, LIMITER: limiter },
+  })
+  assert.equal(res.status, 429)
+  assert.equal((await res.json()).code, 'rate-limited')
+  assert.equal(limiter.calls.length, 1)
+  assert.equal(limiter.calls[0].url, 'https://limiter/brake')
+  assert.deepEqual(limiter.calls[0].body, { key: 'auth-register:203.0.113.9', windowMs: 600_000, max: 5 })
+  assert.equal(accounts.counter.reads, 0, 'a durable-refused registration must cost zero KV operations')
+})
+
+test('login: no LIMITER binding → fail-open, the request proceeds to a normal credential failure', async () => {
+  const { onRequestPost } = await freshImport('../functions/api/auth/login.js')
+  const res = await onRequestPost({
+    request: makeRequestWithIp('/api/auth/login', { username: 'nobody', authHash: authHashB64(1) }),
+    env: { ACCOUNTS: fakeAccounts() },
+  })
+  // 401 bad-credentials, not 429 and not 500: a missing binding degrades to
+  // the in-memory-only behavior this endpoint shipped with.
+  assert.equal(res.status, 401)
+  assert.equal((await res.json()).code, 'bad-credentials')
+})
+
+test('login: a throwing LIMITER fetch → fail-open', async () => {
+  const { onRequestPost } = await freshImport('../functions/api/auth/login.js')
+  const res = await onRequestPost({
+    request: makeRequestWithIp('/api/auth/login', { username: 'nobody', authHash: authHashB64(1) }),
+    env: {
+      ACCOUNTS: fakeAccounts(),
+      LIMITER: {
+        async fetch() {
+          throw new Error('limiter outage')
+        },
+      },
+    },
+  })
+  assert.equal(res.status, 401)
+  assert.equal((await res.json()).code, 'bad-credentials')
+})
+
+test('login: a LIMITER answering 404 (an old limiter with no /brake route) → fail-open', async () => {
+  const { onRequestPost } = await freshImport('../functions/api/auth/login.js')
+  const limiter = fakeLimiter({ error: 'Not found.' }, { status: 404 })
+  const res = await onRequestPost({
+    request: makeRequestWithIp('/api/auth/login', { username: 'nobody', authHash: authHashB64(1) }),
+    env: { ACCOUNTS: fakeAccounts(), LIMITER: limiter },
+  })
+  // This is the deploy-ordering story DEPLOYMENT_GUIDE.md tells: the limiter
+  // WAS asked (the call happened — fail-open lives in the answer handling,
+  // not in skipping the call), and its 404 reads as "not limited".
+  assert.equal(limiter.calls.length, 1)
+  assert.equal(res.status, 401)
+  assert.equal((await res.json()).code, 'bad-credentials')
+})
+
+test('AUTH_TEST_BYPASS_RATE_LIMIT skips both layers: the LIMITER is never consulted', async () => {
+  const { onRequestPost: login } = await freshImport('../functions/api/auth/login.js')
+  const { onRequestPost: register } = await freshImport('../functions/api/auth/register.js')
+  const limiter = fakeLimiter({ limited: true }) // would answer 429 if it were ever asked
+  const env = { ACCOUNTS: fakeAccounts(), LIMITER: limiter, AUTH_TEST_BYPASS_RATE_LIMIT: '1' }
+  const loginRes = await login({
+    request: makeRequestWithIp('/api/auth/login', { username: 'nobody', authHash: authHashB64(1) }),
+    env,
+  })
+  assert.equal(loginRes.status, 401) // not 429 — and per the assertion below, not because the limiter said so
+  const registerRes = await register({
+    request: makeRequestWithIp('/api/auth/register', { username: 'bypassreg', authHash: authHashB64(1) }),
+    env,
+  })
+  assert.equal(registerRes.status, 200)
+  assert.equal(limiter.calls.length, 0, 'with the bypass set, neither endpoint may spend a limiter subrequest')
+})
+
 // register.js has this test (tests/auth-endpoints.test.mjs, "cross-site
 // registration is refused"); login.js did not. Both call the identical
 // isSameOriginBrowserRequest() gate, so this is not testing the gate itself
