@@ -41,13 +41,11 @@ export function makeFloodBrake({ windowMs, max }) {
 // Fail-open on every failure mode (no binding, non-OK answer, thrown fetch,
 // malformed JSON): a limiter outage must degrade to today's per-isolate
 // behavior, never escalate into an auth lockout — login is the only door to
-// the vault, and the in-memory brake still stands either way. Same
-// direction as generate.ts's consume(), and deliberately further: consume()
-// fails open only on a missing binding and a non-OK answer, while its fetch
-// and json calls are uncaught — its call site sits outside any try, so a
-// throw there is a platform 500 for /api/generate. Here a throw also fails
-// open, because "the limiter broke" turning into "nobody can sign in" is
-// precisely the failure this posture exists to rule out.
+// the vault, and the in-memory brake still stands either way. Same posture
+// as generate.ts's consume(), which catches the same four failure modes for
+// the same reason: "the limiter broke" turning into "nobody can sign in"
+// (or, there, "nobody gets a reply") is precisely the failure this posture
+// exists to rule out.
 export async function overDurableBrake(env, request, { name, windowMs, max }) {
   if (!env.LIMITER) return false
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
