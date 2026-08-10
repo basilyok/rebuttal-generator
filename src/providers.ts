@@ -341,7 +341,10 @@ export const PROVIDERS: Provider[] = [
       },
     ],
     defaultModel: 'z-ai/glm-5.2',
-    note: 'One key covers the field: the only browser-reachable route to GPT (OpenAI’s own API cannot be called from a web page — see the note at the top of this file), plus each vendor’s flagship, grouped by vendor. The default GLM-5.2 costs a fraction of a cent per reply but needs credit on the account; the two FREE models work with none. Press ↻ Refresh to load OpenRouter’s full live catalog (360+ models) with current prices.',
+    // NB: this string renders to users (App.tsx's .key-help), so it must not
+    // point at anything only a developer can see — it read "see the note at
+    // the top of this file" until a screenshot caught it in the live UI.
+    note: 'One key covers the field: the only browser-reachable route to GPT (OpenAI’s own API refuses browser calls outright), plus each vendor’s flagship, grouped by vendor. The default GLM-5.2 costs a fraction of a cent per reply but needs credit on the account; the two FREE models work with none. Press ↻ Refresh to load OpenRouter’s full live catalog (360+ models) with current prices.',
   },
   {
     id: 'xai',
