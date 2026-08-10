@@ -32,6 +32,27 @@ just means the durable layer silently stands down and only the in-memory
 brakes apply. Nothing breaks; the limits are merely softer until the limiter
 catches up.
 
+**The ordering above is easy to lose, because Pages deploys itself.** This
+project has Cloudflare's Git integration enabled, so a `git push` to `main`
+builds and deploys Pages automatically — no `wrangler pages deploy` needed.
+The limiter Worker has no such integration: it ships only when someone runs
+`npx wrangler deploy` in `limiter/`. So pushing a commit that changes both
+sides deploys them in exactly the wrong order, and the only symptom is a
+`console.error('durable brake unavailable', 404)` in the Pages logs while the
+durable layer stands down. When a change spans both, deploy the limiter
+**first**, then push. (This happened on 2026-08-10: the push that shipped the
+auth brake's Pages half preceded the limiter deploy by about half an hour.)
+
+One further trap in `wrangler deploy` for this Worker: because it has no
+routes and `workers_dev = false`, the upload can report **"No targets deployed
+for m36x-limiter"** and leave the new version uploaded but *not* serving
+traffic. Always confirm with `npx wrangler deployments list` that the newest
+version id is the one at `(100%)`; if it is not, promote it explicitly:
+
+```bash
+npx wrangler versions deploy <version-id>@100% --yes
+```
+
 When verifying a deploy, also confirm the Pages project's dashboard
 environment variables do **not** define `AUTH_TEST_BYPASS_RATE_LIMIT`: a
 dashboard-set value would disable **both** brake layers, and the in-repo
