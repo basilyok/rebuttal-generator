@@ -32,16 +32,23 @@ just means the durable layer silently stands down and only the in-memory
 brakes apply. Nothing breaks; the limits are merely softer until the limiter
 catches up.
 
-**The ordering above is easy to lose, because Pages deploys itself.** This
-project has Cloudflare's Git integration enabled, so a `git push` to `main`
-builds and deploys Pages automatically — no `wrangler pages deploy` needed.
-The limiter Worker has no such integration: it ships only when someone runs
-`npx wrangler deploy` in `limiter/`. So pushing a commit that changes both
-sides deploys them in exactly the wrong order, and the only symptom is a
-`console.error('durable brake unavailable', 404)` in the Pages logs while the
-durable layer stands down. When a change spans both, deploy the limiter
-**first**, then push. (This happened on 2026-08-10: the push that shipped the
-auth brake's Pages half preceded the limiter deploy by about half an hour.)
+**Do not assume a `git push` ships anything.** Deployments in the dashboard are
+labelled with a commit hash, and on 2026-08-10 one deployment did appear a few
+minutes after a push, which makes it look like Git integration is deploying for
+you. It is not dependable: the three commits pushed after that one sat
+undeployed for over a day with no build and no failure recorded, until someone
+ran `wrangler pages deploy` by hand. Treat the explicit deploy at the top of
+this section as the only thing that ships code, and confirm afterwards with
+`npx wrangler pages deployment list --project-name=m36x-rebuttal` that the
+newest entry is the commit you meant.
+
+That uncertainty makes the limiter ordering easier to get wrong, because the
+Pages half can reach production without a deliberate step. When a change spans
+both, deploy the limiter **first**, then Pages. The symptom of getting it
+backwards is quiet: `console.error('durable brake unavailable', 404)` in the
+Pages logs while the durable layer stands down and only the in-memory brakes
+apply. (This happened on 2026-08-10 — the auth brake's Pages half was live
+about half an hour before the limiter that serves `/brake`.)
 
 One further trap in `wrangler deploy` for this Worker: because it has no
 routes and `workers_dev = false`, the upload can report **"No targets deployed
