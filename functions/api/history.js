@@ -5,6 +5,7 @@
 // is the most sensitive thing the app will ever hold (a longitudinal record of
 // the user's disputes); it gets the vault treatment, not a smaller one.
 import { getSession, jsonResponse, requireAccounts, historyKey } from '../_lib/session.js'
+import { overDurableBrake } from '../_lib/ratelimit.js'
 
 /** ~100 entries of realistic size, base64 — far more than the vault needs. */
 const MAX_CIPHERTEXT_CHARS = 200_000
@@ -48,6 +49,17 @@ export async function onRequestPut({ request, env }) {
   // Storing arbitrary client JSON is how a storage bucket becomes someone's CDN.
   if (!isBlob(body?.salt, 64) || !isBlob(body?.iv, 64) || !isBlob(body?.ciphertext, MAX_CIPHERTEXT_CHARS)) {
     return jsonResponse({ error: 'Malformed history payload.' }, 400)
+  }
+
+  // Account-keyed, after validation, before the write — same reasoning as
+  // vault.js. The cap is higher because the client pushes history after every
+  // generation, so a busy session legitimately writes far more often than the
+  // vault does; it is still low enough that a runaway client-side sync loop
+  // hits a wall instead of quietly eating a shared 1000-writes/day budget.
+  // Note each of these writes can carry up to MAX_CIPHERTEXT_CHARS, so this
+  // brake bounds bytes as much as it bounds operations.
+  if (await overDurableBrake(env, request, { name: 'history-put', windowMs: 600_000, max: 40, subject: session.userId })) {
+    return jsonResponse({ error: 'History is syncing too often — it will catch up shortly.' }, 429)
   }
 
   const record = {

@@ -46,14 +46,23 @@ export function makeFloodBrake({ windowMs, max }) {
 // the same reason: "the limiter broke" turning into "nobody can sign in"
 // (or, there, "nobody gets a reply") is precisely the failure this posture
 // exists to rule out.
-export async function overDurableBrake(env, request, { name, windowMs, max }) {
+// `subject` overrides the IP in the counter key, and authenticated endpoints
+// should always pass one (the account id). Keying an account's own writes by
+// address is wrong in both directions: behind CGNAT a whole office shares one
+// address, so neighbours would consume each other's quota, while anyone who
+// changes network escapes the limit they were about to hit. The IP default
+// stays for endpoints with nobody to name yet — sign-in, sharing, extraction.
+// A subject is trusted here: every caller derives it from a validated session,
+// never from client input.
+export async function overDurableBrake(env, request, { name, windowMs, max, subject }) {
   if (!env.LIMITER) return false
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
+  const who = subject || ip
   try {
     const res = await env.LIMITER.fetch('https://limiter/brake', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: `${name}:${ip}`, windowMs, max }),
+      body: JSON.stringify({ key: `${name}:${who}`, windowMs, max }),
     })
     if (!res.ok) {
       // Fail-open's own failure mode is silence — unmarked, a persistent

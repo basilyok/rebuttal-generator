@@ -12,6 +12,7 @@
 // claims become false. Treat that as a breaking change, not a refactor.
 
 import { getSession, jsonResponse, requireAccounts, vaultKey } from '../_lib/session.js'
+import { overDurableBrake } from '../_lib/ratelimit.js'
 
 /** Generous enough for a dozen provider keys, small enough to bound abuse. */
 const MAX_CIPHERTEXT_CHARS = 20_000
@@ -55,6 +56,15 @@ export async function onRequestPut({ request, env }) {
   // Storing arbitrary client JSON is how a storage bucket becomes someone's CDN.
   if (!isBlob(body?.salt, 64) || !isBlob(body?.iv, 64) || !isBlob(body?.ciphertext, MAX_CIPHERTEXT_CHARS)) {
     return jsonResponse({ error: 'Malformed vault payload.' }, 400)
+  }
+
+  // Keyed by account, not address: this write belongs to a signed-in user, so
+  // CGNAT neighbours must not share a quota and changing network must not shed
+  // one. Placed after validation so a malformed payload cannot burn the limit,
+  // and before the write because capping writes is the whole point. Fails open
+  // — a limiter outage must not stop someone saving their keys.
+  if (await overDurableBrake(env, request, { name: 'vault-put', windowMs: 600_000, max: 20, subject: session.userId })) {
+    return jsonResponse({ error: 'Too many vault saves in a row — wait a moment and try again.' }, 429)
   }
 
   const record = {

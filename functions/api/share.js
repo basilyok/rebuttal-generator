@@ -7,7 +7,7 @@
 // API keys never reach this endpoint: the client sends only the finished text.
 
 import { isSameOriginBrowserRequest } from '../_lib/gate.js'
-import { makeFloodBrake } from '../_lib/ratelimit.js'
+import { makeFloodBrake, overDurableBrake } from '../_lib/ratelimit.js'
 
 const MAX_BYTES = 100_000
 const MAX_FIELD = 40_000
@@ -67,6 +67,15 @@ export async function onRequestPost(context) {
   }
   if (overRateLimit(context.request)) {
     return json({ error: 'Too many shares at once — wait a minute and try again.' }, 429)
+  }
+  // The durable half. The in-memory brake above is per-isolate and per-colo,
+  // so its 6/min is a floor an address clears several times over by reaching
+  // several edges; this counter is global, which makes it an actual cap.
+  // Publishing is anonymous, so there is no account to key on — IP it is.
+  // The window is wider than the in-memory one on purpose: bursts are normal
+  // (share, tweak, re-share), sustained volume is not.
+  if (await overDurableBrake(context.env, context.request, { name: 'share-post', windowMs: 600_000, max: 20 })) {
+    return json({ error: 'Too many shares from your network — wait a few minutes and try again.' }, 429)
   }
 
   const raw = await context.request.text()

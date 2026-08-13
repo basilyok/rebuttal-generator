@@ -9,7 +9,7 @@
 // browser and never pass through here.
 
 import { isSameOriginBrowserRequest } from '../_lib/gate.js'
-import { makeFloodBrake } from '../_lib/ratelimit.js'
+import { makeFloodBrake, overDurableBrake } from '../_lib/ratelimit.js'
 
 const MAX_CHARS = 20_000
 const MIN_WORDS = 120
@@ -278,6 +278,15 @@ export async function onRequestGet(context) {
   }
   if (overRateLimit(context.request)) {
     return json({ error: 'Too many article requests at once — wait a minute and try again.' }, 429)
+  }
+  // The durable half. Nothing here writes to KV, so this brake is not about
+  // the write budget — it is about egress: one call can fan out into four
+  // upstream fetches (source, two archive lookups, snapshot) on 15-20s
+  // timeouts, which is what makes an unbraked extractor a free amplifier for
+  // someone else's scraping. Reading several articles in a row is normal use,
+  // so the cap is the loosest of the set.
+  if (await overDurableBrake(context.env, context.request, { name: 'article-get', windowMs: 600_000, max: 40 })) {
+    return json({ error: 'Too many article requests from your network — wait a few minutes and try again.' }, 429)
   }
 
   const params = new URL(context.request.url).searchParams

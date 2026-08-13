@@ -6,8 +6,35 @@
 // than in a cookie, so a stolen cookie alone cannot complete somebody's sign-in.
 
 import { jsonResponse, oauthKey, randomToken, base64Url, googleConfigured, OAUTH_TTL_SECONDS } from '../../../_lib/session.js'
+import { makeFloodBrake, overDurableBrake } from '../../../_lib/ratelimit.js'
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+
+// This endpoint writes a KV record on every single call, and until 2026-08-11
+// it did so with no authentication, no origin check and no brake — the whole
+// free-plan budget of 1000 writes/day was one unauthenticated `while true`
+// loop away, and exhausting it does not merely break sign-in: vault saves,
+// history sync and preferences all write to the same namespace.
+//
+// It is NOT gated to same-origin like /api/share and /api/article. Those are
+// fetches from our own page, where a browser always supplies Origin or
+// Sec-Fetch-Site. This is a top-level navigation, reachable from a bookmark,
+// a typed URL, or a fresh tab — none of which carry a same-origin signal, so
+// the gate that fits those endpoints would break legitimate sign-in here.
+// A per-address rate limit is the tool that fits a navigation.
+//
+// Ten starts per ten minutes per address: a person clicking "Sign in with
+// Google" does it once or twice, and a stalled attempt costs one more.
+const RATE = { windowMs: 600_000, max: 10 }
+const overRateLimit = makeFloodBrake(RATE)
+
+/** Send the user back to the app with a message rather than raw JSON — same
+ *  shape as callback.js's failure(), because this is a navigation too. */
+function failure(request, reason) {
+  const url = new URL('/', new URL(request.url).origin)
+  url.searchParams.set('auth_error', reason)
+  return Response.redirect(url.toString(), 302)
+}
 
 async function pkceChallenge(verifier) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
@@ -22,6 +49,16 @@ export function redirectUri(request) {
 export async function onRequestGet({ request, env }) {
   if (!googleConfigured(env)) {
     return jsonResponse({ error: 'Google sign-in is not configured on this deployment.', configured: false }, 501)
+  }
+
+  // Both brakes run BEFORE the KV write below — the whole point is to cap
+  // writes, so a limited request must cost nothing. In-memory first (free,
+  // per-isolate), then the durable counter (one subrequest, global), matching
+  // the layering contract in _lib/ratelimit.js. Both fail open: a limiter
+  // outage must never become "nobody can sign in", since sign-in is the only
+  // door to the vault.
+  if (overRateLimit(request) || (await overDurableBrake(env, request, { name: 'auth-start', ...RATE }))) {
+    return failure(request, 'rate_limited')
   }
 
   const url = new URL(request.url)

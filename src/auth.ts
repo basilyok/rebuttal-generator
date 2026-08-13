@@ -64,6 +64,8 @@ export function authErrorMessage(code: string): string {
       return 'Could not complete sign-in with the provider. Please try again.'
     case 'invalid_token':
       return 'The sign-in response could not be verified. Please try again.'
+    case 'rate_limited':
+      return 'Too many sign-in attempts from your network. Please wait a few minutes and try again.'
     default:
       return 'Sign-in did not complete. Please try again.'
   }
