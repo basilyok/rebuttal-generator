@@ -60,6 +60,26 @@ version id is the one at `(100%)`; if it is not, promote it explicitly:
 npx wrangler versions deploy <version-id>@100% --yes
 ```
 
+### The KV write budget
+
+Six endpoints write to the `ACCOUNTS`/`SHARES` namespaces, and on the free plan
+they share **1000 writes/day**. Exhausting it is not a single-feature outage:
+sign-in, vault sync, history sync and preferences all stop together, because
+they all write to the same place. Every one of those endpoints therefore sits
+behind a brake, and the brakes are deliberately placed *after* validation and
+*before* the write, so neither a malformed payload nor a refused request costs
+budget. `tests/writebudget.test.mjs` pins that placement — a brake moved after
+its write would still return 429 and still burn the quota it exists to guard.
+
+Authenticated endpoints (`vault`, `history`, `prefs`) key their counter by
+account id via `overDurableBrake`'s `subject`; anonymous ones (`auth-start`,
+`share`, `article`) key by address. Never "fix" an authenticated endpoint to
+key by IP: behind CGNAT one address is a whole office, so colleagues would
+spend each other's quota while anyone switching network sheds their own.
+
+Every brake fails open. A limiter outage must degrade to the in-memory brakes,
+never become "nobody can sign in" — sign-in is the only door to the vault.
+
 When verifying a deploy, also confirm the Pages project's dashboard
 environment variables do **not** define `AUTH_TEST_BYPASS_RATE_LIMIT`: a
 dashboard-set value would disable **both** brake layers, and the in-repo
