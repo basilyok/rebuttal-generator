@@ -1,5 +1,21 @@
 # Password Recovery Implementation Plan
 
+> **Assert on what a caller can obtain, not on the artifact you just wrote.**
+> Task 3 shipped the same class of error twice before it was caught. First a
+> comment claimed a partial reset was safe because the old password still
+> worked — true, but authenticating is not decrypting, and the ciphertext had
+> already moved to the new key era. Then its replacement claimed every state
+> left a copy sealed under a credential the caller holds — true of what was
+> *stored*, false of what `begin` actually *served*.
+>
+> Both times the comment was literally true and operationally false, and both
+> times the test agreed with it, because the test measured the same wrong thing:
+> it read the KV store directly instead of calling the endpoint. A test that
+> inspects the artifact you just wrote can only confirm you wrote it.
+>
+> Every remaining task here crosses the same boundary. When you assert, ask what
+> a real caller holds and what a real call returns.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:subagent-driven-development (recommended) or superpowers-extended-cc:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship the approved recovery-code design (spec: `docs/superpowers/specs/2026-08-13-password-recovery-design.md`) so a password account can be reset without destroying its vault and history.
