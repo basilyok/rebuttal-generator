@@ -1238,8 +1238,14 @@ git commit -m "Tag blobs with the key that opens them"
 
 **Context you need:** `src/App.tsx:280` holds `localKeyRef` (the adopted `masterKey`); `onVaultOpened` (line ~380) applies a decrypted bundle; `collectKeyBundle()` (line 139) gathers the localStorage API keys; `syncVault` (line ~1151) reseals and PUTs. The vault effect around line 449 already branches on `auth.user?.provider === 'local' && localKeyRef.current`. `handleAuthSubmit` adopts the key at line 1100.
 
+**Flip the era tag in the same edit that changes the key — carried from Task 4.** `pushHistory` takes its version as a required parameter with no default, and `App.tsx`'s `syncHistory` currently passes `BLOB_VERSION_MASTER`, which is the truthful value while no DEK exists. When this task introduces the real DEK, the key and the tag must move together in a single edit. They are separate arguments precisely so a reviewer can see them disagree: a blob tagged v2 but sealed under the masterKey would pass the "refuse reset while any blob is v1" gate that exists to stop exactly it, and the reset would then rewrap the DEK and strand the data.
+
+**Decide what `pullAndMergeHistory` does with `MissingKeyError` — also from Task 4.** It currently swallows that in the same `catch` as a wrong key and a corrupt blob, returning local history. Right for a reader, since the panel must not break — but it means a half-migrated account silently drops its remote history rather than reporting that it lacks a key it ought to hold. "I hold the wrong key" is a migration bug and should be visible somewhere; "the blob is corrupt" is not. Distinguish them, or record here why not.
+
 **Acceptance Criteria:**
 - [ ] `fetchDek()` / `saveDek(byPassword, byRecovery)` wrap the endpoint with the same `credentials: 'same-origin'` and null-on-401 conventions as `fetchVault`/`saveVault`
+- [ ] The DEK key and the `BLOB_VERSION_DEK` tag are introduced in the same edit, at every `syncHistory`/`pushHistory` call site
+- [ ] `MissingKeyError` from `pullAndMergeHistory` is either surfaced or explicitly documented as swallowed
 - [ ] `setupRecovery(username, masterKey)` generates DEK + code, **writes the DEK record before re-encrypting anything**, then migrates blobs, and returns the code
 - [ ] `ensureMigrated(...)` re-encrypts any still-v1 blob to v2 and is a no-op when everything is already v2
 - [ ] Running setup twice does not orphan data — the second run reuses the stored DEK rather than minting a new one
