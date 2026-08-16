@@ -260,3 +260,345 @@ test('missing credentialVersion on both sides still resolves (no backfill needed
   })
   assert.equal(session?.userId, 'local:alice')
 })
+
+// --- reset endpoints -------------------------------------------------------
+// Reusing kvSpy from above; `writes` records key order, which the write-order
+// test depends on.
+
+const RECOVERY_AUTH = 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='
+const NEW_AUTH_HASH = 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA='
+const wrappedTwo = { iv: 'AAAAAAAAAAAAAAAA', ciphertext: 'Q0NDQw==', version: 1 }
+
+/** Build a recovery record that really verifies against RECOVERY_AUTH. */
+async function realRecoveryRecord() {
+  const { hashAuth, fromBase64 } = await import('../functions/_lib/password.js')
+  return hashAuth(fromBase64(RECOVERY_AUTH))
+}
+
+const post = (url, body, extra = {}) =>
+  new Request(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...extra },
+    body: JSON.stringify(body),
+  })
+
+const completeBody = (overrides = {}) => ({
+  username: 'alice',
+  recoveryAuth: RECOVERY_AUTH,
+  authHash: NEW_AUTH_HASH,
+  dek: { byPassword: wrappedTwo, byRecovery: wrappedTwo },
+  ...overrides,
+})
+
+test('begin: a correct code releases byRecovery', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/begin.js')
+  const spy = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'dek:local:alice': JSON.stringify({ byPassword: wrappedTwo, byRecovery: wrappedTwo, version: 1 }),
+  })
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'alice', recoveryAuth: RECOVERY_AUTH }),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(res.status, 200)
+  const data = await res.json()
+  assert.equal(data.byRecovery.ciphertext, wrappedTwo.ciphertext)
+  // Proving possession of the code must not also hand over the password-wrapped
+  // copy: that copy is the one an offline password guess would target.
+  assert.equal(data.byPassword, undefined)
+  assert.deepEqual(spy.writes, [], 'begin is a read-only endpoint')
+})
+
+test('begin: a wrong code and an unknown username are indistinguishable', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/begin.js')
+  const wrongCode = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'dek:local:alice': JSON.stringify({ byPassword: wrappedTwo, byRecovery: wrappedTwo, version: 1 }),
+  })
+  const unknownUser = kvSpy()
+
+  const a = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'alice', recoveryAuth: NEW_AUTH_HASH }),
+    env: { ACCOUNTS: wrongCode.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  const b = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'nobody', recoveryAuth: RECOVERY_AUTH }),
+    env: { ACCOUNTS: unknownUser.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(a.status, 401)
+  assert.equal(b.status, 401)
+  assert.deepEqual(await a.json(), await b.json(), 'the two failures must be byte-identical')
+  assert.deepEqual(unknownUser.writes, [], 'a failed begin writes nothing')
+})
+
+test('begin: an unknown username still costs a PBKDF2 verify', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/begin.js')
+  // The body-only comparison above cannot see an early `if (!recordRaw) return
+  // failure()` hoisted above verifyAuth — that refactor looks harmless and
+  // silently restores a username-by-timing oracle. Counting derivations is what
+  // catches it: crypto.subtle.deriveBits is the one call verifyAuth cannot skip.
+  const realDeriveBits = crypto.subtle.deriveBits.bind(crypto.subtle)
+  let derivations = 0
+  crypto.subtle.deriveBits = (...args) => {
+    derivations += 1
+    return realDeriveBits(...args)
+  }
+  try {
+    const spy = kvSpy()
+    await onRequestPost({
+      request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'nobody', recoveryAuth: RECOVERY_AUTH }),
+      env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+    })
+    assert.equal(derivations, 1, 'the miss path must verify against dummyRecord(), not return early')
+  } finally {
+    crypto.subtle.deriveBits = realDeriveBits
+  }
+})
+
+test('begin: refuses off-site callers', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/begin.js')
+  const spy = kvSpy()
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'alice', recoveryAuth: RECOVERY_AUTH }, { Origin: 'https://evil.example' }),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(res.status, 403)
+})
+
+test('begin: malformed bodies are 400 and never reach KV', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/begin.js')
+  const cases = [
+    ['no username', { recoveryAuth: RECOVERY_AUTH }],
+    ['no code', { username: 'alice' }],
+    ['code is not base64', { username: 'alice', recoveryAuth: '!!nope!!' }],
+    ['code is the wrong length', { username: 'alice', recoveryAuth: 'QUFB' }],
+  ]
+  for (const [label, body] of cases) {
+    const spy = kvSpy()
+    const res = await onRequestPost({
+      request: post(`${ORIGIN}/api/auth/recover/begin`, body),
+      env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+    })
+    assert.equal(res.status, 400, label)
+    assert.deepEqual(spy.writes, [], label)
+  }
+  // An oversized body is refused on length alone, before JSON.parse.
+  const spy = kvSpy()
+  const big = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'a'.repeat(9000), recoveryAuth: RECOVERY_AUTH }),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(big.status, 400)
+})
+
+test('begin: 501 when ACCOUNTS is unconfigured', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/begin.js')
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'alice', recoveryAuth: RECOVERY_AUTH }),
+    env: { ...openLimiter },
+  })
+  assert.equal(res.status, 501)
+})
+
+test('complete: writes dek, then recovery, then password — in that order', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const spy = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local', name: 'alice' }),
+  })
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(res.status, 200)
+  // The password record MUST land last: until it does the account stays wholly
+  // on its old credentials, so any earlier failure is inert rather than
+  // stranding a password whose DEK was never stored.
+  const relevant = spy.writes.filter((k) => k.startsWith('dek:') || k.startsWith('recovery:') || k.startsWith('password:'))
+  assert.deepEqual(relevant, ['dek:local:alice', 'recovery:local:alice', 'password:local:alice'])
+  // And the version bump comes after ALL of them — a failure between the bump
+  // and the password write would sign every session out for a reset that never
+  // took effect.
+  assert.deepEqual(spy.writes, [
+    'dek:local:alice',
+    'recovery:local:alice',
+    'password:local:alice',
+    'user:local:alice',
+  ])
+})
+
+test('complete: the new password verifies and the DEK copies are stored', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const { verifyAuth, fromBase64 } = await import('../functions/_lib/password.js')
+  const spy = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+  })
+  await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  // Ordering alone would still pass if the handler stored junk under each key.
+  assert.equal(await verifyAuth(JSON.parse(spy.store['password:local:alice']), fromBase64(NEW_AUTH_HASH)), true)
+  const dek = JSON.parse(spy.store['dek:local:alice'])
+  assert.equal(dek.byPassword.ciphertext, wrappedTwo.ciphertext)
+  assert.equal(dek.byRecovery.ciphertext, wrappedTwo.ciphertext)
+})
+
+test('complete: rotating the recovery code replaces the verifier', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const { verifyAuth, fromBase64 } = await import('../functions/_lib/password.js')
+  const spy = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+  })
+  await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody({ recoveryAuthNext: NEW_AUTH_HASH })),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  const stored = JSON.parse(spy.store['recovery:local:alice'])
+  assert.equal(await verifyAuth(stored, fromBase64(NEW_AUTH_HASH)), true, 'the new code must work')
+  assert.equal(await verifyAuth(stored, fromBase64(RECOVERY_AUTH)), false, 'the spent code must not')
+})
+
+test('complete: without a rotation the old code keeps working', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const { verifyAuth, fromBase64 } = await import('../functions/_lib/password.js')
+  const spy = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+  })
+  await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(
+    await verifyAuth(JSON.parse(spy.store['recovery:local:alice']), fromBase64(RECOVERY_AUTH)),
+    true,
+    'the verifier must survive a reset that did not rotate it'
+  )
+})
+
+test('complete: bumps credentialVersion so old sessions stop resolving', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const spy = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local', credentialVersion: 3 }),
+  })
+  await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(JSON.parse(spy.store['user:local:alice']).credentialVersion, 4)
+})
+
+test('complete: a missing credentialVersion bumps to 1, never to NaN', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const spy = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+  })
+  await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  // getSession fails a user record closed on a non-integer version, so a NaN
+  // here would lock the account out entirely, not merely fail to invalidate.
+  assert.equal(JSON.parse(spy.store['user:local:alice']).credentialVersion, 1)
+})
+
+test('complete: a wrong code writes nothing', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const spy = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+  })
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody({ recoveryAuth: NEW_AUTH_HASH })),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(res.status, 401)
+  assert.deepEqual(spy.writes, [])
+})
+
+test('complete: an unknown username fails the same way, and writes nothing', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const spy = kvSpy()
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody({ username: 'nobody' })),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(res.status, 401)
+  assert.equal((await res.json()).code, 'bad-credentials')
+  assert.deepEqual(spy.writes, [], 'nothing may be written for an account that does not exist')
+})
+
+test('complete: refuses off-site callers', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const spy = kvSpy()
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody(), { Origin: 'https://evil.example' }),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(res.status, 403)
+  assert.deepEqual(spy.writes, [])
+})
+
+test('complete: malformed bodies are 400 and never reach KV', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const cases = [
+    ['no new password hash', completeBody({ authHash: undefined })],
+    ['new password hash is the wrong length', completeBody({ authHash: 'QUFB' })],
+    ['no dek', completeBody({ dek: undefined })],
+    ['one dek copy missing', completeBody({ dek: { byPassword: wrappedTwo } })],
+    ['dek copy is not base64', completeBody({ dek: { byPassword: { iv: '!!x!!', ciphertext: 'x' }, byRecovery: wrappedTwo } })],
+    ['rotation code is the wrong length', completeBody({ recoveryAuthNext: 'QUFB' })],
+  ]
+  for (const [label, body] of cases) {
+    const spy = kvSpy({
+      'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+      'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+    })
+    const res = await onRequestPost({
+      request: post(`${ORIGIN}/api/auth/recover/complete`, body),
+      env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+    })
+    assert.equal(res.status, 400, label)
+    assert.deepEqual(spy.writes, [], label)
+  }
+})
+
+test('complete: 501 when ACCOUNTS is unconfigured', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    env: { ...openLimiter },
+  })
+  assert.equal(res.status, 501)
+})
+
+// The brakes are the only server-side limit on how many recovery codes one
+// address can try, so "the endpoint consults them" is a spec property, not an
+// implementation detail — and a limited request must cost no KV write.
+test('the reset endpoints refuse a limited caller before touching KV', async () => {
+  const closedLimiter = {
+    LIMITER: { async fetch() { return new Response(JSON.stringify({ limited: true })) } },
+  }
+  for (const [path, body] of [
+    ['begin', { username: 'alice', recoveryAuth: RECOVERY_AUTH }],
+    ['complete', completeBody()],
+  ]) {
+    const { onRequestPost } = await import(`../functions/api/auth/recover/${path}.js`)
+    const spy = kvSpy({
+      'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+      'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+    })
+    const res = await onRequestPost({
+      request: post(`${ORIGIN}/api/auth/recover/${path}`, body),
+      env: { ACCOUNTS: spy.kv, ...closedLimiter },
+    })
+    assert.equal(res.status, 429, path)
+    assert.equal((await res.json()).code, 'rate-limited', path)
+    assert.deepEqual(spy.writes, [], path)
+  }
+})
