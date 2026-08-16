@@ -267,6 +267,7 @@ test('missing credentialVersion on both sides still resolves (no backfill needed
 
 const RECOVERY_AUTH = 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='
 const NEW_AUTH_HASH = 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA='
+const NEXT_RECOVERY_AUTH = 'TkVYVFJFQ09WRVJZQ09ERS0zMi1ieXRlcy1oZXJlISE='
 const wrappedTwo = { iv: 'AAAAAAAAAAAAAAAA', ciphertext: 'Q0NDQw==', version: 1 }
 
 /** Build a recovery record that really verifies against RECOVERY_AUTH. */
@@ -286,6 +287,7 @@ const completeBody = (overrides = {}) => ({
   username: 'alice',
   recoveryAuth: RECOVERY_AUTH,
   authHash: NEW_AUTH_HASH,
+  recoveryAuthNext: NEXT_RECOVERY_AUTH,
   dek: { byPassword: wrappedTwo, byRecovery: wrappedTwo },
   ...overrides,
 })
@@ -453,11 +455,11 @@ test('complete: rotating the recovery code replaces the verifier', async () => {
     'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
   })
   await onRequestPost({
-    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody({ recoveryAuthNext: NEW_AUTH_HASH })),
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
     env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
   })
   const stored = JSON.parse(spy.store['recovery:local:alice'])
-  assert.equal(await verifyAuth(stored, fromBase64(NEW_AUTH_HASH)), true, 'the new code must work')
+  assert.equal(await verifyAuth(stored, fromBase64(NEXT_RECOVERY_AUTH)), true, 'the new code must work')
   assert.equal(await verifyAuth(stored, fromBase64(RECOVERY_AUTH)), false, 'the spent code must not')
 })
 
@@ -469,7 +471,7 @@ test('complete: without a rotation the old code keeps working', async () => {
     'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
   })
   await onRequestPost({
-    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody({ recoveryAuthNext: undefined })),
     env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
   })
   assert.equal(
@@ -477,6 +479,137 @@ test('complete: without a rotation the old code keeps working', async () => {
     true,
     'the verifier must survive a reset that did not rotate it'
   )
+})
+
+// The property no other test here covers, and the one that matters most: KV
+// has no transaction, so `complete` can stop between any two writes. At EVERY
+// such point some credential the user still holds must open some copy in the
+// stored dek: record. Authentication is not the question — the old password
+// keeps signing in throughout, which is exactly what made the original
+// (wrong) "every write before password: is inert" argument look true.
+//
+// The two key eras are told apart by ciphertext, since a unit test has no real
+// AES keys: OLD_COPY is sealed under the old password/code, NEW_COPY under the
+// new ones.
+const OLD_COPY = 'T0xEQ09QWQ=='
+const NEW_COPY = 'TkVXQ09QWQ=='
+const oldPair = { byPassword: { iv: 'AAAAAAAAAAAAAAAA', ciphertext: OLD_COPY, version: 1 }, byRecovery: { iv: 'AAAAAAAAAAAAAAAA', ciphertext: OLD_COPY, version: 1 }, version: 1 }
+
+/** A kvSpy whose nth put throws, standing in for a crash or a dropped network. */
+function kvFailingOnPut(seed, failAt) {
+  const spy = kvSpy(seed)
+  const realPut = spy.kv.put
+  let n = 0
+  spy.kv.put = async (key, value) => {
+    n += 1
+    if (n === failAt) throw new Error('KV unavailable')
+    return realPut(key, value)
+  }
+  return spy
+}
+
+/**
+ * Which key era each stored credential record belongs to, and which eras the
+ * stored dek: record still has a copy for. `previous` counts: a client that
+ * finds the current copy unopenable falls back to it.
+ */
+async function eraOf(record, oldBytes, newBytes) {
+  const { verifyAuth } = await import('../functions/_lib/password.js')
+  if (await verifyAuth(record, oldBytes)) return 'old'
+  if (await verifyAuth(record, newBytes)) return 'new'
+  return 'none'
+}
+
+test('complete: every partial-write state leaves the DEK openable by a credential the user holds', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const { hashAuth, fromBase64 } = await import('../functions/_lib/password.js')
+  const OLD_PASSWORD = 'T0xEUEFTU1dPUkQtMzItYnl0ZXMtZXhhY3RseSEhISE='
+
+  // Four writes, so four ways to be interrupted, plus the clean run.
+  for (const failAt of [1, 2, 3, 4]) {
+    const spy = kvFailingOnPut(
+      {
+        'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+        'password:local:alice': JSON.stringify(await hashAuth(fromBase64(OLD_PASSWORD))),
+        'dek:local:alice': JSON.stringify(oldPair),
+        'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+      },
+      failAt
+    )
+    await onRequestPost({
+      request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody({
+        dek: { byPassword: { iv: 'AAAAAAAAAAAAAAAA', ciphertext: NEW_COPY }, byRecovery: { iv: 'AAAAAAAAAAAAAAAA', ciphertext: NEW_COPY } },
+      })),
+      env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+    })
+
+    // What the user can prove, given whatever landed.
+    const passwordEra = await eraOf(
+      JSON.parse(spy.store['password:local:alice']),
+      fromBase64(OLD_PASSWORD),
+      fromBase64(NEW_AUTH_HASH)
+    )
+    const codeEra = await eraOf(
+      JSON.parse(spy.store['recovery:local:alice']),
+      fromBase64(RECOVERY_AUTH),
+      fromBase64(NEXT_RECOVERY_AUTH)
+    )
+    const eraCipher = { old: OLD_COPY, new: NEW_COPY, none: null }
+
+    // What the stored record can offer, current pair and fallback alike.
+    const dek = JSON.parse(spy.store['dek:local:alice'])
+    const passwordCopies = [dek.byPassword?.ciphertext, dek.previous?.byPassword?.ciphertext]
+    const codeCopies = [dek.byRecovery?.ciphertext, dek.previous?.byRecovery?.ciphertext]
+
+    const openable =
+      passwordCopies.includes(eraCipher[passwordEra]) || codeCopies.includes(eraCipher[codeEra])
+    assert.ok(
+      openable,
+      `interrupted at write ${failAt}: password proves the ${passwordEra} era and the code proves the ${codeEra} era, ` +
+        `but the stored record only offers ${JSON.stringify({ passwordCopies, codeCopies })} — this vault can never be opened`
+    )
+  }
+})
+
+test('complete: the previous pair does not chain, so the record cannot grow without bound', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const spy = kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    // A record that already carries a generation of history.
+    'dek:local:alice': JSON.stringify({ ...oldPair, previous: { byPassword: wrappedTwo, byRecovery: wrappedTwo } }),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+  })
+  await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  const dek = JSON.parse(spy.store['dek:local:alice'])
+  assert.equal(dek.previous.byPassword.ciphertext, OLD_COPY, 'one generation back is kept')
+  assert.equal(dek.previous.previous, undefined, 'two generations back is not')
+})
+
+test('complete: an unopenable existing dek record does not block the reset', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  for (const [label, raw] of [
+    ['unparseable', '{not json'],
+    ['not a pair', JSON.stringify({})],
+    ['first reset, no record at all', null],
+  ]) {
+    const seed = {
+      'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+      'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+    }
+    if (raw !== null) seed['dek:local:alice'] = raw
+    const spy = kvSpy(seed)
+    const res = await onRequestPost({
+      request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+      env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+    })
+    // Refusing here would strand the account that most needs the reset: an
+    // unopenable dek: record is the state a reset exists to escape.
+    assert.equal(res.status, 200, label)
+    assert.equal(JSON.parse(spy.store['dek:local:alice']).previous, null, label)
+  }
 })
 
 test('complete: bumps credentialVersion so old sessions stop resolving', async () => {

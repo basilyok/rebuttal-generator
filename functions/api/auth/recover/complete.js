@@ -1,18 +1,40 @@
 // Step two: with possession already proven, replace the account's credentials.
 //
-// Four writes, and their ORDER is the whole safety argument. KV has no
-// transaction, so the account must remain fully usable on its OLD credentials
-// until the very last one lands:
+// Four writes, and their ORDER is the whole safety argument:
 //
-//   1. dek:       the new wrapped copies — inert until a password can open one
-//   2. recovery:  the verifier for the code — inert until the password changes
-//   3. password:  the new authHash      — the switch that makes it all live
+//   1. dek:       the new wrapped copies, PLUS the old pair under `previous`
+//   2. recovery:  the verifier for the new code
+//   3. password:  the new authHash — the switch that makes the new era live
 //   4. user:      the credentialVersion bump — evicts the old sessions
 //
-// Fail anywhere in 1-3 and the old password still works and still unwraps the
-// old DEK copy, so a retry converges with nothing lost. Writing password:
-// first would strand a password whose DEK was never stored: an account that
-// signs in but cannot decrypt anything it owns.
+// KV has no transaction, so every intermediate state must be openable by some
+// credential the user actually holds. Getting that right needs `previous`, and
+// the reason is worth stating precisely, because an earlier version of this
+// comment stated the opposite and was wrong in the one direction that loses
+// data (see the correction block in
+// docs/superpowers/specs/2026-08-13-password-recovery-design.md):
+//
+// Write 1 does not ADD the new copies, it OVERWRITES the record. Without
+// `previous`, the window between writes 1 and 2 is a vault nobody can open:
+// the old password still authenticates (password: has not moved) but
+// byPassword is now sealed under the NEW password key; the old code still
+// verifies (recovery: has not moved) but byRecovery is now sealed under the
+// NEW code; and the new code cannot even reach begin's 200, because its
+// verifier has not landed. A client that crashed, dropped the network or
+// closed the tab there would leave the vault permanently unopenable — in the
+// feature whose entire purpose is not losing the vault.
+//
+// The trap is that authentication and decryption are separate things. The old
+// credentials keep signing in throughout, which is exactly what makes "the old
+// password still works, so the account is intact" look true while the
+// ciphertext it points at has already moved to the new key era. Sign-in is not
+// evidence of anything here.
+//
+// Carrying the old pair under `previous` makes the ordering argument true
+// rather than merely stated: at every point in the sequence, at least one of
+// the four stored copies is sealed under a credential the caller still holds.
+// Writing password: first would still be wrong for the original reason —
+// it would strand a password whose DEK was never stored.
 //
 // The bump is last for the same class of reason, one step further out: a
 // failure between the bump and the password write would sign every session out
@@ -63,6 +85,26 @@ const isWrapped = (value) => !!value && isBlob(value.iv, MAX_FIELD) && isBlob(va
 // reason spelled out in dek.js: the server validated exactly one wrap format,
 // so it labels the record with that format.
 const clean = (value) => ({ iv: value.iv, ciphertext: value.ciphertext, version: 1 })
+
+/**
+ * The `previous` field for write 1: the stored pair, or null if there is not a
+ * usable one. Rebuilt field by field through clean() rather than copied, which
+ * is what bounds the chain — a stored record's own `previous` is not among the
+ * fields clean() emits, so it cannot survive into the next generation. A
+ * `delete record.previous` would do the same thing today and silently stop
+ * doing it the first time the record grows another nested field.
+ */
+function previousPair(raw) {
+  if (!raw) return null
+  let record
+  try {
+    record = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (!isWrapped(record?.byPassword) || !isWrapped(record?.byRecovery)) return null
+  return { byPassword: clean(record.byPassword), byRecovery: clean(record.byRecovery) }
+}
 
 const failure = () =>
   // Byte-identical to begin.js's, and for the same reason: this endpoint
@@ -144,14 +186,30 @@ export async function onRequestPost({ request, env }) {
     const user = JSON.parse(userRaw)
     if (!user || typeof user !== 'object') return failure()
 
-    // 1. New wrapped copies. Inert: nothing can reach them until a password
-    //    that opens one exists.
+    // The pair the caller's CURRENT credentials open. Read before any write,
+    // because write 1 is what destroys it. Kept deliberately lenient: a record
+    // that will not parse, or that does not hold a usable pair, becomes null
+    // rather than an error. Refusing the reset in that case would strand the
+    // one account that most needs it — an unopenable dek: record is precisely
+    // the state a reset exists to escape, and preserving unusable bytes buys
+    // nobody anything.
+    const previous = previousPair(await env.ACCOUNTS.get(dekKey(userId)))
+
+    // 1. The new wrapped copies, carrying the old pair. See the header: this
+    //    OVERWRITES, so `previous` is the only thing standing between a
+    //    mid-sequence failure and a permanently unopenable vault.
     await env.ACCOUNTS.put(
       dekKey(userId),
       JSON.stringify({
         byPassword: clean(body.dek.byPassword),
         byRecovery: clean(body.dek.byRecovery),
+        previous,
         version: 1,
+        // Only this record is stamped. The password: and recovery: records
+        // carry no timestamp because hashAuth() owns their shape and nothing
+        // reads a date off them; this one is a plain document written by two
+        // different endpoints (here and PUT /api/dek), where "which write won"
+        // is a question a human debugging a half-finished reset will ask.
         updatedAt: Date.now(),
       })
     )
