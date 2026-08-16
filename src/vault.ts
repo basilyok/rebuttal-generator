@@ -53,13 +53,17 @@ export class WrongPassphraseError extends VaultError {
 
 // --- encoding helpers -------------------------------------------------------
 
-const toBase64 = (bytes: Uint8Array): string => {
+// Exported for src/recovery.ts, which needs the same base64 shape for the
+// wrapped-DEK record. Deliberately shared rather than duplicated: two
+// implementations of base64 in one codebase is how a blob written by one
+// path becomes unreadable by the other.
+export const toBase64 = (bytes: Uint8Array): string => {
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
   return btoa(binary)
 }
 
-const fromBase64 = (value: string): Uint8Array => Uint8Array.from(atob(value), (ch) => ch.charCodeAt(0))
+export const fromBase64 = (value: string): Uint8Array => Uint8Array.from(atob(value), (ch) => ch.charCodeAt(0))
 
 // --- IndexedDB key cache ----------------------------------------------------
 
