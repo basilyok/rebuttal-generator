@@ -616,8 +616,15 @@ git commit -m "Add the wrapped-DEK record endpoint and credentialVersion session
 
 **Context you need:** `functions/api/auth/login.js` is the template for everything about the shape here — the `MAX_BODY_BYTES` guard, `fromBase64(body?.authHash)` with a 32-byte length check, the `AUTH_TEST_BYPASS_RATE_LIMIT` seam that gates *both* brake layers, and above all the `dummyRecord()` discipline: `verifyAuth()` must run on every request, real user or not, and the code must not hoist an early `if (!recordRaw) return failure()` above it. Copy that structure rather than inventing a new one. `hashAuth(bytes)` → `{salt, hash, iterations, version}`; `verifyAuth(record, bytes)` → boolean; both from `functions/_lib/password.js`.
 
+**Where the `credentialVersion` bump goes — decided during Task 2's review.** The plan says `complete` "bumps `credentialVersion`" without pinning the position, and the position matters. It must land **after** the `password:` write: a failure between the bump and the password write would sign every session out for a reset that never actually took effect, which is strictly worse than not bumping at all.
+
+Accept one consequence rather than being surprised by it: a login landing between the `password:` write and the bump mints a session at the old version, which the bump then kills — bouncing that user to sign-in exactly once. Self-healing and millisecond-wide, but it should be a known cost.
+
+Also note the documented bound recorded in `session.js` during Task 2: invalidation is eventual, within KV's consistency window, and a concurrent user-record write can revert it. Do not build anything here that assumes the bump is immediately and permanently visible.
+
 **Acceptance Criteria:**
 - [ ] Both endpoints: same-origin gate (403), body cap and JSON validation (400), layered brakes honouring `AUTH_TEST_BYPASS_RATE_LIMIT`
+- [ ] The `credentialVersion` bump is the LAST write in `complete`, after `password:`
 - [ ] `begin` returns `{ byRecovery }` on a correct code, and an identical `bad-credentials` 401 for a wrong code *and* an unknown username
 - [ ] `begin` runs `verifyAuth` against `dummyRecord()` on a miss, so both paths cost one PBKDF2
 - [ ] `complete` re-verifies `recoveryAuth` before writing anything
