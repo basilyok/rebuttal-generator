@@ -39,10 +39,15 @@
 // The bump is last for the same class of reason, one step further out: a
 // failure between the bump and the password write would sign every session out
 // for a reset that never took effect — strictly worse than not bumping at all.
-// The accepted cost of that ordering is one millisecond-wide window in the
-// other direction: a login landing between writes 3 and 4 mints a session at
-// the old version, which the bump then kills, bouncing that user to sign-in
-// exactly once. Self-healing, and the cheaper of the two failures.
+// The accepted cost of that ordering is a window in the other direction: a
+// login landing between writes 3 and 4 mints a session at the old version,
+// which the bump then kills, bouncing that user to sign-in exactly once.
+// Self-healing, and the cheaper of the two failures. It is not as narrow as it
+// looks — write 4 re-reads the user record first (see there), so the gap spans
+// a KV read as well as the gap between two writes, which at the edge is tens
+// of milliseconds rather than one. Still small, still self-healing; just not
+// the "millisecond-wide" an earlier version of this comment claimed, written
+// before that read existed.
 //
 // Note also the bound documented on createSession in _lib/session.js:
 // invalidation is eventual, within KV's consistency window, and a concurrent
@@ -74,11 +79,17 @@ const MAX_BODY_BYTES = 8_000
 
 /**
  * The `previous` field for write 1: the stored pair, or null if there is not a
- * usable one. Rebuilt field by field through cleanWrapped() rather than
- * copied, which is what bounds the chain — a stored record's own `previous` is
- * not among the fields cleanWrapped() emits, so it cannot survive into the
- * next generation. A `delete record.previous` would do the same thing today
- * and silently stop doing it the first time the record grows another field.
+ * usable one.
+ *
+ * WHAT BOUNDS THE CHAIN is the two-field object literal this returns. `previous`
+ * sits at the record's TOP level, so naming exactly byPassword and byRecovery
+ * here is what drops the incoming record's own `previous` — along with every
+ * other field it may have grown. Swap the cleanWrapped() calls below for raw
+ * copies and the depth is still 1; delete a field from this return and it is
+ * not. cleanWrapped() is a real second bound (it would catch a `previous`
+ * nested INSIDE a copy) but it is not the one doing the work, and an earlier
+ * version of this comment credited it alone — the exact way a comment survives
+ * the refactor it was written to prevent.
  */
 function previousPair(raw) {
   if (!raw) return null
@@ -232,7 +243,16 @@ export async function onRequestPost({ request, env }) {
     //    Re-reading does not make it atomic — KV has no compare-and-swap, so
     //    the window shrinks from three writes wide to one read wide and cannot
     //    be closed here. What keeps that residue survivable is the `previous`
-    //    pair from write 1: an unlucky interleave costs a re-run, not a vault.
+    //    pair from write 1: an unlucky interleave between TWO resets costs a
+    //    re-run, not a vault.
+    //
+    //    Between three it can still cost a vault, and the honest accounting
+    //    should say so: history is one generation deep, so A's copies survive
+    //    B overwriting them but not C as well. Interleave A B C and then let A
+    //    retry, and A's original pair is two generations back — discarded.
+    //    Reaching it needs three concurrent resets of ONE account, which needs
+    //    the account's recovery code three times over; not worth engineering
+    //    against, but not worth pretending away either.
     //
     //    `id` is re-derived rather than trusted from storage, the same rule
     //    upsertUser follows.

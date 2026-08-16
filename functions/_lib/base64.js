@@ -51,8 +51,11 @@ export const isWrapped = (value) =>
  * above). Echoing a client-supplied version would label a record with a format
  * nothing ever checked for.
  *
- * Naming only the three fields it emits is also load-bearing at the recover/
- * complete.js call site, where it is what stops a stored record's `previous`
- * from chaining into the next generation. Do not turn this into a spread.
+ * Naming only the three fields it emits also serves as a secondary bound on
+ * the history chain in recover/complete.js — it would drop a `previous` nested
+ * inside a copy. The PRIMARY bound there is that function's own two-field
+ * return, since `previous` lives at the record's top level, not inside a copy;
+ * see previousPair(). Do not turn this into a spread, but do not go to it
+ * expecting to find the line that keeps the chain at depth 1.
  */
 export const cleanWrapped = (value) => ({ iv: value.iv, ciphertext: value.ciphertext, version: 1 })

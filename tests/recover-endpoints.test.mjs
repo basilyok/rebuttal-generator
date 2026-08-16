@@ -542,12 +542,17 @@ test('complete: rotating the recovery code replaces the verifier', async () => {
 // keeps signing in throughout, which is exactly what made the original
 // (wrong) "every write before password: is inert" argument look true.
 //
-// The two key eras are told apart by ciphertext, since a unit test has no real
-// AES keys: OLD_COPY is sealed under the old password/code, NEW_COPY under the
-// new ones.
-const OLD_COPY = 'T0xEQ09QWQ=='
-const NEW_COPY = 'TkVXQ09QWQ=='
-const oldPair = { byPassword: { iv: 'AAAAAAAAAAAAAAAA', ciphertext: OLD_COPY, version: 1 }, byRecovery: { iv: 'AAAAAAAAAAAAAAAA', ciphertext: OLD_COPY, version: 1 }, version: 1 }
+// Copies are told apart by ciphertext, since a unit test has no real AES keys.
+// All FOUR are distinct — era and slot both. Using one constant per era would
+// leave the suite blind to a handler that stored the password-wrapped DEK under
+// byRecovery: every era assertion would still pass while the copy the recovery
+// code is handed is one it cannot open.
+const OLD_PW = 'T0xEUFc='
+const OLD_RC = 'T0xEUkM='
+const NEW_PW = 'TkVXUFc='
+const NEW_RC = 'TkVXUkM='
+const copy = (ciphertext) => ({ iv: 'AAAAAAAAAAAAAAAA', ciphertext, version: 1 })
+const oldPair = { byPassword: copy(OLD_PW), byRecovery: copy(OLD_RC), version: 1 }
 
 /** A kvSpy whose nth put throws, standing in for a crash or a dropped network. */
 function kvFailingOnPut(seed, failAt) {
@@ -574,30 +579,39 @@ async function eraOf(record, oldBytes, newBytes) {
   return 'none'
 }
 
-test('complete: every partial-write state leaves the DEK openable by a credential the user holds', async () => {
-  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+test('complete: every partial-write state leaves the DEK REACHABLE by a credential the user holds', async () => {
+  const complete = await import('../functions/api/auth/recover/complete.js')
+  const begin = await import('../functions/api/auth/recover/begin.js')
+  const dekEndpoint = await import('../functions/api/dek.js')
   const { hashAuth, fromBase64 } = await import('../functions/_lib/password.js')
   const OLD_PASSWORD = 'T0xEUEFTU1dPUkQtMzItYnl0ZXMtZXhhY3RseSEhISE='
 
-  // Four writes, so four ways to be interrupted, plus the clean run.
+  // REACHABLE, not merely stored. An earlier version of this test read
+  // spy.store directly and passed while `begin` served only dek.byRecovery and
+  // never dek.previous.byRecovery — so the fallback existed in KV and no
+  // caller could ever obtain it. Reading storage answers "did we keep a copy";
+  // only driving the endpoints answers "can the user get at one", and the
+  // second is the question the guarantee is about. Anything that inspects the
+  // store here instead of a response is measuring the wrong thing.
   for (const failAt of [1, 2, 3, 4]) {
     const spy = kvFailingOnPut(
       {
         'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
         'password:local:alice': JSON.stringify(await hashAuth(fromBase64(OLD_PASSWORD))),
         'dek:local:alice': JSON.stringify(oldPair),
-        'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+        ...seedSignedIn(),
       },
       failAt
     )
-    await onRequestPost({
+    const env = { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter }
+    await complete.onRequestPost({
       request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody({
-        dek: { byPassword: { iv: 'AAAAAAAAAAAAAAAA', ciphertext: NEW_COPY }, byRecovery: { iv: 'AAAAAAAAAAAAAAAA', ciphertext: NEW_COPY } },
+        dek: { byPassword: copy(NEW_PW), byRecovery: copy(NEW_RC) },
       })),
-      env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+      env,
     })
 
-    // What the user can prove, given whatever landed.
+    // Which era each credential the user still holds now proves.
     const passwordEra = await eraOf(
       JSON.parse(spy.store['password:local:alice']),
       fromBase64(OLD_PASSWORD),
@@ -608,19 +622,39 @@ test('complete: every partial-write state leaves the DEK openable by a credentia
       fromBase64(RECOVERY_AUTH),
       fromBase64(NEXT_RECOVERY_AUTH)
     )
-    const eraCipher = { old: OLD_COPY, new: NEW_COPY, none: null }
 
-    // What the stored record can offer, current pair and fallback alike.
-    const dek = JSON.parse(spy.store['dek:local:alice'])
-    const passwordCopies = [dek.byPassword?.ciphertext, dek.previous?.byPassword?.ciphertext]
-    const codeCopies = [dek.byRecovery?.ciphertext, dek.previous?.byRecovery?.ciphertext]
-
-    const openable =
-      passwordCopies.includes(eraCipher[passwordEra]) || codeCopies.includes(eraCipher[codeEra])
+    // The path that matters for THIS feature: someone who has lost their
+    // password and holds only the code. Whichever code verifies, begin must
+    // hand back a copy sealed under that same era.
+    const beginRes = await begin.onRequestPost({
+      request: post(`${ORIGIN}/api/auth/recover/begin`, {
+        username: 'alice',
+        recoveryAuth: codeEra === 'old' ? RECOVERY_AUTH : NEXT_RECOVERY_AUTH,
+      }),
+      env,
+    })
+    assert.equal(beginRes.status, 200, `interrupted at write ${failAt}: the verifying code must still pass begin`)
+    const served = await beginRes.json()
+    const servedToCode = [served.byRecovery?.ciphertext, served.previousByRecovery?.ciphertext]
     assert.ok(
-      openable,
-      `interrupted at write ${failAt}: password proves the ${passwordEra} era and the code proves the ${codeEra} era, ` +
-        `but the stored record only offers ${JSON.stringify({ passwordCopies, codeCopies })} — this vault can never be opened`
+      servedToCode.includes({ old: OLD_RC, new: NEW_RC }[codeEra]),
+      `interrupted at write ${failAt}: the code proves the ${codeEra} era, but begin served ` +
+        `${JSON.stringify(servedToCode)} — this user can never open their vault`
+    )
+
+    // The other path, for an account that still has a live session: GET
+    // /api/dek returns the whole record, `previous` included.
+    const dekRes = await dekEndpoint.onRequestGet({
+      request: new Request(`${ORIGIN}/api/dek`, { headers: { Cookie: SESSION } }),
+      env,
+    })
+    assert.equal(dekRes.status, 200, `interrupted at write ${failAt}: the stored record must stay readable`)
+    const { dek } = await dekRes.json()
+    const servedToPassword = [dek.byPassword?.ciphertext, dek.previous?.byPassword?.ciphertext]
+    assert.ok(
+      servedToPassword.includes({ old: OLD_PW, new: NEW_PW }[passwordEra]),
+      `interrupted at write ${failAt}: the password proves the ${passwordEra} era, but GET /api/dek served ` +
+        `${JSON.stringify(servedToPassword)}`
     )
   }
 })
@@ -638,7 +672,7 @@ test('complete: the previous pair does not chain, so the record cannot grow with
     env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
   })
   const dek = JSON.parse(spy.store['dek:local:alice'])
-  assert.equal(dek.previous.byPassword.ciphertext, OLD_COPY, 'one generation back is kept')
+  assert.equal(dek.previous.byPassword.ciphertext, OLD_PW, 'one generation back is kept')
   assert.equal(dek.previous.previous, undefined, 'two generations back is not')
 })
 

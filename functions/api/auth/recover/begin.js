@@ -94,11 +94,28 @@ export async function onRequestPost({ request, env }) {
     }
     if (!dek?.byRecovery) return failure()
 
-    // Only the recovery-wrapped copy. byPassword is withheld even though the
-    // caller just authenticated: releasing it would hand a proven-possession
-    // caller the exact ciphertext an offline password guess targets, for no
-    // benefit — the reset flow rewraps a DEK it opened with the code.
-    return jsonResponse({ byRecovery: dek.byRecovery })
+    // Both generations of the recovery-wrapped copy.
+    //
+    // previousByRecovery is what makes complete.js's `previous` pair REACHABLE
+    // rather than merely stored, and without it that whole mechanism is inert
+    // for the people it exists for. A reset interrupted between its writes 1
+    // and 2 leaves dek.byRecovery sealed under a code whose verifier never
+    // landed: the code that DID verify — the one the caller just proved — can
+    // only open the previous copy. Serving only the current one hands that
+    // caller ciphertext they cannot open and no way to ask for the one they
+    // can. GET /api/dek returns the full record and so covers the
+    // password-side fallback, but a caller who still knows their password is
+    // not who this endpoint exists for.
+    //
+    // Still only the recovery-wrapped side, both generations of it. byPassword
+    // and previous.byPassword stay withheld even though the caller just
+    // authenticated: releasing either would hand a proven-possession caller
+    // the exact ciphertext an offline password guess targets, for no benefit —
+    // the reset flow rewraps a DEK it opened with the code.
+    return jsonResponse({
+      byRecovery: dek.byRecovery,
+      previousByRecovery: dek.previous?.byRecovery ?? null,
+    })
   } catch (err) {
     // Same marker discipline as login.js: the error's NAME only, never the
     // object, its message, or anything derived from the code.
