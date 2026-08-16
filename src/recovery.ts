@@ -17,7 +17,12 @@ export const RECOVERY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
 const GROUPS = 6
 const GROUP_SIZE = 4
-/** 24 characters × 5 bits = 120 bits, rounded up to 128 bits of draw below. */
+/**
+ * 24 characters × 5 bits per base32 character = 120 bits of entropy. The
+ * length was chosen for legibility — six short groups are readable aloud and
+ * retypable — and the entropy follows from it, not the reverse. 120 bits is
+ * far past brute-force even for someone holding the wrapped blob offline.
+ */
 const CODE_CHARS = GROUPS * GROUP_SIZE
 
 const SALT_PREFIX = 'rebuttal|recovery|v1|'

@@ -76,11 +76,13 @@ record, because reset rewrites the two independently and the write ordering in
 The user record gains `credentialVersion` (integer, defaulting to 0 when
 absent, so existing records need no backfill).
 
-**Recovery code format:** 128 bits of entropy, Crockford base32, displayed as
-`XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`. Crockford because it excludes I/L/O/U, so the
-code survives being read off a screen and typed by hand — which is how it will
-actually be used. 128 bits keeps offline attack infeasible even against someone
-holding the wrapped blob.
+**Recovery code format:** 24 Crockford base32 characters — six groups of four,
+displayed as `XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`. At 5 bits per character that is
+**120 bits** of entropy. Crockford because it excludes I/L/O/U, so the code
+survives being read off a screen and typed by hand, which is how it will
+actually be used. 120 bits keeps offline attack infeasible even against someone
+holding the wrapped blob; the length was chosen for legibility, and the entropy
+follows from it rather than the other way round.
 
 ## The recovery verifier (correction to an earlier draft)
 
@@ -101,7 +103,7 @@ recoveryAuth = PBKDF2(recoveryKey, salt = recoveryCode, 1)
 stored as `hashAuth(recoveryAuth)` through the existing
 `functions/_lib/password.js` helper and checked with the same `verifyAuth`.
 The recovery code itself still never reaches the server, and a KV leak yields a
-verifier useless without the 128-bit code behind it.
+verifier useless without the 120-bit code behind it.
 
 This also improves the read half: `byRecovery` is released only to a request
 that has already proven possession, so the blob cannot be harvested.

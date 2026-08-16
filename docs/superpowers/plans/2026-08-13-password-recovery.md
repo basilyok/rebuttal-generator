@@ -4,7 +4,7 @@
 
 **Goal:** Ship the approved recovery-code design (spec: `docs/superpowers/specs/2026-08-13-password-recovery-design.md`) so a password account can be reset without destroying its vault and history.
 
-**Architecture:** A random per-account `DEK` becomes the only key that encrypts data. It is wrapped twice — under `masterKey` (from the password) and under `recoveryKey` (from a 128-bit recovery code) — and both wrapped copies live in one KV record the server cannot open. Reset rewrites that record instead of re-encrypting anything. Blobs carry a version tag so existing accounts migrate incrementally and a half-migrated account stays fully readable.
+**Architecture:** A random per-account `DEK` becomes the only key that encrypts data. It is wrapped twice — under `masterKey` (from the password) and under `recoveryKey` (from a 120-bit recovery code) — and both wrapped copies live in one KV record the server cannot open. Reset rewrites that record instead of re-encrypting anything. Blobs carry a version tag so existing accounts migrate incrementally and a half-migrated account stays fully readable.
 
 **Tech Stack:** WebCrypto (PBKDF2-SHA256, AES-GCM), Cloudflare Pages Functions, Workers KV, the existing `LIMITER` Durable Object brakes, React 18 + TypeScript, `node --test` + `tsx`.
 
@@ -52,7 +52,7 @@
 **Context you need:** `src/vault.ts` defines `toBase64`/`fromBase64` as module-private consts (around lines 56-62) and `cachedKey()` around line 100. `sealJson(key, value)` and `openJson(key, blob)` are already exported and return/consume `VaultBlob` (`{salt, iv, ciphertext, version?, updatedAt?}`). `src/account.ts` exports `normalizeUsername` and uses `SALT_PREFIX = "rebuttal|v1|"`; the recovery path uses a *different* prefix so the two derivations can never collide.
 
 **Acceptance Criteria:**
-- [ ] `generateRecoveryCode()` returns 26 Crockford base32 characters in six dash-separated groups, drawn from `crypto.getRandomValues`
+- [ ] `generateRecoveryCode()` returns 24 Crockford base32 characters — six dash-separated groups of four, 120 bits — drawn from `crypto.getRandomValues`
 - [ ] The alphabet excludes I, L, O and U
 - [ ] `deriveRecoveryCredentials(username, code)` returns `{ recoveryKeyBytes, recoveryAuth }`, using 600,000 PBKDF2 rounds and salt `"rebuttal|recovery|v1|" + normalizeUsername(username)`
 - [ ] The derivation is case- and dash-insensitive on the code, so a user typing it back in any reasonable form succeeds
@@ -195,7 +195,7 @@ export const RECOVERY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
 const GROUPS = 6
 const GROUP_SIZE = 4
-/** 24 characters × 5 bits = 120 bits, rounded up to 128 bits of draw below. */
+/** 24 characters × 5 bits = 120 bits of entropy. */
 const CODE_CHARS = GROUPS * GROUP_SIZE
 
 const SALT_PREFIX = 'rebuttal|recovery|v1|'
