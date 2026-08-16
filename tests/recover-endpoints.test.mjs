@@ -103,6 +103,45 @@ test('a session stamped below the user credentialVersion no longer resolves', as
   assert.equal(session, null, 'a reset must invalidate sessions minted before it')
 })
 
+// upsertUser rebuilds the user record from a fixed field list rather than
+// merging, so every field it forgets to name is dropped on write. These two
+// pin credentialVersion into that list. They must exercise the WRITE path, not
+// the refreshAfterMs skip — the skip returns `{ ...existing }` and would pass
+// even with the field missing from the rebuild.
+test('upsertUser preserves credentialVersion across a record write', async () => {
+  const { upsertUser } = await import('../functions/_lib/session.js')
+  const spy = kvSpy({
+    'user:local:alice': JSON.stringify({
+      id: 'local:alice',
+      provider: 'local',
+      name: 'alice',
+      credentialVersion: 3,
+      lastSeenAt: Date.now(),
+    }),
+  })
+  // No refreshAfterMs — the Google callback omits it too, so it always writes.
+  const user = await upsertUser({ ACCOUNTS: spy.kv }, { provider: 'local', subject: 'alice' })
+  assert.deepEqual(spy.writes, ['user:local:alice'], 'this must be the write path, not the skip path')
+  assert.equal(user.credentialVersion, 3)
+  assert.equal(
+    JSON.parse(spy.store['user:local:alice']).credentialVersion,
+    3,
+    'dropping this field would silently revive every session a reset had killed'
+  )
+})
+
+test('upsertUser writes credentialVersion 0 when the record has none', async () => {
+  const { upsertUser } = await import('../functions/_lib/session.js')
+  const spy = kvSpy({
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local', lastSeenAt: Date.now() }),
+  })
+  const user = await upsertUser({ ACCOUNTS: spy.kv }, { provider: 'local', subject: 'alice' })
+  // Always present after a write, so getSession's comparison never meets an
+  // undefined on the user side.
+  assert.equal(user.credentialVersion, 0)
+  assert.equal(JSON.parse(spy.store['user:local:alice']).credentialVersion, 0)
+})
+
 test('missing credentialVersion on both sides still resolves (no backfill needed)', async () => {
   const { getSession } = await import('../functions/_lib/session.js')
   const spy = kvSpy({

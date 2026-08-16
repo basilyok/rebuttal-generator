@@ -209,6 +209,12 @@ export async function upsertUser(env, { provider, subject, email, name, picture,
     // Preferences survive re-authentication — this is what makes a language choice
     // stick across logins rather than resetting on every sign-in.
     language: existing?.language || '',
+    // Survives re-authentication for a sharper reason than `language` above:
+    // this integer is what invalidates sessions after a password reset, and a
+    // rebuild that dropped it would silently reset it to 0 and make every
+    // session the reset had killed resolve again. The failure is invisible —
+    // no error, no log, just an account that quietly stops being protected.
+    credentialVersion: Number.isInteger(existing?.credentialVersion) ? existing.credentialVersion : 0,
     createdAt: existing?.createdAt || Date.now(),
     lastSeenAt: Date.now(),
   }
