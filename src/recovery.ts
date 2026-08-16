@@ -45,7 +45,12 @@ export const RECOVERY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
 const GROUPS = 6
 const GROUP_SIZE = 4
-/** 24 characters × 5 bits = 120 bits of entropy. */
+/**
+ * 24 characters × 5 bits per base32 character = 120 bits of entropy. The
+ * length was chosen for legibility — six short groups are readable aloud and
+ * retypable — and the entropy follows from it, not the reverse. 120 bits is
+ * far past brute-force even for someone holding the wrapped blob offline.
+ */
 const CODE_CHARS = GROUPS * GROUP_SIZE
 
 /**
@@ -99,12 +104,18 @@ export function generateRecoveryCode(): string {
  * — writing `0` down and reading back `O` — and folding them here is what
  * turns that into a successful unlock rather than an unexplained failure.
  *
- * The dash class is \p{Pd} (Unicode dash punctuation), not a literal "-": a
- * code copied out of a PDF, or typed where smart-dash autocorrect is on,
- * arrives with en-dashes and non-breaking hyphens that are visually identical
- * to what we printed. Matching the whole category rather than enumerating
- * U+2010–U+2015 means the next dash someone's word processor invents is
- * already handled.
+ * The last rule strips two whole Unicode categories rather than a literal "-".
+ * \p{Pd} (dash punctuation) covers the en-dashes and non-breaking hyphens a
+ * code picks up from smart-dash autocorrect. \p{Cf} (format) covers the
+ * invisibles — U+00AD soft hyphen above all, which is what a PDF actually
+ * inserts at a line break, plus zero-width spaces and word joiners from rich
+ * text. A soft-hyphenated paste looks character-for-character correct on
+ * screen, so leaving it in means rejecting a code the user can see is right.
+ * Neither category can ever be meaningful inside a typed secret, and no
+ * character in either is in RECOVERY_ALPHABET, so stripping them cannot
+ * destroy information. Matching the categories rather than enumerating
+ * codepoints means the next such character someone's word processor invents
+ * is already handled.
  */
 export const normalizeRecoveryCode = (code: string) =>
   code
@@ -112,7 +123,7 @@ export const normalizeRecoveryCode = (code: string) =>
     .toUpperCase()
     .replace(/[IL]/g, '1')
     .replace(/O/g, '0')
-    .replace(/[\s\p{Pd}]/gu, '')
+    .replace(/[\s\p{Pd}\p{Cf}]/gu, '')
 
 /**
  * Exported so the UI can reject a half-typed code immediately. Without it the
@@ -206,10 +217,20 @@ export async function unwrapDek(key: CryptoKey, blob: VaultBlob): Promise<Uint8A
     iv = fromBase64(blob.iv)
     ciphertext = fromBase64(blob.ciphertext)
   } catch {
-    // The record itself is malformed — truncated, or never base64 to begin
-    // with. No code can fix this, so it must not be reported as a bad code.
+    // Not base64 at all — a clipped JSON field, or a value that was never a
+    // record. No code can fix this, so it must not come back as a bad code.
     throw new CorruptDekRecordError()
   }
+  // Decoding is not enough on its own: atob is strict about framing but says
+  // nothing about content, and base64 truncated at a 4-character boundary is
+  // still well-formed. Truncation is the likeliest way this record actually
+  // goes bad — a partial KV write, a half-finished migration — so without a
+  // length check the exact user this split exists to protect gets told
+  // "wrong code, try again" about a code that was right. The shape is
+  // structural, not cryptographic: wrapDek always writes a 12-byte IV and a
+  // 48-byte ciphertext (the 32-byte DEK plus a 16-byte GCM tag).
+  if (iv.length !== 12 || ciphertext.length < 17) throw new CorruptDekRecordError()
+
   let plaintext: ArrayBuffer
   try {
     plaintext = await crypto.subtle.decrypt(

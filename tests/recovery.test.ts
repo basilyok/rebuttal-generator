@@ -68,6 +68,20 @@ test('normalizing strips en-dashes and other non-ASCII hyphens', () => {
   }
 })
 
+test('normalizing strips invisible characters a paste can carry', () => {
+  // U+00AD is what a PDF inserts at a line break, and it is category Cf, not
+  // Pd — so a soft-hyphenated paste looks character-for-character correct on
+  // screen. Rejecting it would be an unexplained failure on a right code.
+  const code = generateRecoveryCode()
+  const canonical = normalizeRecoveryCode(code)
+  for (const invisible of ['­', '​', '⁠', '﻿']) {
+    const point = invisible.codePointAt(0)?.toString(16)
+    const seeded = code.replace(/-/g, `-${invisible}`)
+    assert.equal(normalizeRecoveryCode(seeded), canonical, `U+${point} not stripped`)
+    assert.ok(isValidRecoveryCode(seeded), `U+${point} must not invalidate a good code`)
+  }
+})
+
 test('isValidRecoveryCode accepts real codes and rejects near-misses', () => {
   const code = generateRecoveryCode()
   assert.ok(isValidRecoveryCode(code))
@@ -85,7 +99,16 @@ test('deriving from an invalid code or a blank username throws instead of produc
   const code = generateRecoveryCode()
   await assert.rejects(() => deriveRecoveryCredentials('alice', ''), WrongRecoveryCodeError)
   await assert.rejects(() => deriveRecoveryCredentials('alice', code.slice(0, 10)), WrongRecoveryCodeError)
-  await assert.rejects(() => deriveRecoveryCredentials('   ', code), RecoveryError)
+  // The message, not just RecoveryError: WrongRecoveryCodeError extends it, so
+  // the base class alone would pass no matter which of the two guards fired.
+  await assert.rejects(
+    () => deriveRecoveryCredentials('   ', code),
+    (err: unknown) => {
+      assert.ok(err instanceof RecoveryError)
+      assert.equal((err as RecoveryError).message, 'username-required')
+      return true
+    }
+  )
 })
 
 test('derivation is stable and depends on both username and code', async () => {
@@ -157,8 +180,19 @@ test('a malformed record is a corruption error, not a wrong-code error', async (
   // The reset UI must not invite a fourth attempt at a code that was right.
   const key = await importWrappingKey(crypto.getRandomValues(new Uint8Array(32)))
   const blob = await wrapDek(key, generateDek())
+
+  // Never was base64.
   await assert.rejects(() => unwrapDek(key, { ...blob, iv: 'not base64!!' }), CorruptDekRecordError)
   await assert.rejects(() => unwrapDek(key, { ...blob, ciphertext: '@@@' }), CorruptDekRecordError)
+
+  // Still well-formed base64, but the wrong shape — which is what truncation
+  // actually looks like, since clipping at a 4-character boundary decodes
+  // cleanly. These are the cases the decode-only split reported as bad codes.
+  const clip = (b64: string, chars: number) => b64.slice(0, chars)
+  await assert.rejects(() => unwrapDek(key, { ...blob, iv: clip(blob.iv, 12) }), CorruptDekRecordError)
+  await assert.rejects(() => unwrapDek(key, { ...blob, iv: '' }), CorruptDekRecordError)
+  await assert.rejects(() => unwrapDek(key, { ...blob, ciphertext: clip(blob.ciphertext, 8) }), CorruptDekRecordError)
+  await assert.rejects(() => unwrapDek(key, { ...blob, ciphertext: '' }), CorruptDekRecordError)
 })
 
 test('tampered ciphertext is rejected rather than decrypted', async () => {
