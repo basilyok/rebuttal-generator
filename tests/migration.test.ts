@@ -136,11 +136,11 @@ function fakeHistoryServer() {
   }
 }
 
-test('pushHistory seals under the key it is handed and tags the blob v2', async () => {
+test('pushHistory tags the blob with the era it is told, not one of its own choosing', async () => {
   const server = fakeHistoryServer()
   try {
     const dekKey = await aesKey()
-    await pushHistory([entry('a')], dekKey)
+    await pushHistory([entry('a')], dekKey, BLOB_VERSION_DEK)
     const stored = server.stored()
     assert.ok(stored, 'the server received a blob')
     assert.equal(stored.version, BLOB_VERSION_DEK)
@@ -148,6 +148,29 @@ test('pushHistory seals under the key it is handed and tags the blob v2', async 
     // entries back out of what the server actually stored.
     const back = await openBlob<{ entries: HistoryEntry[] }>({ dekKey }, stored)
     assert.deepEqual(back.entries.map((e) => e.id), ['a'])
+
+    const masterKey = await aesKey()
+    await pushHistory([entry('b')], masterKey, BLOB_VERSION_MASTER)
+    assert.equal(server.stored()?.version, BLOB_VERSION_MASTER)
+  } finally {
+    server.restore()
+  }
+})
+
+test('a master-era history blob is NOT openable as a DEK blob', async () => {
+  const server = fakeHistoryServer()
+  try {
+    // The mislabelling this pins down: while no DEK exists, history sealed under
+    // the master key must say so. If it claimed v2, reset's "refuse while any
+    // blob is v1" gate would wave it through and the rewrap would strand it.
+    // A round-trip test cannot catch that — today both key slots hold the same
+    // key, so a wrongly-tagged blob still opens.
+    const masterKey = await aesKey()
+    const dekKey = await aesKey()
+    await pushHistory([entry('a')], masterKey, BLOB_VERSION_MASTER)
+    const stored = server.stored()
+    assert.ok(stored)
+    await assert.rejects(() => openBlob({ dekKey }, stored), MissingKeyError)
   } finally {
     server.restore()
   }
@@ -157,7 +180,7 @@ test('pullAndMergeHistory opens what pushHistory stored, given the same key', as
   const server = fakeHistoryServer()
   try {
     const dekKey = await aesKey()
-    await pushHistory([entry('a'), entry('b')], dekKey)
+    await pushHistory([entry('a'), entry('b')], dekKey, BLOB_VERSION_DEK)
     const merged = await pullAndMergeHistory({ dekKey })
     assert.deepEqual(merged?.map((e) => e.id).sort(), ['a', 'b'])
   } finally {
@@ -170,7 +193,7 @@ test('pullAndMergeHistory falls back to local when it lacks the key the blob nee
   try {
     const dekKey = await aesKey()
     const masterKey = await aesKey()
-    await pushHistory([entry('a')], dekKey)
+    await pushHistory([entry('a')], dekKey, BLOB_VERSION_DEK)
     // Remote entries are lost to this caller, but local history keeps working
     // rather than the whole panel erroring out.
     assert.deepEqual(await pullAndMergeHistory({ masterKey }), [])

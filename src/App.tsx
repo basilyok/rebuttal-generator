@@ -75,6 +75,7 @@ import {
   sealJson,
   cachedKey,
   WrongPassphraseError,
+  BLOB_VERSION_MASTER,
   type BlobKeys,
   type KeyBundle,
   type VaultBlob,
@@ -408,10 +409,17 @@ export default function App() {
     return key ? { masterKey: key, dekKey: key } : {}
   }
 
-  /** Push under the key this device holds — with none, history stays local, silently. */
+  /**
+   * Push under the key this device holds — with none, history stays local, silently.
+   *
+   * The era is BLOB_VERSION_MASTER because that is what the key genuinely is
+   * today: no DEK exists yet. Task 5 introduces one, and flips this tag in the
+   * same edit that changes the key — the two must never move apart, or the
+   * blob claims an era it was not sealed in and reset's v1 gate waves it past.
+   */
   const syncHistory = async (entries: HistoryEntry[]) => {
     const key = await localVaultKey()
-    if (key) await pushHistory(entries, key)
+    if (key) await pushHistory(entries, key, BLOB_VERSION_MASTER)
   }
 
   /**

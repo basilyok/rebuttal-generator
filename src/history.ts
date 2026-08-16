@@ -3,7 +3,7 @@
 // the newest 100 entries also sync to /api/history as ONE ciphertext blob —
 // one KV write per save, and the server never sees plaintext. Losing the vault
 // key loses the synced history by design; the local copy is unaffected.
-import { sealJson, openBlob, BLOB_VERSION_DEK, type BlobKeys, type VaultBlob } from './vault'
+import { sealJson, openBlob, type BlobKeys, type VaultBlob } from './vault'
 import type { Citation } from './providers'
 
 export interface HistoryEntry {
@@ -97,9 +97,19 @@ export async function fetchHistoryBlob(): Promise<VaultBlob | null> {
  * migration two keys exist and only the caller knows which era this account is
  * in; a module-level guess would seal history under a key the reader is not
  * using.
+ *
+ * `version` has deliberately NO default. The tag means "this era's key sealed
+ * me", and reset gates on it — a blob wrongly claiming v2 passes the very check
+ * meant to stop it, and the reset then rewraps the DEK and strands this
+ * history. A default is how a writer comes to assert an era its caller never
+ * confirmed, so every call site must state which key it is actually holding.
  */
-export async function pushHistory(entries: HistoryEntry[], key: CryptoKey): Promise<void> {
-  const blob = await sealJson(key, { v: 1, entries: entries.slice(0, HISTORY_CAP) }, BLOB_VERSION_DEK)
+export async function pushHistory(
+  entries: HistoryEntry[],
+  key: CryptoKey,
+  version: number
+): Promise<void> {
+  const blob = await sealJson(key, { v: 1, entries: entries.slice(0, HISTORY_CAP) }, version)
   await fetch('/api/history', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
