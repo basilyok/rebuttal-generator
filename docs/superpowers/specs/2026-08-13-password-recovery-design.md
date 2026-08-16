@@ -142,20 +142,47 @@ code would be the wrong default, and rotation is nearly free since that record
 is being rewritten regardless.
 
 **Write order inside `complete` is load-bearing.** KV offers no transaction, so
-the three writes go: **`dek:` first, then `recovery:`, then `password:` last.**
-The password record is what makes the new password usable, so it must be the
-last thing to land — until it does, the account remains entirely on its old
-credentials and every earlier write is inert. If any write fails partway, the
-old password still works and its `byPassword` copy still unwraps `DEK`; the
-user retries and nothing is lost. Writing `password:` first would leave a new
-password whose wrapped `DEK` was never stored — an account that authenticates
-but cannot decrypt anything.
+the writes go: **`dek:` first, then `recovery:`, then `password:`, then the
+`credentialVersion` bump.** The password record is what makes the new password
+usable, so it must land after the material it unlocks. Writing `password:`
+first would leave a new password whose wrapped `DEK` was never stored — an
+account that authenticates but cannot decrypt anything.
 
-One consequence to accept: a failure between the `dek:` and `recovery:` writes
-leaves the new `byRecovery` stored against the *old* verifier, so the new
-recovery code will not work while the old one still does. The old password and
-old code both still function, so the account is intact and a retry converges —
-but the plan must not display the new code until `complete` returns success.
+> **Correction (2026-08-13, found in Task 3's code review).** An earlier version
+> of this paragraph claimed every write before `password:` is "inert," and that
+> a partial failure leaves the old password working "so the account is intact."
+> **That was wrong, and it would have shipped permanent data loss.**
+>
+> Write 1 does not add the new wrapped copies — it *overwrites* the old ones.
+> So between write 1 and write 2 the old password still authenticates and the
+> old code still verifies, but `byPassword` is now sealed under the new password
+> key and `byRecovery` under the new code. Neither credential the user holds can
+> open the DEK, and the new code cannot even pass `begin` because its verifier
+> has not landed yet. A client that crashed, lost the network, or closed the tab
+> in that window leaves a vault nobody can ever open.
+>
+> The error was conflating *authentication* with *decryption*: the old
+> credentials keep signing in, which is what made the claim look true, while the
+> ciphertext they point at has already moved to the new key era.
+
+**The fix: `dek:` carries both key eras.** `complete` reads the existing record
+and write 1 stores the new pair alongside the old one under `previous`:
+
+```json
+{ "byPassword": "…new…", "byRecovery": "…new…", "previous": { "byPassword": "…old…", "byRecovery": "…old…" }, "version": 1 }
+```
+
+Clients try the current pair and fall back to `previous`. Every intermediate
+state is then openable by some credential the user actually holds, and the
+ordering argument becomes true rather than merely stated. `previous` is pruned
+on the next successful `complete` or `PUT /api/dek`. Cost: one extra KV read on
+an operation that happens roughly once per account per lifetime.
+
+**Rotation is mandatory, not optional.** `recoveryAuthNext` is a required field.
+An optional-rotation path would leave a captured `complete` body replayable
+indefinitely (without rotation the verifier never moves), and it would make the
+write sequence conditional on a request field — the one thing the ordering
+argument cannot tolerate.
 
 **Existing sessions die on reset.** Sessions are `session:<id>` with no
 per-user index, so they cannot be enumerated. Instead the user record carries
