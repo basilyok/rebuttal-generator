@@ -1707,6 +1707,12 @@ git commit -m "Add recovery setup UI, prompt and strings"
 - Modify: `src/AccountBar.tsx` (the "Forgot your password?" link)
 - Modify: `src/App.tsx`
 
+**Use what Task 1 already exports.** Its code-review pass added three things this task must not reinvent:
+
+- `isValidRecoveryCode(code)` — validate the field on input. Without it the only feedback available costs 600k PBKDF2 rounds, roughly a second, to report something a regex knew at the first keystroke. Disable the submit button until it passes.
+- `WrongRecoveryCodeError` vs `CorruptDekRecordError` — these are the reason the reset UI can tell "you typed it wrong, try again" from "this record will not decode, and retrying cannot help." Map them to different messages; collapsing both into one error invites a user with a corrupt record to keep retrying a code that was correct.
+- `normalizeRecoveryCode` already folds I/L→1, O→0, and every Unicode dash, so the input field must **not** do its own cleanup — doing it twice risks the two disagreeing.
+
 **Acceptance Criteria:**
 - [ ] "Forgot your password?" on the sign-in dialog opens the reset flow
 - [ ] Step 1 (username + code) surfaces one message for wrong code and unknown username
