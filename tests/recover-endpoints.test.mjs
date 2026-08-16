@@ -6,8 +6,8 @@ import assert from 'node:assert/strict'
 
 const ORIGIN = 'https://x.test'
 
-/** KV stand-in that records writes in order — write ORDER is a spec requirement. */
-export function kvSpy(seed = {}) {
+/** KV stand-in that records writes in order — write ORDER will be a spec requirement, in Task 3. */
+function kvSpy(seed = {}) {
   const store = { ...seed }
   const writes = []
   return {
@@ -49,6 +49,49 @@ test('GET /api/dek returns null when the account has no record yet', async () =>
   assert.deepEqual(await res.json(), { dek: null })
 })
 
+test('GET /api/dek returns a stored record', async () => {
+  const { onRequestGet } = await import('../functions/api/dek.js')
+  const stored = { byPassword: wrapped, byRecovery: { ...wrapped, ciphertext: 'Q0NDQw==' }, version: 1 }
+  const spy = kvSpy({ ...seedSignedIn(), 'dek:local:alice': JSON.stringify(stored) })
+  const res = await onRequestGet({
+    request: new Request(`${ORIGIN}/api/dek`, { headers: { Cookie: SESSION } }),
+    env: { ACCOUNTS: spy.kv, ...openLimiter },
+  })
+  assert.equal(res.status, 200)
+  const { dek } = await res.json()
+  // Read-back is what migration depends on; without this a handler that
+  // returned {dek:null} unconditionally would pass every other GET test here.
+  assert.equal(dek.byPassword.ciphertext, wrapped.ciphertext)
+  assert.equal(dek.byRecovery.ciphertext, 'Q0NDQw==')
+})
+
+test('GET /api/dek reports a corrupt record as corruption, never as absence', async () => {
+  const { onRequestGet } = await import('../functions/api/dek.js')
+  // Both failure shapes: bytes that will not parse, and JSON that parses into
+  // something that is not a DEK. Answering {dek:null} to either would send the
+  // client into first-time setup and overwrite a recoverable record.
+  for (const [label, raw] of [
+    ['unparseable', '{not json'],
+    ['parses but is not a DEK', JSON.stringify({})],
+    ['one copy missing', JSON.stringify({ byPassword: wrapped })],
+  ]) {
+    const spy = kvSpy({ ...seedSignedIn(), 'dek:local:alice': raw })
+    const res = await onRequestGet({
+      request: new Request(`${ORIGIN}/api/dek`, { headers: { Cookie: SESSION } }),
+      env: { ACCOUNTS: spy.kv, ...openLimiter },
+    })
+    assert.equal(res.status, 500, label)
+    assert.equal((await res.json()).code, 'dek-corrupt', label)
+  }
+})
+
+test('GET /api/dek is 501 when ACCOUNTS is unconfigured', async () => {
+  const { onRequestGet } = await import('../functions/api/dek.js')
+  const res = await onRequestGet({ request: new Request(`${ORIGIN}/api/dek`), env: { ...openLimiter } })
+  assert.equal(res.status, 501)
+  assert.equal((await res.json()).configured, false)
+})
+
 test('GET /api/dek is 401 when signed out', async () => {
   const { onRequestGet } = await import('../functions/api/dek.js')
   const spy = kvSpy()
@@ -76,6 +119,38 @@ test('PUT /api/dek stores both wrapped copies', async () => {
   assert.equal(stored.byRecovery.ciphertext, wrapped.ciphertext)
 })
 
+test('PUT /api/dek stamps version 1, ignoring whatever the client claimed', async () => {
+  const { onRequestPut } = await import('../functions/api/dek.js')
+  const spy = kvSpy(seedSignedIn())
+  await onRequestPut({
+    request: new Request(`${ORIGIN}/api/dek`, {
+      method: 'PUT',
+      headers: { Cookie: SESSION, 'Content-Type': 'application/json', Origin: ORIGIN },
+      body: JSON.stringify({ byPassword: { ...wrapped, version: 99 }, byRecovery: { ...wrapped, version: 99 } }),
+    }),
+    env: { ACCOUNTS: spy.kv, ...openLimiter },
+  })
+  const stored = JSON.parse(spy.store['dek:local:alice'])
+  // The server validated exactly one wrap format, so it labels the record with
+  // that format — echoing the client's number would label it with a format
+  // nothing here checked for.
+  assert.equal(stored.byPassword.version, 1)
+  assert.equal(stored.byRecovery.version, 1)
+})
+
+test('PUT /api/dek is 501 when ACCOUNTS is unconfigured', async () => {
+  const { onRequestPut } = await import('../functions/api/dek.js')
+  const res = await onRequestPut({
+    request: new Request(`${ORIGIN}/api/dek`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
+      body: JSON.stringify({ byPassword: wrapped, byRecovery: wrapped }),
+    }),
+    env: { ...openLimiter },
+  })
+  assert.equal(res.status, 501)
+})
+
 test('PUT /api/dek rejects a malformed copy and writes nothing', async () => {
   const { onRequestPut } = await import('../functions/api/dek.js')
   const spy = kvSpy(seedSignedIn())
@@ -101,6 +176,38 @@ test('a session stamped below the user credentialVersion no longer resolves', as
     ACCOUNTS: spy.kv,
   })
   assert.equal(session, null, 'a reset must invalidate sessions minted before it')
+})
+
+test('a session stamped ABOVE the user record still resolves', async () => {
+  const { getSession } = await import('../functions/_lib/session.js')
+  const spy = kvSpy({
+    'session:new': JSON.stringify({ userId: 'local:alice', createdAt: Date.now(), credentialVersion: 2 }),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local', credentialVersion: 1 }),
+  })
+  const session = await getSession(new Request(`${ORIGIN}/`, { headers: { Cookie: 'rb_session=new' } }), {
+    ACCOUNTS: spy.kv,
+  })
+  // The record went backwards (stale read or restore). Refusing a session that
+  // proved a NEWER credential would lock out the person the reset was for, so
+  // only `stamped < current` rejects. Pinned deliberately, not left as fallout.
+  assert.equal(session?.userId, 'local:alice')
+})
+
+test('a corrupt credentialVersion on the user record fails closed', async () => {
+  const { getSession } = await import('../functions/_lib/session.js')
+  for (const bad of ['1', 1.5, null, {}]) {
+    const spy = kvSpy({
+      'session:s': JSON.stringify({ userId: 'local:alice', createdAt: Date.now(), credentialVersion: 0 }),
+      'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local', credentialVersion: bad }),
+    })
+    const session = await getSession(new Request(`${ORIGIN}/`, { headers: { Cookie: 'rb_session=s' } }), {
+      ACCOUNTS: spy.kv,
+    })
+    // Collapsing junk to 0 here would read as "never reset" and admit every
+    // session — switching the mechanism off on exactly the account whose
+    // record went bad. The session side may collapse; this side may not.
+    assert.equal(session, null, `credentialVersion ${JSON.stringify(bad)} must not read as "never reset"`)
+  }
 })
 
 // upsertUser rebuilds the user record from a fixed field list rather than

@@ -376,7 +376,7 @@ test('metrics gate: a local account claiming the operator email is refused; a go
     subject: 'impersonator',
     email: env.OPERATOR_EMAIL,
   })
-  const impersonatorSession = await createSession(env, impersonator.id)
+  const impersonatorSession = await createSession(env, impersonator)
   const impersonatorRes = await metricsGet({ request: metricsRequest(impersonatorSession), env })
   assert.equal(
     impersonatorRes.status,
@@ -389,7 +389,7 @@ test('metrics gate: a local account claiming the operator email is refused; a go
     subject: 'g-operator-sub',
     email: env.OPERATOR_EMAIL,
   })
-  const operatorSession = await createSession(env, operator.id)
+  const operatorSession = await createSession(env, operator)
   const operatorRes = await metricsGet({ request: metricsRequest(operatorSession), env })
   // The gate's outcome, not metrics content: no LIMITER binding in this fake
   // env, so a passed gate falls through to metrics.js's own `{ metrics: [] }`
@@ -403,7 +403,7 @@ test('metrics gate: a local account claiming the operator email is refused; a go
     subject: 'g-someone-else',
     email: 'someone-else@example.com',
   })
-  const otherSession = await createSession(env, otherGoogleUser.id)
+  const otherSession = await createSession(env, otherGoogleUser)
   const otherRes = await metricsGet({ request: metricsRequest(otherSession), env })
   assert.equal(otherRes.status, 404, 'a google account with a non-matching email must still be refused')
 

@@ -13,13 +13,10 @@
 
 import { getSession, jsonResponse, requireAccounts, vaultKey } from '../_lib/session.js'
 import { overDurableBrake } from '../_lib/ratelimit.js'
+import { isBlob } from '../_lib/base64.js'
 
 /** Generous enough for a dozen provider keys, small enough to bound abuse. */
 const MAX_CIPHERTEXT_CHARS = 20_000
-const BASE64 = /^[A-Za-z0-9+/=]+$/
-
-const isBlob = (value, maxChars) =>
-  typeof value === 'string' && value.length > 0 && value.length <= maxChars && BASE64.test(value)
 
 export async function onRequestGet({ request, env }) {
   const unconfigured = requireAccounts(env)

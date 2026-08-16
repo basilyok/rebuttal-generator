@@ -117,7 +117,7 @@ export async function onRequestGet({ request, env }) {
     picture: claims.picture || '',
   })
 
-  const sessionId = await createSession(env, user.id)
+  const sessionId = await createSession(env, user)
   const destination = new URL(pending.next || '/', new URL(request.url).origin)
 
   return new Response(null, {

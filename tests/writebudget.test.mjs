@@ -208,6 +208,37 @@ test('prefs PUT: a limited request is refused and writes nothing', async () => {
   assert.equal(limiter.calls[0].key, 'prefs-put:local:alice')
 })
 
+const wrappedDek = { iv: 'AAAAAAAAAAAAAAAA', ciphertext: 'QkJCQg==', version: 1 }
+
+test('dek PUT: a limited request is refused and writes nothing', async () => {
+  const { onRequestPut } = await import('../functions/api/dek.js')
+  const spy = accountsSpy(sessionRecords)
+  const limiter = recordingLimiter({ limited: true })
+  const res = await onRequestPut({
+    request: authedRequest('https://x.test/api/dek', { byPassword: wrappedDek, byRecovery: wrappedDek }),
+    env: { ACCOUNTS: spy.kv, ...limiter.env },
+  })
+  assert.equal(res.status, 429)
+  assert.deepEqual(spy.writes, [], 'a limited dek PUT must not reach KV')
+  assert.equal(limiter.calls[0].key, 'dek-put:local:alice', 'keyed by account, not address')
+})
+
+test('dek PUT: a malformed payload is rejected BEFORE the brake, so junk cannot burn quota', async () => {
+  const { onRequestPut } = await import('../functions/api/dek.js')
+  const spy = accountsSpy(sessionRecords)
+  const limiter = recordingLimiter({ limited: false })
+  const res = await onRequestPut({
+    request: authedRequest('https://x.test/api/dek', { byPassword: { iv: '!!not base64!!', ciphertext: 'x' } }),
+    env: { ACCOUNTS: spy.kv, ...limiter.env },
+  })
+  assert.equal(res.status, 400)
+  // The brake must not even be CONSULTED: an implementation that asked first
+  // and rejected second would still pass a writes-only assertion, while every
+  // junk request spent a slot of the caller's real quota.
+  assert.deepEqual(limiter.calls, [], 'validation must run before the brake')
+  assert.deepEqual(spy.writes, [])
+})
+
 test('OAuth start: a limited request redirects with auth_error and writes no state record', async () => {
   const { onRequestGet } = await import('../functions/api/auth/google/start.js')
   const spy = accountsSpy()
