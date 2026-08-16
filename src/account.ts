@@ -105,7 +105,15 @@ const toBase64 = (bytes: Uint8Array): string => {
   return btoa(binary)
 }
 
-async function pbkdf2(secret: BufferSource, salt: BufferSource, iterations: number): Promise<ArrayBuffer> {
+/**
+ * Exported for src/recovery.ts, which derives its own credentials with the
+ * same construction. Shared rather than copied on purpose: this is the one
+ * helper where a future hardening (a different hash, a wider output) must
+ * reach both paths at once. A second copy would let the recovery derivation
+ * drift quietly out of step with the password one, and the only symptom would
+ * be a docblock that claims equal strength while no longer delivering it.
+ */
+export async function pbkdf2(secret: BufferSource, salt: BufferSource, iterations: number): Promise<ArrayBuffer> {
   const material = await crypto.subtle.importKey('raw', secret, 'PBKDF2', false, ['deriveBits'])
   return crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, material, 256)
 }
