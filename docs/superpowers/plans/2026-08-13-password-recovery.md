@@ -1728,6 +1728,10 @@ git commit -m "Add recovery setup UI, prompt and strings"
 - [ ] If `begin` succeeds but the account is not fully migrated, the flow stops with `recovery.resetBlocked` and changes nothing
 - [ ] A failed reset leaves the old password working
 
+**The not-fully-migrated guard is client-side only — noted during Task 3's review.** `recovery.resetBlocked` lives in the browser, so the server will happily reset an account whose blobs are still `version: 1`, and anyone posting directly to `/api/auth/recover/complete` bypasses it. That is this plan's allocation rather than an oversight, and it is defensible: bypassing it costs you your *own* v1 blobs, nobody else's, and the endpoint is already possession-gated by the recovery code.
+
+Record the asymmetry honestly, though — every other invariant in this feature is server-enforced. If it ever matters, `complete` can read `vault:` and `history:` and refuse on a v1 tag, at the price of two extra KV reads on an operation that happens roughly once per account per lifetime. Do not add that speculatively; it was considered and priced here.
+
 **Verify:** browser walkthrough in Step 4.
 
 **Steps:**
