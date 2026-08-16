@@ -75,6 +75,7 @@ import {
   sealJson,
   cachedKey,
   WrongPassphraseError,
+  type BlobKeys,
   type KeyBundle,
   type VaultBlob,
 } from './vault'
@@ -383,17 +384,35 @@ export default function App() {
     setTavilyDraft(loadTavilyKey())
     setShowApiKeyInput(getProvider(providerId).requiresKey && !loadStoredKey(providerId))
     setVaultState('unlocked')
-    void pullAndMergeHistory().then((merged) => {
-      if (isStale() || !merged) return
-      setHistoryEntries(merged)
-      // Sign-in uploads the device backlog: entries generated while signed
-      // out are already in the merge, so pushing it completes the sync.
-      void pushHistory(merged)
-    })
+    void blobKeys()
+      .then(pullAndMergeHistory)
+      .then((merged) => {
+        if (isStale() || !merged) return
+        setHistoryEntries(merged)
+        // Sign-in uploads the device backlog: entries generated while signed
+        // out are already in the merge, so pushing it completes the sync.
+        void syncHistory(merged)
+      })
   }
 
   /** The password account's vault key: this session's, or the device cache. */
   const localVaultKey = async (): Promise<CryptoKey | null> => localKeyRef.current ?? (await cachedKey())
+
+  /**
+   * One key still does both jobs: whatever unlocked this device's vault. Filling
+   * both slots with it reproduces exactly the cachedKey() lookup history.ts used
+   * to do internally; Task 5 is where the two slots start holding different keys.
+   */
+  const blobKeys = async (): Promise<BlobKeys> => {
+    const key = await localVaultKey()
+    return key ? { masterKey: key, dekKey: key } : {}
+  }
+
+  /** Push under the key this device holds — with none, history stays local, silently. */
+  const syncHistory = async (entries: HistoryEntry[]) => {
+    const key = await localVaultKey()
+    if (key) await pushHistory(entries, key)
+  }
 
   /**
    * First seal for a password account — no passphrase dialog, the
@@ -781,7 +800,7 @@ export default function App() {
     saveEntry(entry).then(async () => {
       const all = await listEntries()
       setHistoryEntries(all)
-      if (vaultState === 'unlocked') void pushHistory(all) // one KV write per save, ciphertext only
+      if (vaultState === 'unlocked') void syncHistory(all) // one KV write per save, ciphertext only
     })
   }
 
@@ -1180,13 +1199,15 @@ export default function App() {
         await saveVault(sealed)
         setVaultBlob(sealed)
         setVaultState('unlocked')
-        void pullAndMergeHistory().then((merged) => {
-          if (!merged) return
-          setHistoryEntries(merged)
-          // Sign-in uploads the device backlog: entries generated while signed
-          // out are already in the merge, so pushing it completes the sync.
-          void pushHistory(merged)
-        })
+        void blobKeys()
+          .then(pullAndMergeHistory)
+          .then((merged) => {
+            if (!merged) return
+            setHistoryEntries(merged)
+            // Sign-in uploads the device backlog: entries generated while signed
+            // out are already in the merge, so pushing it completes the sync.
+            void syncHistory(merged)
+          })
       } else if (vaultBlob) {
         onVaultOpened(await unlock(vaultBlob, passphrase))
       }
@@ -1642,7 +1663,7 @@ export default function App() {
               // Push immediately, not debounced: a per-entry delete on this device
               // could otherwise be resurrected by a stale local list pushed from
               // another device before this delete's push lands (see history.ts).
-              if (vaultState === 'unlocked') void pushHistory(all)
+              if (vaultState === 'unlocked') void syncHistory(all)
             })
           }}
           onClear={() => {
@@ -1650,7 +1671,7 @@ export default function App() {
             clearAllEntries().then(() => {
               setHistoryEntries([])
               // Push immediately — same delete-resurrection risk as per-entry delete.
-              if (vaultState === 'unlocked') void pushHistory([])
+              if (vaultState === 'unlocked') void syncHistory([])
             })
           }}
         />

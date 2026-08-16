@@ -3,7 +3,7 @@
 // the newest 100 entries also sync to /api/history as ONE ciphertext blob —
 // one KV write per save, and the server never sees plaintext. Losing the vault
 // key loses the synced history by design; the local copy is unaffected.
-import { sealJson, openJson, cachedKey, type VaultBlob } from './vault'
+import { sealJson, openBlob, BLOB_VERSION_DEK, type BlobKeys, type VaultBlob } from './vault'
 import type { Citation } from './providers'
 
 export interface HistoryEntry {
@@ -92,10 +92,14 @@ export async function fetchHistoryBlob(): Promise<VaultBlob | null> {
   return data?.history ?? null
 }
 
-export async function pushHistory(entries: HistoryEntry[]): Promise<void> {
-  const key = await cachedKey()
-  if (!key) return // no unlocked vault on this device — local-only, silently
-  const blob = await sealJson(key, { v: 1, entries: entries.slice(0, HISTORY_CAP) })
+/**
+ * The key is a parameter rather than a cachedKey() lookup because during
+ * migration two keys exist and only the caller knows which era this account is
+ * in; a module-level guess would seal history under a key the reader is not
+ * using.
+ */
+export async function pushHistory(entries: HistoryEntry[], key: CryptoKey): Promise<void> {
+  const blob = await sealJson(key, { v: 1, entries: entries.slice(0, HISTORY_CAP) }, BLOB_VERSION_DEK)
   await fetch('/api/history', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -104,19 +108,22 @@ export async function pushHistory(entries: HistoryEntry[]): Promise<void> {
   }).catch(() => {}) // a failed sync is not worth interrupting the user (same policy as syncVault)
 }
 
-/** Pull the remote blob, merge with local, write the merge back locally. Returns the merged list. */
-export async function pullAndMergeHistory(): Promise<HistoryEntry[] | null> {
-  const key = await cachedKey()
-  if (!key) return null
+/**
+ * Pull the remote blob, merge with local, write the merge back locally. Returns
+ * the merged list. `keys` carries whichever of the two eras the caller holds;
+ * openBlob picks by the blob's own tag, so a half-migrated account still reads.
+ */
+export async function pullAndMergeHistory(keys: BlobKeys): Promise<HistoryEntry[] | null> {
+  if (!keys.masterKey && !keys.dekKey) return null
   const blob = await fetchHistoryBlob()
   const local = await listEntries()
   if (!blob) return local
   try {
-    const remote = await openJson<{ v: number; entries: HistoryEntry[] }>(key, blob)
+    const remote = await openBlob<{ v: number; entries: HistoryEntry[] }>(keys, blob)
     const merged = mergeEntries(local, Array.isArray(remote?.entries) ? remote.entries : [])
     for (const e of merged) await saveEntry(e)
     return merged
   } catch {
-    return local // wrong key or corrupt blob: local history still works
+    return local // wrong key, missing key, or corrupt blob: local history still works
   }
 }

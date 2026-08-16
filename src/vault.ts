@@ -32,6 +32,16 @@ const KEY_ID = 'vault-key'
 const PBKDF2_ITERATIONS = 600_000
 export const VAULT_VERSION = 1
 
+/**
+ * Which key opens a blob. The tag travels WITH the data rather than in an
+ * account-level "migrated" flag, and that is what makes migration safe to
+ * interrupt: a signed-in client holds both keys, so an account whose vault is
+ * already v2 while its history is still v1 reads correctly either way, with no
+ * repair step and no ordering requirement between the two.
+ */
+export const BLOB_VERSION_MASTER = 1
+export const BLOB_VERSION_DEK = 2
+
 export interface VaultBlob {
   salt: string
   iv: string
@@ -48,6 +58,12 @@ export class VaultError extends Error {}
 export class WrongPassphraseError extends VaultError {
   constructor() {
     super('That passphrase did not unlock the vault.')
+  }
+}
+/** The blob asked for a key this caller does not have — distinct from "wrong key". */
+export class MissingKeyError extends VaultError {
+  constructor() {
+    super('missing-key')
   }
 }
 
@@ -220,8 +236,16 @@ async function sealWith(key: CryptoKey, bundle: KeyBundle, salt: Uint8Array): Pr
  * (from cachedKey()) and whatever JSON-serialisable value they want sealed.
  * The salt field is carried for VaultBlob shape-compatibility only; it plays
  * no role in decryption here since the key is supplied directly, not derived.
+ *
+ * `version` records which key era sealed this blob (see BLOB_VERSION_*). It
+ * defaults to the master era so a caller that has not been taught about the DEK
+ * yet cannot silently mislabel its own ciphertext.
  */
-export async function sealJson(key: CryptoKey, value: unknown): Promise<VaultBlob> {
+export async function sealJson(
+  key: CryptoKey,
+  value: unknown,
+  version: number = BLOB_VERSION_MASTER
+): Promise<VaultBlob> {
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const plaintext = new TextEncoder().encode(JSON.stringify(value))
   const ciphertext = await crypto.subtle.encrypt(
@@ -233,7 +257,7 @@ export async function sealJson(key: CryptoKey, value: unknown): Promise<VaultBlo
     salt: toBase64(crypto.getRandomValues(new Uint8Array(16))),
     iv: toBase64(iv),
     ciphertext: toBase64(new Uint8Array(ciphertext)),
-    version: VAULT_VERSION,
+    version,
   }
 }
 
@@ -245,6 +269,25 @@ export async function openJson<T = unknown>(key: CryptoKey, blob: VaultBlob): Pr
     fromBase64(blob.ciphertext) as unknown as BufferSource
   )
   return JSON.parse(new TextDecoder().decode(plaintext)) as T
+}
+
+/** Whichever of the two key eras the caller currently holds. Either may be absent mid-migration. */
+export interface BlobKeys {
+  masterKey?: CryptoKey
+  dekKey?: CryptoKey
+}
+
+/**
+ * Decrypt by tag. An absent version means a blob written before tagging
+ * existed, which is always master-key sealed. Never falls back to "try the
+ * other key" — a silent second attempt would mask a migration bug until the
+ * day the first key stopped existing.
+ */
+export async function openBlob<T = unknown>(keys: BlobKeys, blob: VaultBlob): Promise<T> {
+  const wantsDek = blob.version === BLOB_VERSION_DEK
+  const key = wantsDek ? keys.dekKey : keys.masterKey
+  if (!key) throw new MissingKeyError()
+  return openJson<T>(key, blob)
 }
 
 /**
