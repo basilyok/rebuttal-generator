@@ -14,16 +14,10 @@
 import { jsonResponse, requireAccounts, recoveryKey, dekKey } from '../../../_lib/session.js'
 import { fromBase64, verifyAuth, dummyRecord } from '../../../_lib/password.js'
 import { isSameOriginBrowserRequest } from '../../../_lib/gate.js'
-import { makeFloodBrake, overDurableBrake } from '../../../_lib/ratelimit.js'
+import { overDurableBrake } from '../../../_lib/ratelimit.js'
+import { RECOVER_BRAKE_NAME, RECOVER_RATE, overRecoverFlood } from '../../../_lib/recoverbrake.js'
 
 const MAX_BODY_BYTES = 4_000
-
-// Tighter than login's 5-per-5-minutes because the thing being guessed here is
-// a code the user never chose and cannot weaken: there is no legitimate reason
-// to submit recovery codes at more than a trickle, and a real reset needs
-// exactly one success.
-const RATE = { windowMs: 600_000, max: 5 }
-const overRateLimit = makeFloodBrake(RATE)
 
 const failure = () =>
   // One message for every rejection — unknown username, wrong code, and an
@@ -62,10 +56,12 @@ export async function onRequestPost({ request, env }) {
   // durable one persists in the limiter's SQLite across dev-server restarts and
   // would otherwise let one test run poison the next. Production never sets it.
   if (!env.AUTH_TEST_BYPASS_RATE_LIMIT) {
-    if (overRateLimit(request)) return limited()
+    // Both layers come from _lib/recoverbrake.js so complete.js counts into
+    // the same ones — see that file for why the two steps must share.
+    if (overRecoverFlood(request)) return limited()
     // Before the ACCOUNTS read, after validation — login.js explains why both
     // halves of that placement are load-bearing.
-    if (await overDurableBrake(env, request, { name: 'auth-recover', ...RATE })) return limited()
+    if (await overDurableBrake(env, request, { name: RECOVER_BRAKE_NAME, ...RECOVER_RATE })) return limited()
   }
 
   const userId = `local:${username}`

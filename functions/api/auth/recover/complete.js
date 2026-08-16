@@ -64,35 +64,21 @@ import {
 } from '../../../_lib/session.js'
 import { dummyRecord, fromBase64, hashAuth, verifyAuth } from '../../../_lib/password.js'
 import { isSameOriginBrowserRequest } from '../../../_lib/gate.js'
-import { makeFloodBrake, overDurableBrake } from '../../../_lib/ratelimit.js'
-import { isBlob } from '../../../_lib/base64.js'
+import { overDurableBrake } from '../../../_lib/ratelimit.js'
+import { RECOVER_BRAKE_NAME, RECOVER_RATE, overRecoverFlood } from '../../../_lib/recoverbrake.js'
+import { cleanWrapped, isWrapped } from '../../../_lib/base64.js'
 
 // Roomier than begin's cap: this body carries two wrapped DEK copies on top of
 // the credentials. Still far below anything that could park data here.
 const MAX_BODY_BYTES = 8_000
-// Same bound and same reasoning as dek.js — a sanity cap, not a fit.
-const MAX_FIELD = 512
-
-// Deliberately the same brake NAME as begin.js, so the two steps share one
-// counter. They are one flow to an attacker: separate counters would double
-// the budget for guessing a code, since complete re-verifies it too.
-const RATE = { windowMs: 600_000, max: 5 }
-const overRateLimit = makeFloodBrake(RATE)
-
-const isWrapped = (value) => !!value && isBlob(value.iv, MAX_FIELD) && isBlob(value.ciphertext, MAX_FIELD)
-
-// Stamps version 1 rather than echoing a client-supplied version, for the
-// reason spelled out in dek.js: the server validated exactly one wrap format,
-// so it labels the record with that format.
-const clean = (value) => ({ iv: value.iv, ciphertext: value.ciphertext, version: 1 })
 
 /**
  * The `previous` field for write 1: the stored pair, or null if there is not a
- * usable one. Rebuilt field by field through clean() rather than copied, which
- * is what bounds the chain — a stored record's own `previous` is not among the
- * fields clean() emits, so it cannot survive into the next generation. A
- * `delete record.previous` would do the same thing today and silently stop
- * doing it the first time the record grows another nested field.
+ * usable one. Rebuilt field by field through cleanWrapped() rather than
+ * copied, which is what bounds the chain — a stored record's own `previous` is
+ * not among the fields cleanWrapped() emits, so it cannot survive into the
+ * next generation. A `delete record.previous` would do the same thing today
+ * and silently stop doing it the first time the record grows another field.
  */
 function previousPair(raw) {
   if (!raw) return null
@@ -103,7 +89,7 @@ function previousPair(raw) {
     return null
   }
   if (!isWrapped(record?.byPassword) || !isWrapped(record?.byRecovery)) return null
-  return { byPassword: clean(record.byPassword), byRecovery: clean(record.byRecovery) }
+  return { byPassword: cleanWrapped(record.byPassword), byRecovery: cleanWrapped(record.byRecovery) }
 }
 
 const failure = () =>
@@ -135,19 +121,23 @@ export async function onRequestPost({ request, env }) {
   const username = typeof body?.username === 'string' ? body.username.trim().toLowerCase() : ''
   const recoveryAuth = fromBase64(body?.recoveryAuth)
   const newAuthHash = fromBase64(body?.authHash)
-  // Rotation is optional — omitting it keeps the existing code working — but a
-  // PRESENT-and-malformed value is a client bug, not a request to skip
-  // rotation. Silently ignoring it would leave the user holding a freshly
-  // displayed code that never became the real one.
-  const rotating = body?.recoveryAuthNext !== undefined
-  const nextRecoveryAuth = rotating ? fromBase64(body.recoveryAuthNext) : null
+  // Rotation is REQUIRED, validated exactly like authHash beside it. An
+  // optional branch here used to keep the old verifier by rewriting it
+  // verbatim, and it was wrong three ways: a captured body stayed replayable
+  // forever because the verifier never moved; the write sequence this file
+  // exists to guarantee became conditional on a request field; and the filler
+  // wrote back bytes captured before three other writes, so a concurrent
+  // rotation could be silently rolled back. It was also dead — the client
+  // types this field as required and always sends it.
+  const nextRecoveryAuth = fromBase64(body?.recoveryAuthNext)
   if (
     !username ||
     !recoveryAuth ||
     recoveryAuth.length !== 32 ||
     !newAuthHash ||
     newAuthHash.length !== 32 ||
-    (rotating && (!nextRecoveryAuth || nextRecoveryAuth.length !== 32)) ||
+    !nextRecoveryAuth ||
+    nextRecoveryAuth.length !== 32 ||
     !isWrapped(body?.dek?.byPassword) ||
     !isWrapped(body?.dek?.byRecovery)
   ) {
@@ -156,10 +146,12 @@ export async function onRequestPost({ request, env }) {
 
   // Same seam as login.js and begin.js, gating both layers.
   if (!env.AUTH_TEST_BYPASS_RATE_LIMIT) {
-    if (overRateLimit(request)) return limited()
+    // Both layers are begin.js's — see _lib/recoverbrake.js for why the two
+    // steps must count into one budget rather than two.
+    if (overRecoverFlood(request)) return limited()
     // After validation so junk cannot burn a global slot; before the ACCOUNTS
     // read so every request does identical work up to failure().
-    if (await overDurableBrake(env, request, { name: 'auth-recover', ...RATE })) return limited()
+    if (await overDurableBrake(env, request, { name: RECOVER_BRAKE_NAME, ...RECOVER_RATE })) return limited()
   }
 
   const userId = `local:${username}`
@@ -178,13 +170,20 @@ export async function onRequestPost({ request, env }) {
     const valid = await verifyAuth(record, recoveryAuth)
     if (!recordRaw || !valid) return failure()
 
-    // Read the user record BEFORE the first write. The bump needs it, and
-    // discovering it missing after write 1 would leave the account's DEK
-    // rotated with no way to finish.
-    const userRaw = await env.ACCOUNTS.get(userKey(userId))
-    if (!userRaw) return failure()
-    const user = JSON.parse(userRaw)
-    if (!user || typeof user !== 'object') return failure()
+    // Check the user record exists BEFORE the first write: discovering it
+    // missing after write 1 would leave the account's DEK rotated with no way
+    // to finish. The record read here is deliberately NOT the one write 4
+    // uses — see there.
+    //
+    // A verified recovery code with no user record is an inconsistent account,
+    // not a credential mismatch, and saying 'bad-credentials' here would be a
+    // lie about what just happened. It is safe to be honest: possession is
+    // already proven at this point, so a distinct status reveals nothing to
+    // anyone who has not already passed the gate.
+    if (!(await env.ACCOUNTS.get(userKey(userId)))) {
+      console.error('auth/recover/complete: verified code for an account with no user record')
+      return jsonResponse({ error: 'Something went wrong. Please try again.', code: 'server-error' }, 500)
+    }
 
     // The pair the caller's CURRENT credentials open. Read before any write,
     // because write 1 is what destroys it. Kept deliberately lenient: a record
@@ -201,8 +200,8 @@ export async function onRequestPost({ request, env }) {
     await env.ACCOUNTS.put(
       dekKey(userId),
       JSON.stringify({
-        byPassword: clean(body.dek.byPassword),
-        byRecovery: clean(body.dek.byRecovery),
+        byPassword: cleanWrapped(body.dek.byPassword),
+        byRecovery: cleanWrapped(body.dek.byRecovery),
         previous,
         version: 1,
         // Only this record is stamped. The password: and recovery: records
@@ -214,27 +213,34 @@ export async function onRequestPost({ request, env }) {
       })
     )
 
-    // 2. The verifier for the code that opens copy two. When rotating, the
-    //    client must not present the new code as usable until this endpoint
-    //    returns success — until then the OLD code is still the one that works.
-    //    When not rotating we rewrite the existing record verbatim rather than
-    //    skipping: one KV write buys an unconditional, observable position in
-    //    the sequence, so the ordering this file exists to guarantee cannot
-    //    silently become conditional on a request field.
-    await env.ACCOUNTS.put(
-      recoveryKey(userId),
-      rotating ? JSON.stringify(await hashAuth(nextRecoveryAuth)) : recordRaw
-    )
+    // 2. The verifier for the code that opens copy two. The client must not
+    //    present the new code as usable until this endpoint returns success —
+    //    until then the OLD code is still the one that works.
+    await env.ACCOUNTS.put(recoveryKey(userId), JSON.stringify(await hashAuth(nextRecoveryAuth)))
 
     // 3. The switch. Everything above is inert until this lands.
     await env.ACCOUNTS.put(passwordKey(userId), JSON.stringify(await hashAuth(newAuthHash)))
 
     // 4. Evict every session minted under the old credentials. Last, per the
-    //    header comment. `id` is re-derived rather than trusted from storage,
-    //    the same rule upsertUser follows.
+    //    header comment.
+    //
+    //    Re-read rather than reusing the copy fetched before write 1. That
+    //    copy is three writes old by now, and this is a read-modify-write over
+    //    the whole record: a concurrent upsertUser (a Google callback landing
+    //    fresh profile fields, say) would be clobbered wholesale, and a
+    //    concurrent complete's bump would be overwritten with a stale integer.
+    //    Re-reading does not make it atomic — KV has no compare-and-swap, so
+    //    the window shrinks from three writes wide to one read wide and cannot
+    //    be closed here. What keeps that residue survivable is the `previous`
+    //    pair from write 1: an unlucky interleave costs a re-run, not a vault.
+    //
+    //    `id` is re-derived rather than trusted from storage, the same rule
+    //    upsertUser follows.
+    const freshRaw = await env.ACCOUNTS.get(userKey(userId))
+    const fresh = freshRaw ? JSON.parse(freshRaw) : {}
     await env.ACCOUNTS.put(
       userKey(userId),
-      JSON.stringify({ ...user, id: userId, credentialVersion: credentialVersionOf(user) + 1 })
+      JSON.stringify({ ...fresh, id: userId, credentialVersion: credentialVersionOf(fresh) + 1 })
     )
 
     return jsonResponse({ ok: true })

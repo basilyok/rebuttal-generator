@@ -239,6 +239,106 @@ test('dek PUT: a malformed payload is rejected BEFORE the brake, so junk cannot 
   assert.deepEqual(spy.writes, [])
 })
 
+// The reset endpoints are the odd pair here: begin never writes at all, and
+// complete is the only endpoint in the app that writes FOUR rows in one
+// request. Both share a single durable counter (functions/_lib/recoverbrake.js)
+// because complete re-verifies the same recovery code begin checked, so two
+// counters would hand out double the budget for guessing one code.
+const RECOVERY_AUTH = 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='
+const resetBodies = {
+  begin: { username: 'alice', recoveryAuth: RECOVERY_AUTH },
+  complete: {
+    username: 'alice',
+    recoveryAuth: RECOVERY_AUTH,
+    authHash: 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=',
+    recoveryAuthNext: 'TkVYVFJFQ09WRVJZQ09ERS0zMi1ieXRlcy1oZXJlISE=',
+    dek: { byPassword: wrappedDek, byRecovery: wrappedDek },
+  },
+}
+
+for (const step of ['begin', 'complete']) {
+  test(`recover/${step}: a limited request is refused and writes nothing`, async () => {
+    const { hashAuth, fromBase64 } = await import('../functions/_lib/password.js')
+    const { onRequestPost } = await import(`../functions/api/auth/recover/${step}.js`)
+    const spy = accountsSpy({
+      // A real verifier, so the refusal cannot be passing for the wrong reason.
+      'recovery:local:alice': JSON.stringify(await hashAuth(fromBase64(RECOVERY_AUTH))),
+      'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+    })
+    const limiter = recordingLimiter({ limited: true })
+    const res = await onRequestPost({
+      request: new Request(`https://x.test/api/auth/recover/${step}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'https://x.test', 'CF-Connecting-IP': '8.8.8.8' },
+        body: JSON.stringify(resetBodies[step]),
+      }),
+      env: { ACCOUNTS: spy.kv, ...limiter.env },
+    })
+    assert.equal(res.status, 429)
+    assert.deepEqual(spy.writes, [], `a limited recover/${step} must not reach KV`)
+    // Keyed by address, not account: there is no session here, and the caller's
+    // claimed username is exactly what an attacker would vary.
+    assert.equal(limiter.calls[0].key, 'auth-recover:8.8.8.8')
+  })
+}
+
+test('the two reset steps share one durable counter, so guessing gets one budget', async () => {
+  const begin = await import('../functions/api/auth/recover/begin.js')
+  const complete = await import('../functions/api/auth/recover/complete.js')
+  const limiter = recordingLimiter({ limited: false })
+  const spy = accountsSpy()
+  for (const [mod, step] of [[begin, 'begin'], [complete, 'complete']]) {
+    await mod.onRequestPost({
+      request: new Request(`https://x.test/api/auth/recover/${step}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'https://x.test', 'CF-Connecting-IP': '6.6.6.6' },
+        body: JSON.stringify(resetBodies[step]),
+      }),
+      env: { ACCOUNTS: spy.kv, ...limiter.env },
+    })
+  }
+  assert.deepEqual(
+    limiter.calls.map((c) => c.key),
+    ['auth-recover:6.6.6.6', 'auth-recover:6.6.6.6'],
+    'complete must count into the same counter begin does'
+  )
+  // Same window and cap on both sides too — a shared key with mismatched
+  // parameters is two different limits racing over one counter.
+  assert.deepEqual(limiter.calls[0], limiter.calls[1])
+})
+
+test('the shared counter is the IN-MEMORY one too, not just the durable one', async () => {
+  // The distinction this pins is exactly the bug that shipped: makeFloodBrake()
+  // closes over a fresh Map per call, so two endpoints each calling it get two
+  // independent counters even when they agree on the durable brake's name. The
+  // durable-key assertion above passes either way — only spending one
+  // endpoint's budget and then hitting the OTHER endpoint can tell them apart.
+  const begin = await import('../functions/api/auth/recover/begin.js')
+  const complete = await import('../functions/api/auth/recover/complete.js')
+  const spy = accountsSpy()
+  // A fresh address: the in-memory brake is module state shared across this
+  // whole file, so a reused IP would carry hits in from the tests above.
+  const IP = '7.1.1.1'
+  const hit = (mod, step) =>
+    mod.onRequestPost({
+      request: new Request(`https://x.test/api/auth/recover/${step}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'https://x.test', 'CF-Connecting-IP': IP },
+        body: JSON.stringify(resetBodies[step]),
+      }),
+      env: { ACCOUNTS: spy.kv, ...recordingLimiter({ limited: false }).env },
+    })
+
+  // Spend the whole budget (8 per 10 minutes) on begin alone.
+  for (let i = 0; i < 8; i++) {
+    const res = await hit(begin, 'begin')
+    assert.notEqual(res.status, 429, `begin attempt ${i + 1} is still inside the budget`)
+  }
+  const spillover = await hit(complete, 'complete')
+  assert.equal(spillover.status, 429, 'complete must be refused on a budget begin already spent')
+  assert.deepEqual(spy.writes, [])
+})
+
 test('OAuth start: a limited request redirects with auth_error and writes no state record', async () => {
   const { onRequestGet } = await import('../functions/api/auth/google/start.js')
   const spy = accountsSpy()

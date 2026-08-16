@@ -333,12 +333,23 @@ test('begin: a wrong code and an unknown username are indistinguishable', async 
   assert.deepEqual(unknownUser.writes, [], 'a failed begin writes nothing')
 })
 
-test('begin: an unknown username still costs a PBKDF2 verify', async () => {
-  const { onRequestPost } = await import('../functions/api/auth/recover/begin.js')
-  // The body-only comparison above cannot see an early `if (!recordRaw) return
-  // failure()` hoisted above verifyAuth — that refactor looks harmless and
-  // silently restores a username-by-timing oracle. Counting derivations is what
-  // catches it: crypto.subtle.deriveBits is the one call verifyAuth cannot skip.
+/**
+ * Count the PBKDF2 derivations one request performs.
+ *
+ * The body-only comparison above cannot see an early `if (!recordRaw) return
+ * failure()` hoisted above verifyAuth — the refactor looks harmless and
+ * silently restores a username-by-timing oracle, which is a property no
+ * response body can express. Counting derivations is what catches it.
+ *
+ * Two caveats worth knowing before trusting or moving this:
+ *  - It patches a GLOBAL, `crypto.subtle.deriveBits`. Node's test runner is
+ *    serial by default; the day anyone turns on concurrency within a file,
+ *    this goes flaky and the fix is a per-request injection seam, not a retry.
+ *  - It counts deriveBits, not importKey. pbkdf2() in _lib/password.js calls
+ *    both, once each; deriveBits is the one that carries the cost, so if that
+ *    pairing ever changes this is measuring the wrong call.
+ */
+async function countDerivations(run) {
   const realDeriveBits = crypto.subtle.deriveBits.bind(crypto.subtle)
   let derivations = 0
   crypto.subtle.deriveBits = (...args) => {
@@ -346,14 +357,75 @@ test('begin: an unknown username still costs a PBKDF2 verify', async () => {
     return realDeriveBits(...args)
   }
   try {
-    const spy = kvSpy()
-    await onRequestPost({
-      request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'nobody', recoveryAuth: RECOVERY_AUTH }),
-      env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
-    })
-    assert.equal(derivations, 1, 'the miss path must verify against dummyRecord(), not return early')
+    await run()
   } finally {
     crypto.subtle.deriveBits = realDeriveBits
+  }
+  return derivations
+}
+
+// The property is EQUALITY between the two failure paths, not a magic number on
+// one of them: a hoisted early return makes the miss path cheaper than the
+// wrong-code path, and only a comparison sees that.
+for (const step of ['begin', 'complete']) {
+  test(`${step}: an unknown username costs exactly as many derivations as a wrong code`, async () => {
+    const { onRequestPost } = await import(`../functions/api/auth/recover/${step}.js`)
+    const bodyFor = (username, code) =>
+      step === 'begin'
+        ? { username, recoveryAuth: code }
+        : completeBody({ username, recoveryAuth: code })
+
+    const seeded = {
+      'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+      'dek:local:alice': JSON.stringify({ byPassword: wrappedTwo, byRecovery: wrappedTwo, version: 1 }),
+      'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+    }
+    const call = (seed, body) =>
+      onRequestPost({
+        request: post(`${ORIGIN}/api/auth/recover/${step}`, body),
+        env: { ACCOUNTS: kvSpy(seed).kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+      })
+
+    const wrongCode = await countDerivations(() => call(seeded, bodyFor('alice', NEW_AUTH_HASH)))
+    const unknownUser = await countDerivations(() => call({}, bodyFor('nobody', RECOVERY_AUTH)))
+
+    assert.equal(wrongCode, 1, 'a wrong code costs one verify')
+    assert.equal(
+      unknownUser,
+      wrongCode,
+      'the miss path must verify against dummyRecord(), not return early — an unknown username that ' +
+        'answers with less work is a username oracle by response time'
+    )
+  })
+}
+
+test('begin: a verified code with no usable dek record fails like any other miss', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/begin.js')
+  // The one 401 begin's own comment calls out and nothing asserted. Answering
+  // anything more specific here would say "this username exists and its code
+  // is correct" to a caller who cannot be given the record anyway.
+  const reference = kvSpy()
+  const miss = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'nobody', recoveryAuth: RECOVERY_AUTH }),
+    env: { ACCOUNTS: reference.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  const missBody = await miss.json()
+
+  for (const [label, raw] of [
+    ['no dek record at all', null],
+    ['unparseable', '{not json'],
+    ['parses but holds no byRecovery', JSON.stringify({ byPassword: wrappedTwo })],
+  ]) {
+    const seed = { 'recovery:local:alice': JSON.stringify(await realRecoveryRecord()) }
+    if (raw !== null) seed['dek:local:alice'] = raw
+    const spy = kvSpy(seed)
+    const res = await onRequestPost({
+      request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'alice', recoveryAuth: RECOVERY_AUTH }),
+      env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+    })
+    assert.equal(res.status, 401, label)
+    assert.deepEqual(await res.json(), missBody, label)
+    assert.deepEqual(spy.writes, [], label)
   }
 })
 
@@ -461,24 +533,6 @@ test('complete: rotating the recovery code replaces the verifier', async () => {
   const stored = JSON.parse(spy.store['recovery:local:alice'])
   assert.equal(await verifyAuth(stored, fromBase64(NEXT_RECOVERY_AUTH)), true, 'the new code must work')
   assert.equal(await verifyAuth(stored, fromBase64(RECOVERY_AUTH)), false, 'the spent code must not')
-})
-
-test('complete: without a rotation the old code keeps working', async () => {
-  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
-  const { verifyAuth, fromBase64 } = await import('../functions/_lib/password.js')
-  const spy = kvSpy({
-    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
-    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
-  })
-  await onRequestPost({
-    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody({ recoveryAuthNext: undefined })),
-    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
-  })
-  assert.equal(
-    await verifyAuth(JSON.parse(spy.store['recovery:local:alice']), fromBase64(RECOVERY_AUTH)),
-    true,
-    'the verifier must survive a reset that did not rotate it'
-  )
 })
 
 // The property no other test here covers, and the one that matters most: KV
@@ -666,6 +720,21 @@ test('complete: an unknown username fails the same way, and writes nothing', asy
   assert.deepEqual(spy.writes, [], 'nothing may be written for an account that does not exist')
 })
 
+test('complete: a verified code with no user record is an error, not a credential mismatch', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const spy = kvSpy({ 'recovery:local:alice': JSON.stringify(await realRecoveryRecord()) })
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  // The code MATCHED. Saying 'bad-credentials' would be a lie about what
+  // happened, and it costs nothing to be honest: possession is already proven,
+  // so a distinct status tells nobody anything they had not already earned.
+  assert.equal(res.status, 500)
+  assert.equal((await res.json()).code, 'server-error')
+  assert.deepEqual(spy.writes, [], 'an inconsistent account must not be half-rewritten')
+})
+
 test('complete: refuses off-site callers', async () => {
   const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
   const spy = kvSpy()
@@ -685,6 +754,9 @@ test('complete: malformed bodies are 400 and never reach KV', async () => {
     ['no dek', completeBody({ dek: undefined })],
     ['one dek copy missing', completeBody({ dek: { byPassword: wrappedTwo } })],
     ['dek copy is not base64', completeBody({ dek: { byPassword: { iv: '!!x!!', ciphertext: 'x' }, byRecovery: wrappedTwo } })],
+    // Rotation is mandatory: without it a captured body stays replayable
+    // forever, since the verifier it was checked against never moves.
+    ['no rotation code', completeBody({ recoveryAuthNext: undefined })],
     ['rotation code is the wrong length', completeBody({ recoveryAuthNext: 'QUFB' })],
   ]
   for (const [label, body] of cases) {
@@ -710,28 +782,6 @@ test('complete: 501 when ACCOUNTS is unconfigured', async () => {
   assert.equal(res.status, 501)
 })
 
-// The brakes are the only server-side limit on how many recovery codes one
-// address can try, so "the endpoint consults them" is a spec property, not an
-// implementation detail — and a limited request must cost no KV write.
-test('the reset endpoints refuse a limited caller before touching KV', async () => {
-  const closedLimiter = {
-    LIMITER: { async fetch() { return new Response(JSON.stringify({ limited: true })) } },
-  }
-  for (const [path, body] of [
-    ['begin', { username: 'alice', recoveryAuth: RECOVERY_AUTH }],
-    ['complete', completeBody()],
-  ]) {
-    const { onRequestPost } = await import(`../functions/api/auth/recover/${path}.js`)
-    const spy = kvSpy({
-      'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
-      'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
-    })
-    const res = await onRequestPost({
-      request: post(`${ORIGIN}/api/auth/recover/${path}`, body),
-      env: { ACCOUNTS: spy.kv, ...closedLimiter },
-    })
-    assert.equal(res.status, 429, path)
-    assert.equal((await res.json()).code, 'rate-limited', path)
-    assert.deepEqual(spy.writes, [], path)
-  }
-})
+// The brake wiring for these two endpoints lives in tests/writebudget.test.mjs,
+// where "a limited request performs no KV write" is policed for every
+// write-capable endpoint in one place.

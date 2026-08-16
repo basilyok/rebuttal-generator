@@ -13,23 +13,10 @@
 // clearing first.
 import { getSession, jsonResponse, requireAccounts, dekKey } from '../_lib/session.js'
 import { overDurableBrake } from '../_lib/ratelimit.js'
-import { isBlob } from '../_lib/base64.js'
-
-// Both fields are fixed-size by construction: a 12-byte GCM iv is 16 base64
-// chars, and a wrapped 32-byte DEK plus its 16-byte tag is 64. 512 is ~8x the
-// largest legitimate value — loose enough to survive a future cipher with a
-// bigger key or a longer nonce, tight enough that this record can never become
-// a place to park data. It is a sanity bound, not a fit.
-const MAX_FIELD = 512
-
-const isWrapped = (value) => !!value && isBlob(value.iv, MAX_FIELD) && isBlob(value.ciphertext, MAX_FIELD)
-
-// Stamps version 1 rather than honouring `body.version` the way vault.js does,
-// and the difference is intentional: vault.js passes a version through for a
-// client that must recognise its own older key-derivation scheme, whereas this
-// server validates exactly one wrap format above. Echoing a client-supplied
-// version would label a record with a format nothing here checked for.
-const clean = (value) => ({ iv: value.iv, ciphertext: value.ciphertext, version: 1 })
+// isWrapped and cleanWrapped were defined here until auth/recover/complete.js
+// needed the identical pair; they now live beside isBlob so the two writers of
+// this record cannot drift into disagreeing about its shape.
+import { cleanWrapped, isWrapped } from '../_lib/base64.js'
 
 const corrupt = () =>
   jsonResponse({ error: 'The stored key record is unreadable.', code: 'dek-corrupt' }, 500)
@@ -85,8 +72,8 @@ export async function onRequestPut({ request, env }) {
   }
 
   const record = {
-    byPassword: clean(body.byPassword),
-    byRecovery: clean(body.byRecovery),
+    byPassword: cleanWrapped(body.byPassword),
+    byRecovery: cleanWrapped(body.byRecovery),
     version: 1,
     updatedAt: Date.now(),
   }
