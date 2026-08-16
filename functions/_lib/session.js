@@ -20,6 +20,10 @@ export const vaultKey = (id) => `vault:${id}`
 export const historyKey = (id) => `history:${id}`
 export const passwordKey = (id) => `password:${id}`
 export const oauthKey = (state) => `oauth:${state}`
+/** The DEK wrapped twice — under the password key and under the recovery key. */
+export const dekKey = (id) => `dek:${id}`
+/** The verifier for the recovery code, shaped exactly like the password record. */
+export const recoveryKey = (id) => `recovery:${id}`
 
 /** URL-safe random token. 32 bytes is well past guessing range. */
 export function randomToken(bytes = 32) {
@@ -88,11 +92,17 @@ export function readCookie(request, name) {
   return null
 }
 
-export async function createSession(env, userId) {
+export async function createSession(env, userId, credentialVersion = 0) {
   const id = randomToken()
-  await env.ACCOUNTS.put(sessionKey(id), JSON.stringify({ userId, createdAt: Date.now() }), {
-    expirationTtl: SESSION_TTL_SECONDS,
-  })
+  // The version is stamped INTO the session, not looked up per request: that
+  // is what lets a password reset invalidate every existing session by
+  // bumping one integer on the user record, without an index of a user's
+  // sessions (there is none, and KV cannot enumerate cheaply).
+  await env.ACCOUNTS.put(
+    sessionKey(id),
+    JSON.stringify({ userId, createdAt: Date.now(), credentialVersion }),
+    { expirationTtl: SESSION_TTL_SECONDS }
+  )
   return id
 }
 
@@ -120,7 +130,13 @@ export async function getSession(request, env) {
   if (!userRaw) return null
 
   try {
-    return { sessionId, userId: session.userId, user: JSON.parse(userRaw) }
+    const user = JSON.parse(userRaw)
+    // Absent on both sides means "never reset" — existing records need no
+    // backfill, and a session minted before this field existed still works.
+    const stamped = Number.isInteger(session.credentialVersion) ? session.credentialVersion : 0
+    const current = Number.isInteger(user.credentialVersion) ? user.credentialVersion : 0
+    if (stamped < current) return null // credentials changed since this session was minted
+    return { sessionId, userId: session.userId, user }
   } catch {
     return null
   }
