@@ -6,6 +6,7 @@ import {
   BLOB_VERSION_MASTER,
   BLOB_VERSION_DEK,
   MissingKeyError,
+  type BlobKeys,
   type VaultBlob,
 } from '../src/vault'
 import { pushHistory, pullAndMergeHistory, type HistoryEntry } from '../src/history'
@@ -176,6 +177,34 @@ test('a master-era history blob is NOT openable as a DEK blob', async () => {
   }
 })
 
+/** Exactly what App.tsx does on every open: pull, show the merge, push it back. */
+async function callerPullThenPush(keys: BlobKeys, key: CryptoKey, version: number) {
+  const merged = await pullAndMergeHistory(keys)
+  if (merged) await pushHistory(merged, key, version)
+  return merged
+}
+
+test('a history blob we lack the key for is never overwritten by the local list', async () => {
+  const server = fakeHistoryServer()
+  try {
+    const dekKey = await aesKey()
+    const masterKey = await aesKey()
+    await pushHistory([entry('remote-only')], dekKey, BLOB_VERSION_DEK)
+    const before = JSON.stringify(server.stored())
+
+    // This device is mid-migration and holds the old era's key only. The blob is
+    // intact and the other key opens it, so writing over it would destroy
+    // history that was never actually lost.
+    await callerPullThenPush({ masterKey }, masterKey, BLOB_VERSION_MASTER)
+
+    assert.equal(JSON.stringify(server.stored()), before, 'the unreadable blob was left alone')
+    const back = await openBlob<{ entries: HistoryEntry[] }>({ dekKey }, server.stored()!)
+    assert.deepEqual(back.entries.map((e) => e.id), ['remote-only'])
+  } finally {
+    server.restore()
+  }
+})
+
 test('pullAndMergeHistory opens what pushHistory stored, given the same key', async () => {
   const server = fakeHistoryServer()
   try {
@@ -188,15 +217,15 @@ test('pullAndMergeHistory opens what pushHistory stored, given the same key', as
   }
 })
 
-test('pullAndMergeHistory falls back to local when it lacks the key the blob needs', async () => {
+test('pullAndMergeHistory reports "do not push" when it lacks the key the blob needs', async () => {
   const server = fakeHistoryServer()
   try {
     const dekKey = await aesKey()
     const masterKey = await aesKey()
     await pushHistory([entry('a')], dekKey, BLOB_VERSION_DEK)
-    // Remote entries are lost to this caller, but local history keeps working
-    // rather than the whole panel erroring out.
-    assert.deepEqual(await pullAndMergeHistory({ masterKey }), [])
+    // null, not the local list: the caller pushes whatever it is handed, and
+    // this blob is readable by another key that exists.
+    assert.equal(await pullAndMergeHistory({ masterKey }), null)
     assert.equal(await pullAndMergeHistory({}), null)
   } finally {
     server.restore()
