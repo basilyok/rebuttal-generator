@@ -25,7 +25,7 @@ import {
   type BlobKeys,
   type KeyBundle,
 } from './vault'
-import { fetchHistoryBlobStrict, pushHistory, type HistoryEntry } from './history'
+import { fetchHistoryBlobStrict, pushHistoryStrict, type HistoryEntry } from './history'
 
 /**
  * Every error here carries a stable machine code as its `message`, never a
@@ -328,6 +328,39 @@ async function registerRecoveryAuth(recoveryAuth: string): Promise<void> {
 const isMasterEra = (blob: VaultBlob) =>
   blob.version === undefined || blob.version === BLOB_VERSION_MASTER
 
+/** A key and the era tag that truthfully describes it. Never construct one by hand. */
+export interface SealEra {
+  key: CryptoKey
+  version: number
+}
+
+/**
+ * Choose the key to seal under AND the tag that describes it, in one place.
+ *
+ * Every write site used to make this choice itself, and the pairing was held
+ * together by nothing but repeated convention across four of them. That is the
+ * failure this feature keeps producing: a blob sealed under the master key but
+ * tagged v2 passes reset's "refuse while any blob is v1" gate — the check that
+ * exists to stop exactly it — and the reset then rewraps the DEK and strands
+ * the blob. Nothing looks wrong until the reset, and nothing at the call site
+ * can catch it, because a mismatched pair is two individually-plausible
+ * arguments.
+ *
+ * Made a pure function so it can be tested at all: the three App.tsx call sites
+ * read refs inside a component and cannot be reached from a test.
+ *
+ * The DEK wins whenever there is one. After migration it is the only key that
+ * MUST be able to open the blob, because a reset replaces the master key and
+ * keeps the DEK.
+ */
+export function sealEra(dekKey: CryptoKey, masterKey?: CryptoKey | null): SealEra
+export function sealEra(dekKey: CryptoKey | null, masterKey: CryptoKey | null): SealEra | null
+export function sealEra(dekKey: CryptoKey | null, masterKey?: CryptoKey | null): SealEra | null {
+  if (dekKey) return { key: dekKey, version: BLOB_VERSION_DEK }
+  if (masterKey) return { key: masterKey, version: BLOB_VERSION_MASTER }
+  return null
+}
+
 /**
  * Re-encrypt anything still sealed under masterKey so it is sealed under the
  * DEK instead. Idempotent by construction: a blob already tagged v2 is skipped,
@@ -336,26 +369,30 @@ const isMasterEra = (blob: VaultBlob) =>
  * Called only while signed in, which is the one moment BOTH keys exist — that
  * is what makes this safe to leave half-done.
  *
- * Nothing here is caught. openBlob throwing means the blob would not open with
- * the key its own tag names, and re-sealing whatever came back would replace
- * real ciphertext with garbage; aborting leaves the account exactly as it was
- * and the next sign-in tries again.
+ * Nothing here is caught, and every call on the path is a STRICT variant chosen
+ * so that stays true. openBlob throwing means the blob would not open with the
+ * key its own tag names, and re-sealing whatever came back would replace real
+ * ciphertext with garbage; aborting leaves the account exactly as it was and
+ * the next sign-in tries again. The two reads and the history write all have
+ * swallowing siblings that the panel uses and this must not: a migration that
+ * reports success over a failed read or a failed write leaves a blob in the old
+ * era with every caller downstream believing otherwise.
  */
 export async function ensureMigrated(keys: Required<BlobKeys>): Promise<void> {
+  // One choice of key-and-tag, made by the helper, for both blobs.
+  const era = sealEra(keys.dekKey)
+
   const vaultBlob = await fetchVault()
   if (vaultBlob && isMasterEra(vaultBlob)) {
     const bundle = await openBlob<KeyBundle>(keys, vaultBlob)
-    // The key and the era tag move together, in one expression, on purpose.
-    await saveVault(await sealJson(keys.dekKey, bundle, BLOB_VERSION_DEK))
+    await saveVault(await sealJson(era.key, bundle, era.version))
   }
 
-  // The STRICT read: a swallowed failure here reads as "no history to migrate"
-  // and this function would report success having skipped it.
   const historyBlob = await fetchHistoryBlobStrict()
   if (historyBlob && isMasterEra(historyBlob)) {
     const remote = await openBlob<{ v: number; entries: HistoryEntry[] }>(keys, historyBlob)
     const entries = Array.isArray(remote?.entries) ? remote.entries : []
-    await pushHistory(entries, keys.dekKey, BLOB_VERSION_DEK)
+    await pushHistoryStrict(entries, era.key, era.version)
   }
 }
 
@@ -401,12 +438,33 @@ async function noDekEraStarted(): Promise<boolean> {
 // --- setup ------------------------------------------------------------------
 
 /**
- * `none` — no DEK record: this account has never provisioned recovery.
+ * `none` — the server said there is no DEK record: this account has never
+ * provisioned recovery. An ANSWER, and the only value a UI may treat as an
+ * invitation to run first-time setup.
+ * `unknown` — we could not determine the state: the record would not fetch, or
+ * it exists and this session's key will not open it. Distinct from `none`
+ * precisely because it is not an answer — offering first-time setup here would
+ * offer a mint on the state a spurious mint is most tempting from (see
+ * setupRecovery's guard), and would tell a user who has a working recovery code
+ * that they have none.
  * `incomplete` — a DEK record exists but some blob is still v1 (or an era we do
  * not know), so provisioning was interrupted and has not self-healed yet.
  * `ready` — record present, every blob v2.
+ *
+ * KNOWN GAP, worth stating rather than implying this enum is total. `ready`
+ * describes the DEK and the blobs; it says nothing about whether a VERIFIER was
+ * ever stored for the issued code. An interruption between setupRecovery's
+ * saveDek and its registerRecoveryAuth leaves a record present and the blobs
+ * migrated — `ready` — while the code that was wrapped verifies against
+ * nothing. The client cannot see this: there is no endpoint that reports
+ * whether a verifier exists, and adding one would be an oracle for which
+ * accounts have recovery configured. Two things bound the damage. setupRecovery
+ * returns the code only after the register call succeeds, so no user is ever
+ * shown a code that does not work. And the repair is the same action as setup —
+ * re-running it rewrites both — so the UI task must offer "generate a new code"
+ * unconditionally rather than only when the status is `none`.
  */
-export type RecoveryStatus = 'none' | 'incomplete' | 'ready'
+export type RecoveryStatus = 'none' | 'unknown' | 'incomplete' | 'ready'
 
 export const recoveryStatusFor = (hasDekRecord: boolean, fullyMigrated: boolean): RecoveryStatus =>
   !hasDekRecord ? 'none' : fullyMigrated ? 'ready' : 'incomplete'
@@ -415,7 +473,12 @@ export const recoveryStatusFor = (hasDekRecord: boolean, fullyMigrated: boolean)
  * A reset rewraps the DEK and replaces the password. A blob still sealed under
  * the OLD master key would be left with no key at all, so `incomplete` must
  * refuse — this is the client half of the "refuse reset while any blob is v1"
- * invariant, and the reason recoveryStatusFor distinguishes the two.
+ * invariant, and the reason recoveryStatusFor distinguishes the two. `unknown`
+ * refuses for the stronger reason that we do not know what we would be
+ * rewrapping.
+ *
+ * Note this is not yet load-bearing in shipped code: the reset entry point
+ * arrives with the UI in Task 7, and this is the gate it will use.
  */
 export const canReset = (status: RecoveryStatus) => status === 'ready'
 
@@ -468,7 +531,13 @@ export async function setupRecovery(username: string, masterKey: CryptoKey): Pro
   if (existing) {
     try {
       dek = await unwrapDek(masterKey, existing.byPassword)
-    } catch {
+    } catch (err) {
+      // The split RecoveryError's docblock calls load-bearing, preserved here.
+      // A record that will not DECODE is unrecoverable and must say so; there
+      // is no retry, no other credential, and nothing the user can do. Folding
+      // it into the line below would report it as an ordinary key mismatch and
+      // send the UI on to offer a retry that cannot succeed.
+      if (err instanceof CorruptDekRecordError) throw err
       // A record this password cannot open means the account was reset from
       // another device, so this session's masterKey is stale. Generating a new
       // DEK would be the orphaning above; refuse instead and let the caller

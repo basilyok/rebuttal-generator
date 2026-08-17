@@ -27,6 +27,7 @@ import {
   setupRecovery,
   recoveryStatusFor,
   canReset,
+  sealEra,
   type DekRecord,
 } from '../src/recovery'
 
@@ -48,10 +49,11 @@ const entry = (id: string): HistoryEntry => ({ id, createdAt: 1, argument: `arg-
  * own fetch failure by design, so a history write killed here is invisible to
  * the caller — which is exactly the production shape.
  *
- * PUT /api/dek is modelled on the real handler's cleanWrapped(), which stores
- * only { iv, ciphertext, version } and DROPS the `salt` wrapDek emits. A fake
- * that echoed the request back would prove the client can read its own object
- * rather than what the server actually keeps.
+ * PUT /api/dek is modelled on the real handler: it validates with the same
+ * isWrapped() predicate (so a payload production would 400 cannot pass here),
+ * and stores only { iv, ciphertext, version } plus updatedAt — DROPPING the
+ * `salt` wrapDek emits. A fake that echoed the request back would prove the
+ * client can read its own object rather than what the server actually keeps.
  */
 function fakeAccountServer(
   seed: { vault?: VaultBlob | null; history?: VaultBlob | null; dek?: DekRecord | null } = {}
@@ -67,6 +69,13 @@ function fakeAccountServer(
   let historyReadsFail = false
   const original = globalThis.fetch
   const cleanWrapped = (v: VaultBlob) => ({ iv: v.iv, ciphertext: v.ciphertext, version: 1 })
+  // The real handler's isWrapped(), so a payload production would 400 cannot
+  // quietly pass here. Without it this fake accepts shapes the endpoint refuses,
+  // and every test that "stores a record" proves less than it claims.
+  const BASE64 = /^[A-Za-z0-9+/=]+$/
+  const isBlob = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 512 && BASE64.test(v)
+  const isWrapped = (v: { iv?: unknown; ciphertext?: unknown } | null | undefined) =>
+    !!v && isBlob(v.iv) && isBlob(v.ciphertext)
 
   globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
     const path = String(url)
@@ -86,11 +95,15 @@ function fakeAccountServer(
     if (writes.length >= interruptAfter) throw new TypeError('network interrupted')
     const body = init?.body ? JSON.parse(String(init.body)) : null
     if (path === '/api/dek') {
+      if (!isWrapped(body?.byPassword) || !isWrapped(body?.byRecovery)) {
+        return new Response(JSON.stringify({ error: 'Malformed DEK payload.' }), { status: 400 })
+      }
       writes.push('dek')
       state.dek = JSON.stringify({
         byPassword: cleanWrapped(body.byPassword),
         byRecovery: cleanWrapped(body.byRecovery),
         version: 1,
+        updatedAt: Date.now(),
       })
     } else if (path === '/api/auth/recover/register') {
       writes.push('register')
@@ -365,6 +378,96 @@ test('ensureMigrated surfaces a failed history read instead of skipping it', asy
   } finally {
     server.restore()
   }
+})
+
+test('setup converges from an interruption at every step of the sequence', async () => {
+  // 1 and the pair either side of it. Each cut is a state a real client reaches,
+  // and the ordering argument rests on the ADJACENT ones as much as the first:
+  // after 2 the code is registered but no blob has moved, and after 3 the vault
+  // is v2 while the history is still v1 — the genuine two-era account.
+  for (const cut of [1, 2, 3]) {
+    const masterKey = await aesKey()
+    const server = fakeAccountServer(await seedMasterEra(masterKey))
+    try {
+      server.interruptAfter(cut)
+      await assert.rejects(() => setupRecovery('alice', masterKey), `cut after ${cut}`)
+      const dekBefore = await dekFromRecord(masterKey, server.dek()!)
+
+      // Whatever the cut, every blob still opens for a caller holding both
+      // keys — which is what a signed-in client holds. That is the invariant,
+      // not the version tags.
+      const dekKeyMid = await importWrappingKey(await unwrapDek(masterKey, server.dek()!.byPassword))
+      const keys = { masterKey, dekKey: dekKeyMid }
+      assert.deepEqual(await openBlob(keys, server.vault()!), { anthropic: 'sk-secret' }, `cut after ${cut}`)
+      assert.deepEqual(await openBlob(keys, server.history()!), { v: 1, entries: [entry('old')] }, `cut after ${cut}`)
+
+      server.resume()
+      const { dekKey } = await setupRecovery('alice', masterKey)
+      assert.equal(await dekFromRecord(masterKey, server.dek()!), dekBefore, `cut after ${cut} reused the DEK`)
+      assert.deepEqual(await openBlob({ dekKey }, server.vault()!), { anthropic: 'sk-secret' }, `cut after ${cut}`)
+      const history = await openBlob<{ entries: HistoryEntry[] }>({ dekKey }, server.history()!)
+      assert.deepEqual(history.entries.map((e) => e.id), ['old'], `cut after ${cut}`)
+    } finally {
+      server.restore()
+    }
+  }
+})
+
+test('setupRecovery converges from the half-migrated state ensureMigrated itself leaves', async () => {
+  const masterKey = await aesKey()
+  const server = fakeAccountServer(await seedMasterEra(masterKey))
+  try {
+    // Build the state from the real code rather than by hand: run setup, then
+    // cut the history write so ensureMigrated leaves a v2 vault beside a v1
+    // history. That is the account setup must be able to finish from.
+    server.interruptAfter(3)
+    await assert.rejects(() => setupRecovery('alice', masterKey))
+    server.resume()
+    assert.equal(server.vault()?.version, BLOB_VERSION_DEK)
+    assert.equal(server.history()?.version, BLOB_VERSION_MASTER)
+    assert.equal(await isFullyMigrated(), false, 'genuinely half-migrated')
+
+    const { dekKey } = await setupRecovery('alice', masterKey)
+    assert.equal(await isFullyMigrated(), true)
+    // Both halves readable under the one key a reset would preserve.
+    assert.deepEqual(await openBlob({ dekKey }, server.vault()!), { anthropic: 'sk-secret' })
+    const history = await openBlob<{ entries: HistoryEntry[] }>({ dekKey }, server.history()!)
+    assert.deepEqual(history.entries.map((e) => e.id), ['old'])
+  } finally {
+    server.restore()
+  }
+})
+
+test('sealEra pairs each key with the tag that truthfully describes it', async () => {
+  const masterKey = await aesKey()
+  const dekKey = await aesKey()
+  // The pairing the three App.tsx call sites depend on and cannot themselves
+  // test, because they read refs inside a component.
+  assert.deepEqual(sealEra(dekKey, masterKey), { key: dekKey, version: BLOB_VERSION_DEK })
+  assert.deepEqual(sealEra(null, masterKey), { key: masterKey, version: BLOB_VERSION_MASTER })
+  assert.deepEqual(sealEra(dekKey, null), { key: dekKey, version: BLOB_VERSION_DEK })
+  assert.equal(sealEra(null, null), null)
+
+  // The DEK wins even with both in hand: after migration it is the only key a
+  // reset preserves, so sealing under the master key is what strands the blob.
+  assert.equal(sealEra(dekKey, masterKey).key, dekKey)
+
+  // And the pair really round-trips through openBlob's routing — the tag is not
+  // merely a label that happens to match.
+  for (const [dek, master] of [[dekKey, null], [null, masterKey]] as const) {
+    const era = sealEra(dek, master)!
+    const blob = JSON.parse(JSON.stringify(await sealJson(era.key, { a: 1 }, era.version))) as VaultBlob
+    assert.deepEqual(await openBlob({ masterKey, dekKey }, blob), { a: 1 })
+  }
+})
+
+test('a status we could not determine is `unknown`, never `none`', () => {
+  // `none` is an answer from the server and the only value that may invite
+  // first-time setup. Reporting it for a failed read would offer a fresh mint
+  // on exactly the state a spurious mint destroys data from.
+  assert.equal(recoveryStatusFor(true, false), 'incomplete')
+  assert.equal(canReset('unknown'), false)
+  assert.equal(canReset('none'), false)
 })
 
 test('recovery status resolves none / incomplete / ready, and only ready permits a reset', () => {

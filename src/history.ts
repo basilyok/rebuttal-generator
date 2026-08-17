@@ -142,19 +142,35 @@ export const fetchHistoryBlob = async (): Promise<VaultBlob | null> =>
  * history. A default is how a writer comes to assert an era its caller never
  * confirmed, so every call site must state which key it is actually holding.
  */
-export async function pushHistory(
+export async function pushHistoryStrict(
   entries: HistoryEntry[],
   key: CryptoKey,
   version: number
 ): Promise<void> {
   const blob = await sealJson(key, { v: 1, entries: entries.slice(0, HISTORY_CAP) }, version)
-  await fetch('/api/history', {
+  const response = await fetch('/api/history', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
     body: JSON.stringify(blob),
-  }).catch(() => {}) // a failed sync is not worth interrupting the user (same policy as syncVault)
+  })
+  // The old code checked neither the throw nor the status, so a 500 was as
+  // silent as a dropped connection. Migration needs both: a write it believes
+  // landed but did not leaves a v1 blob behind under a caller reporting success.
+  if (!response.ok) throw new HistoryTransportError('history-save-failed')
 }
+
+/**
+ * The routine sync: a failed write is dropped, because it is not worth
+ * interrupting the user over (same policy as syncVault) and the next generation
+ * pushes the whole list again anyway.
+ *
+ * Migration must NOT use this — see pushHistoryStrict. Nothing retries a
+ * migration write, so a swallowed failure there is a blob left in the old era
+ * with every caller believing otherwise.
+ */
+export const pushHistory = async (entries: HistoryEntry[], key: CryptoKey, version: number): Promise<void> =>
+  pushHistoryStrict(entries, key, version).catch(() => {})
 
 /**
  * Pull the remote blob, merge with local, write the merge back locally. Returns

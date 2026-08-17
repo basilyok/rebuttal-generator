@@ -75,7 +75,8 @@ import {
   openBlob,
   cachedKey,
   WrongPassphraseError,
-  BLOB_VERSION_MASTER,
+  // Only the DEK tag is named here now: every seal site takes its era from
+  // sealEra() rather than choosing a constant, which is the point of the helper.
   BLOB_VERSION_DEK,
   type BlobKeys,
   type KeyBundle,
@@ -88,6 +89,7 @@ import {
   ensureMigrated,
   isFullyMigrated,
   recoveryStatusFor,
+  sealEra,
   type RecoveryStatus,
 } from './recovery'
 import { AccountBar, VaultDialog, type VaultUiState } from './AccountBar'
@@ -446,9 +448,10 @@ export default function App() {
    * It is not swallowed silently, though. "I hold the wrong key for a stored
    * blob" is exactly the condition isFullyMigrated() reports, and adoptRecovery
    * turns that into recoveryStatus === 'incomplete' on every sign-in — where it
-   * both drives the UI and refuses a reset, which is the one operation the
-   * mislabel would turn into data loss. The visibility lives on the status, not
-   * on the read path.
+   * will drive the UI and refuse a reset, the one operation the mislabel would
+   * turn into data loss. The visibility lives on the status, not on the read
+   * path. ("will", not "does": recoveryStatus is computed here but nothing
+   * consumes it until the dialogs land in Tasks 6 and 7.)
    */
   const mergeAndSyncHistory = async (isStale: () => boolean = () => false) => {
     const merged = await pullAndMergeHistory(await blobKeys())
@@ -462,16 +465,14 @@ export default function App() {
   /**
    * Push under the key this device holds — with none, history stays local, silently.
    *
-   * The key and the era tag are chosen in ONE branch, never separately. A blob
-   * sealed under the master key but tagged v2 passes reset's "refuse while any
-   * blob is v1" gate — the check that exists to stop exactly it — and the reset
-   * then rewraps the DEK and strands this history. Keep them in one expression.
+   * The key and the era tag come from sealEra() as one value, never chosen
+   * separately here. A blob sealed under the master key but tagged v2 passes
+   * reset's "refuse while any blob is v1" gate — the check that exists to stop
+   * exactly it — and the reset then rewraps the DEK and strands this history.
    */
   const syncHistory = async (entries: HistoryEntry[]) => {
-    const dekKey = dekKeyRef.current
-    if (dekKey) return pushHistory(entries, dekKey, BLOB_VERSION_DEK)
-    const key = await localVaultKey()
-    if (key) await pushHistory(entries, key, BLOB_VERSION_MASTER)
+    const era = sealEra(dekKeyRef.current, await localVaultKey())
+    if (era) await pushHistory(entries, era.key, era.version)
   }
 
   /**
@@ -483,28 +484,39 @@ export default function App() {
    *
    * Never throws. Every failure here means "recovery is not usable this
    * session", and none of them should stop the vault from opening.
+   *
+   * `isStale` is checked after every await that precedes a write to component
+   * state or to dekKeyRef, because sign-out can land in any of those gaps and
+   * this would otherwise write the departed session's answer over the 'none'
+   * handleSignOut just set — or restore a dekKeyRef it just cleared.
    */
   const adoptRecovery = async (isStale: () => boolean = () => false) => {
     const masterKey = await localVaultKey()
     if (!masterKey) return
     try {
       const record = await fetchDek()
+      if (isStale()) return
+      // Only the server answering "no record" is `none`. Every failure below is
+      // `unknown`: a UI that treats "we could not tell" as "never provisioned"
+      // offers first-time setup to someone who already has a recovery code.
       if (!record) {
-        if (!isStale()) setRecoveryStatus('none')
+        setRecoveryStatus('none')
         return
       }
       const dekKey = await importWrappingKey(await unwrapDek(masterKey, record.byPassword))
       if (isStale()) return
       dekKeyRef.current = dekKey
       await ensureMigrated({ masterKey, dekKey })
-      if (!isStale()) setRecoveryStatus(recoveryStatusFor(true, await isFullyMigrated()))
+      // Hoisted out of the setState argument: it is two round trips long, and
+      // evaluating isStale() before them checked a session that was still live.
+      const migrated = await isFullyMigrated()
+      if (!isStale()) setRecoveryStatus(recoveryStatusFor(true, migrated))
     } catch {
       // A record this password cannot open means the account was reset from
       // another device, so this session's master key is stale; a failed fetch
       // means we simply do not know. Either way, leave the DEK unadopted rather
-      // than guessing, and report `none` so nothing offers a reset that would
-      // rewrap a DEK we never held. The next successful sign-in resolves it.
-      if (!isStale()) setRecoveryStatus('none')
+      // than guessing. The next successful sign-in resolves it.
+      if (!isStale()) setRecoveryStatus('unknown')
     }
   }
 
@@ -519,18 +531,17 @@ export default function App() {
    * for the departed session nor writes state over the new one's.
    */
   const setupLocalVault = async (isStale: () => boolean = () => false) => {
-    // The DEK when there is one, the login-derived key otherwise — and the tag
-    // follows from the same expression, so the two cannot drift apart.
-    const dekKey = dekKeyRef.current
-    const key = dekKey ?? (await localVaultKey())
+    // The DEK when there is one, the login-derived key otherwise — paired with
+    // its tag by sealEra so the two cannot drift apart.
+    const era = sealEra(dekKeyRef.current, await localVaultKey())
     const bundle = collectKeyBundle()
     if (isStale()) return
-    if (!key || !Object.keys(bundle).length) {
+    if (!era || !Object.keys(bundle).length) {
       setVaultState('none')
       return
     }
     try {
-      const sealed = await sealJson(key, bundle, dekKey ? BLOB_VERSION_DEK : BLOB_VERSION_MASTER)
+      const sealed = await sealJson(era.key, bundle, era.version)
       if (isStale()) return
       await saveVault(sealed)
       if (isStale()) return
@@ -1234,7 +1245,22 @@ export default function App() {
       // does, adopt the DEK for this session and finish any migration that was
       // interrupted last time — the self-heal, run on every sign-in because
       // this is where the master key is in hand.
-      await adoptRecovery()
+      //
+      // Staleness here is "the key this call was for is no longer the adopted
+      // one", which covers both sign-out (handleSignOut nulls the ref) and an
+      // account switch (it replaces it). The window spans ensureMigrated, so
+      // without this a sign-out mid-call would reassign dekKeyRef after
+      // handleSignOut had cleared it — handing the next person on this device
+      // the previous account's data key. The SERVER writes ensureMigrated makes
+      // are deliberately left unguarded: they are correct for the account that
+      // was signed in when they started, and the session cookie is what stops
+      // them if it is not.
+      const adopted = localKeyRef.current
+      await adoptRecovery(() => localKeyRef.current !== adopted)
+      // The vault effect runs adoptRecovery again when auth.user.id changes.
+      // The duplicate fetch is tolerated rather than overlooked: it is one GET,
+      // it is idempotent, and the alternative — a flag saying "already done for
+      // this user" — is more state to get wrong than the request costs.
       // Signed-in-but-locked (key lost to a blocked IndexedDB + reload): the
       // effect keys on auth.user.id and will not refire for the same user, so
       // open the vault directly here.
@@ -1242,6 +1268,12 @@ export default function App() {
         try {
           // By tag, not by the master key alone: this blob is v2 whenever the
           // account has already migrated, and only the DEK opens those.
+          //
+          // `vaultBlob` is this component's copy and may be the PRE-migration
+          // object that adoptRecovery just replaced on the server. That is
+          // harmless and self-correcting: the stale copy is v1, the master key
+          // in the other slot opens it, and the next syncVault writes the v2
+          // blob back into state.
           onVaultOpened(await openBlob<KeyBundle>(await blobKeys(), vaultBlob))
         } catch {
           // A blob this account's key cannot open — leave it locked
@@ -1297,21 +1329,17 @@ export default function App() {
     if (!Object.keys(bundle).length) return
     setVaultState('saving')
     try {
-      // Prefer the DEK. After migration it is the only key that MUST be able to
-      // open this blob, because a reset replaces the master key and keeps the
-      // DEK — reseal under the master key here and the next API-key change
-      // silently drags the vault back to v1, where a later reset strands it.
-      // This step is easy to miss precisely because nothing looks wrong until
-      // the reset. Below it: a password account with no recovery yet reseals
-      // under the login-derived key it already holds, which survives a blocked
-      // IndexedDB; a Google account keeps using the device key as before.
-      const dekKey = dekKeyRef.current
-      const localKey = auth.user.provider === 'local' ? await localVaultKey() : null
-      const sealed = dekKey
-        ? await sealJson(dekKey, bundle, BLOB_VERSION_DEK)
-        : localKey
-          ? await sealJson(localKey, bundle, BLOB_VERSION_MASTER)
-          : await resealWithDeviceKey(bundle, vaultBlob)
+      // sealEra prefers the DEK. After migration it is the only key that MUST
+      // be able to open this blob, because a reset replaces the master key and
+      // keeps the DEK — reseal under the master key here and the next API-key
+      // change silently drags the vault back to v1, where a later reset strands
+      // it. This step is easy to miss precisely because nothing looks wrong
+      // until the reset. With neither key: a Google account, which keeps using
+      // the device key exactly as before.
+      const era = sealEra(dekKeyRef.current, auth.user.provider === 'local' ? await localVaultKey() : null)
+      const sealed = era
+        ? await sealJson(era.key, bundle, era.version)
+        : await resealWithDeviceKey(bundle, vaultBlob)
       if (sealed) {
         await saveVault(sealed)
         setVaultBlob(sealed)
