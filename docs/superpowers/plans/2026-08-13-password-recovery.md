@@ -1756,7 +1756,9 @@ git commit -m "Add recovery setup UI, prompt and strings"
 
 `runReset` must therefore try `byRecovery` first and fall back to `previousByRecovery` when unwrapping throws `WrongRecoveryCodeError`, treating a successful fallback exactly like a successful primary unwrap. Do not surface the difference to the user: from their side this is a reset that worked, and explaining which generation of ciphertext opened is noise about our own interrupted write. If both fail, the code is genuinely wrong — that is the real `WrongRecoveryCodeError`.
 
-The same applies wherever Task 5 opens the DEK with the password: `GET /api/dek` returns the whole record, so try `byPassword`, then `previous.byPassword`.
+The same applies wherever the DEK is opened with the password: `GET /api/dek` returns the whole record, so try `byPassword`, then `previous.byPassword`.
+
+**Named precisely, after Task 5's review found this note too vague to act on:** the two functions are `setupRecovery` and `adoptRecovery`, and `DekRecord` needs a `previous` field before either can use it. The scenario is not hypothetical — a reset interrupted between `complete.js`'s first and third writes leaves the old password still authenticating while the *current* `byPassword` is sealed under the new password key. That session cannot open its DEK and a v2 vault stays locked, which is the precise case `previous` was added to cover. It fails safe today (`setupRecovery` throws `dek-not-openable` rather than overwriting), so this is a recoverability gap, not a data-loss one — but leaving it means the server-side fallback stays half-consumed.
 
 **The not-fully-migrated guard is client-side only — noted during Task 3's review.** `recovery.resetBlocked` lives in the browser, so the server will happily reset an account whose blobs are still `version: 1`, and anyone posting directly to `/api/auth/recover/complete` bypasses it. That is this plan's allocation rather than an oversight, and it is defensible: bypassing it costs you your *own* v1 blobs, nobody else's, and the endpoint is already possession-gated by the recovery code.
 
