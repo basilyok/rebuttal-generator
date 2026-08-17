@@ -64,6 +64,7 @@ function fakeAccountServer(
   }
   const writes: string[] = []
   let interruptAfter = Infinity
+  let historyReadsFail = false
   const original = globalThis.fetch
   const cleanWrapped = (v: VaultBlob) => ({ iv: v.iv, ciphertext: v.ciphertext, version: 1 })
 
@@ -74,7 +75,12 @@ function fakeAccountServer(
     if (method === 'GET') {
       if (path === '/api/dek') return ok({ dek: state.dek ? JSON.parse(state.dek) : null })
       if (path === '/api/vault') return ok({ vault: state.vault ? JSON.parse(state.vault) : null })
-      if (path === '/api/history') return ok({ history: state.history ? JSON.parse(state.history) : null })
+      if (path === '/api/history') {
+        // A 500, not a thrown fetch: the shape a real transient server error
+        // takes, and the one the swallowing read turns into a null.
+        if (historyReadsFail) return new Response('{}', { status: 500 })
+        return ok({ history: state.history ? JSON.parse(state.history) : null })
+      }
       throw new Error(`unexpected GET ${path}`)
     }
     if (writes.length >= interruptAfter) throw new TypeError('network interrupted')
@@ -109,6 +115,9 @@ function fakeAccountServer(
     recoveryAuth: () => state.recoveryAuth,
     interruptAfter: (n: number) => {
       interruptAfter = n
+    },
+    failHistoryReads: (fail: boolean) => {
+      historyReadsFail = fail
     },
     resume: () => {
       interruptAfter = Infinity
@@ -260,6 +269,45 @@ test('ensureMigrated writes nothing when it cannot open the v1 blob', async () =
     await assert.rejects(() => ensureMigrated(keys))
     assert.deepEqual(server.writes, [])
     assert.deepEqual(await openBlob({ masterKey }, server.vault()!), { anthropic: 'sk-secret' })
+  } finally {
+    server.restore()
+  }
+})
+
+test('a failed history read is NOT read as "migrated"', async () => {
+  const masterKey = await aesKey()
+  const dekKey = await aesKey()
+  // The vault half must already be v2, or it fails the check on its own and the
+  // history half is never reached — an earlier version of this test passed
+  // against the unfixed code for exactly that reason.
+  const server = fakeAccountServer({
+    vault: await sealJson(dekKey, { anthropic: 'sk-secret' }, BLOB_VERSION_DEK),
+    history: await sealJson(masterKey, { v: 1, entries: [entry('old')] }, BLOB_VERSION_MASTER),
+  })
+  try {
+    assert.equal(await isFullyMigrated(), false, 'the v1 history is visible while the read works')
+
+    // Now the only thing that changes is that /api/history stops answering. A
+    // swallowed error arrives as `null`, indistinguishable from "nothing
+    // stored", and that second reading makes this account — which still holds a
+    // v1 history — report itself ready for a reset. The reset then rewraps the
+    // DEK and strands the very blob we failed to read.
+    server.failHistoryReads(true)
+    assert.equal(await isFullyMigrated(), false, 'a read we could not perform is not evidence of migration')
+  } finally {
+    server.restore()
+  }
+})
+
+test('ensureMigrated surfaces a failed history read instead of skipping it', async () => {
+  const masterKey = await aesKey()
+  const dekKey = await aesKey()
+  const server = fakeAccountServer(await seedMasterEra(masterKey))
+  try {
+    server.failHistoryReads(true)
+    // Reporting success here would leave a v1 history behind while every caller
+    // believed migration was done — the same wrong `null`, one layer down.
+    await assert.rejects(() => ensureMigrated({ masterKey, dekKey }))
   } finally {
     server.restore()
   }

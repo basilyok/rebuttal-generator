@@ -91,13 +91,44 @@ export function mergeEntries(local: HistoryEntry[], remote: HistoryEntry[]): His
 
 // --- sync (same transport contract as fetchVault/saveVault in vault.ts) ---
 
-export async function fetchHistoryBlob(): Promise<VaultBlob | null> {
-  const response = await fetch('/api/history', { credentials: 'same-origin' }).catch(() => null)
-  if (!response || response.status === 401 || response.status === 501) return null
-  if (!response.ok) return null
+/**
+ * A read or write of the history blob that did not happen. Its own type because
+ * the two callers want opposite things from it: the history panel wants it
+ * swallowed, and the migration checks must not swallow it (see below).
+ */
+export class HistoryTransportError extends Error {}
+
+/**
+ * The same read as fetchHistoryBlob, but it distinguishes "nothing stored" from
+ * "could not tell".
+ *
+ * That distinction is invisible to the panel and load-bearing everywhere else.
+ * A caller deciding whether an account is fully migrated reads `null` as "no
+ * history to migrate" — so a transient 500 here made an account with a v1
+ * history report itself ready for a reset, and the reset then rewrapped the DEK
+ * and stranded that history. Note the asymmetry this repairs: fetchVault throws
+ * on a non-ok response, so the vault half of that check always failed safe and
+ * only the history half did not.
+ *
+ * 401/501 stay `null` on purpose: those are answers, not failures — signed out,
+ * or accounts not configured on this deployment.
+ */
+export async function fetchHistoryBlobStrict(): Promise<VaultBlob | null> {
+  const response = await fetch('/api/history', { credentials: 'same-origin' })
+  if (response.status === 401 || response.status === 501) return null
+  if (!response.ok) throw new HistoryTransportError('history-fetch-failed')
   const data = await response.json().catch(() => null)
   return data?.history ?? null
 }
+
+/**
+ * The panel's read: any failure is `null`, because history is a nice-to-have
+ * and a network blip must never be an error in front of the user. Defined in
+ * terms of the strict read rather than beside it, so there is exactly one
+ * implementation of this transport to keep in step with the endpoint.
+ */
+export const fetchHistoryBlob = async (): Promise<VaultBlob | null> =>
+  fetchHistoryBlobStrict().catch(() => null)
 
 /**
  * The key is a parameter rather than a cachedKey() lookup because during

@@ -25,7 +25,7 @@ import {
   type BlobKeys,
   type KeyBundle,
 } from './vault'
-import { fetchHistoryBlob, pushHistory, type HistoryEntry } from './history'
+import { fetchHistoryBlobStrict, pushHistory, type HistoryEntry } from './history'
 
 /**
  * Every error here carries a stable machine code as its `message`, never a
@@ -349,7 +349,9 @@ export async function ensureMigrated(keys: Required<BlobKeys>): Promise<void> {
     await saveVault(await sealJson(keys.dekKey, bundle, BLOB_VERSION_DEK))
   }
 
-  const historyBlob = await fetchHistoryBlob()
+  // The STRICT read: a swallowed failure here reads as "no history to migrate"
+  // and this function would report success having skipped it.
+  const historyBlob = await fetchHistoryBlobStrict()
   if (historyBlob && isMasterEra(historyBlob)) {
     const remote = await openBlob<{ v: number; entries: HistoryEntry[] }>(keys, historyBlob)
     const entries = Array.isArray(remote?.entries) ? remote.entries : []
@@ -361,11 +363,23 @@ export async function ensureMigrated(keys: Required<BlobKeys>): Promise<void> {
  * True when every server-side blob is already DEK-sealed. An account with
  * nothing stored is migrated by definition — otherwise a new account would sit
  * at `incomplete` forever with no blob that could ever clear it.
+ *
+ * UNKNOWN FALLS ON THE NOT-MIGRATED SIDE, and that asymmetry is the whole point
+ * of the try. This predicate has exactly one consumer of consequence: it decides
+ * `ready`, and `ready` is what permits a reset. A wrong `true` therefore ends in
+ * a rewrapped DEK and a stranded blob, while a wrong `false` costs a prompt the
+ * user sees again next sign-in. There is no symmetric reading of a failed read
+ * available here, so it is not offered.
  */
 export async function isFullyMigrated(): Promise<boolean> {
-  const [vaultBlob, historyBlob] = await Promise.all([fetchVault(), fetchHistoryBlob()])
+  let blobs: [VaultBlob | null, VaultBlob | null]
+  try {
+    blobs = await Promise.all([fetchVault(), fetchHistoryBlobStrict()])
+  } catch {
+    return false
+  }
   const ok = (blob: VaultBlob | null) => !blob || blob.version === BLOB_VERSION_DEK
-  return ok(vaultBlob) && ok(historyBlob)
+  return blobs.every(ok)
 }
 
 // --- setup ------------------------------------------------------------------
