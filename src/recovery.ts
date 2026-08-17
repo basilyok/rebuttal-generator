@@ -382,6 +382,22 @@ export async function isFullyMigrated(): Promise<boolean> {
   return blobs.every(ok)
 }
 
+/**
+ * True when nothing stored is DEK-sealed — the precondition for minting a DEK.
+ *
+ * Deliberately not `!isFullyMigrated()`: the two are not complements. A
+ * half-migrated account is neither fully migrated NOR safe to mint into, and
+ * collapsing them would answer "yes, mint" for the account with one v2 blob
+ * already. An era we do not recognise also answers false, because we could not
+ * open that blob to re-seal it either.
+ *
+ * Throws rather than guessing if a read fails — see the call site.
+ */
+async function noDekEraStarted(): Promise<boolean> {
+  const blobs = await Promise.all([fetchVault(), fetchHistoryBlobStrict()])
+  return blobs.every((blob) => !blob || isMasterEra(blob))
+}
+
 // --- setup ------------------------------------------------------------------
 
 /**
@@ -415,8 +431,15 @@ export interface SetupResult {
  * Write order is the safety property: the DEK record lands BEFORE any blob is
  * re-encrypted. Reversed, an interruption would leave blobs sealed under a DEK
  * that was never stored — unrecoverable, and the worst outcome this feature can
- * produce. In this order the only failure mode is "not finished yet", and every
- * intermediate state is one a later run converges from.
+ * produce. In this order every intermediate state is one a later run converges
+ * from.
+ *
+ * "The only failure mode is not-finished-yet" holds only for a SINGLE WRITER
+ * against a consistent view of the record. It is not a property of the write
+ * order alone, and stating it that way was wrong: two devices, two tabs, or one
+ * device reading a KV replica that has not caught up are all writers racing
+ * each other, and the first step below is the guard for that case rather than a
+ * belt-and-braces check.
  *
  * The three steps and what an interruption after each one costs:
  *   1. saveDek     — both copies stored. Blobs are untouched and still open
@@ -455,6 +478,19 @@ export async function setupRecovery(username: string, masterKey: CryptoKey): Pro
       throw new RecoveryError('dek-not-openable')
     }
   } else {
+    // "No record" is not the same claim as "no DEK era". env.ACCOUNTS is Workers
+    // KV, which is eventually consistent globally: a PUT on one device can read
+    // back as null from another colo for up to about a minute, and two tabs
+    // running first-time setup race the same way. If any blob is ALREADY
+    // DEK-sealed, minting here stores a second DEK that cannot open it —
+    // ensureMigrated skips v2 blobs, so nothing downstream ever repairs it, and
+    // there is no third copy to fall back to. That is the one unrecoverable
+    // outcome this whole design exists to prevent, so the absence has to be
+    // corroborated against the blobs rather than trusted on its own.
+    //
+    // A failed read here propagates rather than being caught: not knowing is a
+    // reason to refuse to mint, never a reason to proceed.
+    if (!(await noDekEraStarted())) throw new RecoveryError('dek-record-missing')
     dek = generateDek()
   }
 

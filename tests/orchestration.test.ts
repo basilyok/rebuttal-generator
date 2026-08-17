@@ -212,6 +212,60 @@ test('setupRecovery refuses to mint a second DEK when the stored one will not op
   }
 })
 
+test('setupRecovery refuses to mint when a v2 blob exists but the record reads absent', async () => {
+  const masterKey = await aesKey()
+  const dekA = await aesKey()
+  // The state a stale KV read produces: a DEK record was written on another
+  // device (or another tab) and this colo still answers null, while the vault it
+  // sealed is already v2. Minting stores a DEK_B that cannot open that vault,
+  // and ensureMigrated skips v2 blobs — so nothing ever repairs it and there is
+  // no third copy to fall back to.
+  const server = fakeAccountServer({
+    vault: await sealJson(dekA, { anthropic: 'sk-secret' }, BLOB_VERSION_DEK),
+    dek: null,
+  })
+  try {
+    await assert.rejects(() => setupRecovery('alice', masterKey), RecoveryError)
+    assert.deepEqual(server.writes, [], 'a refusal must not write anything, least of all a DEK record')
+    // The original DEK still opens the vault, which is the property that would
+    // have been destroyed. Checked by decrypting, not by reading the tag.
+    assert.deepEqual(await openBlob({ dekKey: dekA }, server.vault()!), { anthropic: 'sk-secret' })
+  } finally {
+    server.restore()
+  }
+})
+
+test('setupRecovery refuses to mint when it cannot read the blobs at all', async () => {
+  const masterKey = await aesKey()
+  const server = fakeAccountServer()
+  try {
+    server.failHistoryReads(true)
+    // Not knowing whether a DEK era has started is a reason to refuse, never a
+    // reason to proceed: the mint is the irreversible half.
+    await assert.rejects(() => setupRecovery('alice', masterKey))
+    assert.deepEqual(server.writes, [])
+  } finally {
+    server.restore()
+  }
+})
+
+test('the mint guard does not block a genuine first-time setup', async () => {
+  const masterKey = await aesKey()
+  // Both the empty account and the all-v1 account must still provision, or the
+  // guard has traded one data-loss bug for a feature nobody can turn on.
+  for (const seed of [{}, await seedMasterEra(masterKey)]) {
+    const server = fakeAccountServer(seed)
+    try {
+      const { dekKey } = await setupRecovery('alice', masterKey)
+      assert.equal(server.writes[0], 'dek')
+      assert.ok(server.dek(), 'a record was provisioned')
+      if (server.vault()) assert.deepEqual(await openBlob({ dekKey }, server.vault()!), { anthropic: 'sk-secret' })
+    } finally {
+      server.restore()
+    }
+  }
+})
+
 test('ensureMigrated moves v1 blobs to v2 and is then a no-op', async () => {
   const masterKey = await aesKey()
   const dekKey = await aesKey()
