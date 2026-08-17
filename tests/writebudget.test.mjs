@@ -239,6 +239,26 @@ test('dek PUT: a malformed payload is rejected BEFORE the brake, so junk cannot 
   assert.deepEqual(spy.writes, [])
 })
 
+test('recover/register: a limited request is refused and writes nothing', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/register.js')
+  const spy = accountsSpy(sessionRecords)
+  const limiter = recordingLimiter({ limited: true })
+  const res = await onRequestPost({
+    request: new Request('https://x.test/api/auth/recover/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: SESSION_COOKIE, Origin: 'https://x.test' },
+      body: JSON.stringify({ recoveryAuth: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' }),
+    }),
+    env: { ACCOUNTS: spy.kv, ...limiter.env },
+  })
+  assert.equal(res.status, 429)
+  assert.deepEqual(spy.writes, [], 'a limited register must not reach KV')
+  // Keyed by account, unlike begin/complete below: this endpoint has a session,
+  // so keying it by address would let one user behind a shared NAT spend
+  // everyone else's rotation budget.
+  assert.equal(limiter.calls[0].key, 'recovery-register:local:alice')
+})
+
 // The reset endpoints are the odd pair here: begin never writes at all, and
 // complete is the only endpoint in the app that writes FOUR rows in one
 // request. Both share a single durable counter (functions/_lib/recoverbrake.js)

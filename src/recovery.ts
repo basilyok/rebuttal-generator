@@ -12,7 +12,20 @@
 // What this module never does: send the code anywhere, store it, or derive
 // anything the server could use to reconstruct it.
 import { normalizeUsername, pbkdf2 } from './account'
-import { toBase64, fromBase64, type VaultBlob } from './vault'
+import {
+  toBase64,
+  fromBase64,
+  sealJson,
+  openBlob,
+  fetchVault,
+  saveVault,
+  BLOB_VERSION_MASTER,
+  BLOB_VERSION_DEK,
+  type VaultBlob,
+  type BlobKeys,
+  type KeyBundle,
+} from './vault'
+import { fetchHistoryBlob, pushHistory, type HistoryEntry } from './history'
 
 /**
  * Every error here carries a stable machine code as its `message`, never a
@@ -249,3 +262,199 @@ export async function unwrapDek(key: CryptoKey, blob: VaultBlob): Promise<Uint8A
 
 /** A fresh 256-bit data key. The only key that ever encrypts vault or history content. */
 export const generateDek = (): Uint8Array => crypto.getRandomValues(new Uint8Array(32))
+
+// --- transport --------------------------------------------------------------
+// Same conventions as fetchVault/saveVault in src/vault.ts: same-origin
+// credentials, null for "not signed in", throw for anything else.
+
+/** The two wrapped copies of one DEK, exactly as /api/dek stores them. */
+export interface DekRecord {
+  byPassword: VaultBlob
+  byRecovery: VaultBlob
+}
+
+export async function fetchDek(): Promise<DekRecord | null> {
+  const response = await fetch('/api/dek', { credentials: 'same-origin' })
+  if (response.status === 401 || response.status === 501) return null
+  // Deliberately NOT `if (!response.ok) return null`. /api/dek answers 500
+  // `dek-corrupt` for a record that exists but will not parse, and it goes to
+  // real trouble to keep that distinct from absence — because this caller's
+  // answer to "absent" is to mint a fresh DEK and PUT it, which permanently
+  // orphans every v2 blob the stored record could still have opened. Collapsing
+  // an error into null would hand that outcome to a transient 500.
+  if (!response.ok) throw new RecoveryError('dek-fetch-failed')
+  const data = await response.json().catch(() => null)
+  return data?.dek ?? null
+}
+
+export async function saveDek(record: DekRecord): Promise<void> {
+  const response = await fetch('/api/dek', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(record),
+  })
+  if (!response.ok) throw new RecoveryError('dek-save-failed')
+}
+
+/**
+ * Store the verifier for a freshly-minted code on an account already signed in.
+ * Not exported: a verifier written without the matching byRecovery copy landing
+ * in the same sequence is a code that proves possession of nothing, so this only
+ * ever runs as setupRecovery's second step.
+ */
+async function registerRecoveryAuth(recoveryAuth: string): Promise<void> {
+  const response = await fetch('/api/auth/recover/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ recoveryAuth }),
+  })
+  if (!response.ok) throw new RecoveryError('recovery-register-failed')
+}
+
+// --- migration --------------------------------------------------------------
+
+/**
+ * Whether this blob is one of ours to rewrite.
+ *
+ * An absent `version` predates tagging and is master-era by definition (see
+ * openBlob). Anything that is neither era came from a newer client: leaving it
+ * alone is the only safe move, since we could not open it to re-seal it and
+ * overwriting it would destroy data that is probably fine. isFullyMigrated()
+ * then reports the account as not migrated, which refuses a reset — the safe
+ * direction, because a reset would rewrap a DEK that cannot open it either.
+ */
+const isMasterEra = (blob: VaultBlob) =>
+  blob.version === undefined || blob.version === BLOB_VERSION_MASTER
+
+/**
+ * Re-encrypt anything still sealed under masterKey so it is sealed under the
+ * DEK instead. Idempotent by construction: a blob already tagged v2 is skipped,
+ * so an interrupted run simply finishes on the next sign-in.
+ *
+ * Called only while signed in, which is the one moment BOTH keys exist — that
+ * is what makes this safe to leave half-done.
+ *
+ * Nothing here is caught. openBlob throwing means the blob would not open with
+ * the key its own tag names, and re-sealing whatever came back would replace
+ * real ciphertext with garbage; aborting leaves the account exactly as it was
+ * and the next sign-in tries again.
+ */
+export async function ensureMigrated(keys: Required<BlobKeys>): Promise<void> {
+  const vaultBlob = await fetchVault()
+  if (vaultBlob && isMasterEra(vaultBlob)) {
+    const bundle = await openBlob<KeyBundle>(keys, vaultBlob)
+    // The key and the era tag move together, in one expression, on purpose.
+    await saveVault(await sealJson(keys.dekKey, bundle, BLOB_VERSION_DEK))
+  }
+
+  const historyBlob = await fetchHistoryBlob()
+  if (historyBlob && isMasterEra(historyBlob)) {
+    const remote = await openBlob<{ v: number; entries: HistoryEntry[] }>(keys, historyBlob)
+    const entries = Array.isArray(remote?.entries) ? remote.entries : []
+    await pushHistory(entries, keys.dekKey, BLOB_VERSION_DEK)
+  }
+}
+
+/**
+ * True when every server-side blob is already DEK-sealed. An account with
+ * nothing stored is migrated by definition — otherwise a new account would sit
+ * at `incomplete` forever with no blob that could ever clear it.
+ */
+export async function isFullyMigrated(): Promise<boolean> {
+  const [vaultBlob, historyBlob] = await Promise.all([fetchVault(), fetchHistoryBlob()])
+  const ok = (blob: VaultBlob | null) => !blob || blob.version === BLOB_VERSION_DEK
+  return ok(vaultBlob) && ok(historyBlob)
+}
+
+// --- setup ------------------------------------------------------------------
+
+/**
+ * `none` — no DEK record: this account has never provisioned recovery.
+ * `incomplete` — a DEK record exists but some blob is still v1 (or an era we do
+ * not know), so provisioning was interrupted and has not self-healed yet.
+ * `ready` — record present, every blob v2.
+ */
+export type RecoveryStatus = 'none' | 'incomplete' | 'ready'
+
+export const recoveryStatusFor = (hasDekRecord: boolean, fullyMigrated: boolean): RecoveryStatus =>
+  !hasDekRecord ? 'none' : fullyMigrated ? 'ready' : 'incomplete'
+
+/**
+ * A reset rewraps the DEK and replaces the password. A blob still sealed under
+ * the OLD master key would be left with no key at all, so `incomplete` must
+ * refuse — this is the client half of the "refuse reset while any blob is v1"
+ * invariant, and the reason recoveryStatusFor distinguishes the two.
+ */
+export const canReset = (status: RecoveryStatus) => status === 'ready'
+
+export interface SetupResult {
+  code: string
+  dekKey: CryptoKey
+}
+
+/**
+ * Provision recovery for an account that has none, or finish a provisioning
+ * that was interrupted.
+ *
+ * Write order is the safety property: the DEK record lands BEFORE any blob is
+ * re-encrypted. Reversed, an interruption would leave blobs sealed under a DEK
+ * that was never stored — unrecoverable, and the worst outcome this feature can
+ * produce. In this order the only failure mode is "not finished yet", and every
+ * intermediate state is one a later run converges from.
+ *
+ * The three steps and what an interruption after each one costs:
+ *   1. saveDek     — both copies stored. Blobs are untouched and still open
+ *                    under the password. Re-running finishes the job.
+ *   2. register    — the new code becomes usable. Between 1 and 2 the code we
+ *                    just wrapped verifies against nothing, so it must not be
+ *                    shown: that is why this function returns the code only at
+ *                    the end, and why a throw anywhere above never yields one.
+ *   3. ensureMigrated — blobs move to the DEK. Interruptible at any point; the
+ *                    per-blob version tag is what makes the half-done state
+ *                    readable rather than needing a repair pass.
+ *
+ * Rotation caveat: step 1 overwrites byRecovery, so a previously-issued code
+ * stops working the moment it lands, even if step 2 never does. That window is
+ * survivable only because the password copy is untouched throughout — the user
+ * can always re-run setup. /api/dek has no `previous` slot (auth/recover/
+ * complete.js keeps one for the reset path, which has no password to fall back
+ * on); here the password IS the fallback, so it does not need one.
+ */
+export async function setupRecovery(username: string, masterKey: CryptoKey): Promise<SetupResult> {
+  const existing = await fetchDek()
+
+  // Reuse the stored DEK if one exists. Minting a fresh one here would orphan
+  // every blob already sealed under the old one.
+  let dek: Uint8Array
+  if (existing) {
+    try {
+      dek = await unwrapDek(masterKey, existing.byPassword)
+    } catch {
+      // A record this password cannot open means the account was reset from
+      // another device, so this session's masterKey is stale. Generating a new
+      // DEK would be the orphaning above; refuse instead and let the caller
+      // re-authenticate. Rethrown as its own code rather than passed through,
+      // because unwrapDek's WrongRecoveryCodeError would tell the UI to blame a
+      // recovery code that was never involved.
+      throw new RecoveryError('dek-not-openable')
+    }
+  } else {
+    dek = generateDek()
+  }
+
+  const code = generateRecoveryCode()
+  const { recoveryKeyBytes, recoveryAuth } = await deriveRecoveryCredentials(username, code)
+  const recoveryWrapKey = await importWrappingKey(recoveryKeyBytes)
+
+  await saveDek({
+    byPassword: await wrapDek(masterKey, dek),
+    byRecovery: await wrapDek(recoveryWrapKey, dek),
+  })
+  await registerRecoveryAuth(recoveryAuth)
+
+  const dekKey = await importWrappingKey(dek)
+  await ensureMigrated({ masterKey, dekKey })
+  return { code, dekKey }
+}

@@ -819,3 +819,87 @@ test('complete: 501 when ACCOUNTS is unconfigured', async () => {
 // The brake wiring for these two endpoints lives in tests/writebudget.test.mjs,
 // where "a limited request performs no KV write" is policed for every
 // write-capable endpoint in one place.
+
+// --- auth/recover/register --------------------------------------------------
+// Setup's verifier write. Unlike begin/complete it is session-authenticated:
+// the caller has already proven who they are with a password, so there is no
+// recoveryAuth to check and no oracle to protect against.
+
+const registerReq = (body, headers = {}) =>
+  post(`${ORIGIN}/api/auth/recover/register`, body, { Cookie: SESSION, ...headers })
+
+test('register: a signed-in local account stores the verifier', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/register.js')
+  const spy = kvSpy(seedSignedIn())
+  const res = await onRequestPost({
+    request: registerReq({ recoveryAuth: RECOVERY_AUTH }),
+    env: { ACCOUNTS: spy.kv, ...openLimiter },
+  })
+  assert.equal(res.status, 200)
+  assert.deepEqual(spy.writes, ['recovery:local:alice'])
+  // What matters is not that a value was written but that the code behind
+  // RECOVERY_AUTH can later be verified against it — which is what begin does.
+  const { verifyAuth, fromBase64 } = await import('../functions/_lib/password.js')
+  assert.equal(await verifyAuth(JSON.parse(spy.store['recovery:local:alice']), fromBase64(RECOVERY_AUTH)), true)
+})
+
+test('register: the stored verifier really unlocks begin', async () => {
+  const registerHandler = (await import('../functions/api/auth/recover/register.js')).onRequestPost
+  const beginHandler = (await import('../functions/api/auth/recover/begin.js')).onRequestPost
+  const spy = kvSpy({
+    ...seedSignedIn(),
+    'dek:local:alice': JSON.stringify({ byPassword: wrapped, byRecovery: wrappedTwo }),
+  })
+  const env = { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter }
+  await registerHandler({ request: registerReq({ recoveryAuth: RECOVERY_AUTH }), env })
+  // End to end through the real endpoints: setup enrolled it, begin accepts it.
+  // Reading the KV value back would only confirm register wrote something.
+  const res = await beginHandler({
+    request: post(`${ORIGIN}/api/auth/recover/begin`, { username: 'alice', recoveryAuth: RECOVERY_AUTH }),
+    env,
+  })
+  assert.equal(res.status, 200)
+  assert.equal((await res.json()).byRecovery.ciphertext, wrappedTwo.ciphertext)
+})
+
+test('register: refuses without a session, off-origin, or for a non-password account', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/register.js')
+  const cases = [
+    ['signed out', {}, post(`${ORIGIN}/api/auth/recover/register`, { recoveryAuth: RECOVERY_AUTH }), 401],
+    [
+      'off-origin',
+      seedSignedIn(),
+      post(`${ORIGIN}/api/auth/recover/register`, { recoveryAuth: RECOVERY_AUTH }, {
+        Cookie: SESSION,
+        Origin: 'https://evil.test',
+      }),
+      403,
+    ],
+    [
+      'google account',
+      {
+        'session:sess1': JSON.stringify({ userId: 'google:bob', createdAt: Date.now(), credentialVersion: 0 }),
+        'user:google:bob': JSON.stringify({ id: 'google:bob', provider: 'google', credentialVersion: 0 }),
+      },
+      registerReq({ recoveryAuth: RECOVERY_AUTH }),
+      400,
+    ],
+    ['no verifier', seedSignedIn(), registerReq({}), 400],
+    ['verifier is the wrong length', seedSignedIn(), registerReq({ recoveryAuth: 'QUFB' }), 400],
+  ]
+  for (const [label, seed, request, status] of cases) {
+    const spy = kvSpy(seed)
+    const res = await onRequestPost({ request, env: { ACCOUNTS: spy.kv, ...openLimiter } })
+    assert.equal(res.status, status, label)
+    assert.deepEqual(spy.writes, [], label)
+  }
+})
+
+test('register: 501 when ACCOUNTS is unconfigured', async () => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/register.js')
+  const res = await onRequestPost({
+    request: registerReq({ recoveryAuth: RECOVERY_AUTH }),
+    env: { ...openLimiter },
+  })
+  assert.equal(res.status, 501)
+})
