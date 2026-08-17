@@ -3,7 +3,14 @@
 // the newest 100 entries also sync to /api/history as ONE ciphertext blob —
 // one KV write per save, and the server never sees plaintext. Losing the vault
 // key loses the synced history by design; the local copy is unaffected.
-import { sealJson, openBlob, MissingKeyError, type BlobKeys, type VaultBlob } from './vault'
+import {
+  sealJson,
+  openBlob,
+  MissingKeyError,
+  UnknownBlobVersionError,
+  type BlobKeys,
+  type VaultBlob,
+} from './vault'
 import type { Citation } from './providers'
 
 export interface HistoryEntry {
@@ -135,11 +142,12 @@ export async function pullAndMergeHistory(keys: BlobKeys): Promise<HistoryEntry[
     return merged
   } catch (err) {
     // A blob we merely lack the key for is intact and opens under the other
-    // era. Returning `local` hands it straight to the caller, which pushes the
-    // merge back — overwriting the very blob we could not read, on the
-    // half-migrated account the version tag exists to protect. `null` is the
-    // established "do not push" signal, so no caller changes.
-    if (err instanceof MissingKeyError) return null
+    // era; one tagged with an era we do not know came from a newer client and
+    // is probably fine too. Returning `local` hands either straight to the
+    // caller, which pushes the merge back — overwriting the very blob we could
+    // not read, on the half-migrated account the version tag exists to protect.
+    // `null` is the established "do not push" signal, so no caller changes.
+    if (err instanceof MissingKeyError || err instanceof UnknownBlobVersionError) return null
     return local // wrong key or corrupt blob: local history still works
   }
 }

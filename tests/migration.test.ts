@@ -6,10 +6,11 @@ import {
   BLOB_VERSION_MASTER,
   BLOB_VERSION_DEK,
   MissingKeyError,
+  UnknownBlobVersionError,
   type BlobKeys,
   type VaultBlob,
 } from '../src/vault'
-import { pushHistory, pullAndMergeHistory, type HistoryEntry } from '../src/history'
+import { pushHistory, pullAndMergeHistory, saveEntry, listEntries, type HistoryEntry } from '../src/history'
 
 // Node ships WebCrypto on globalThis.crypto, so the exact browser code paths
 // run here unmodified.
@@ -48,9 +49,9 @@ async function legacySeal(key: CryptoKey, value: unknown, withVersionField: bool
   return blob
 }
 
-test('sealJson defaults to the master version, keeping existing callers unchanged', async () => {
+test('sealJson writes the era it is given, and openBlob routes a master blob to the master key', async () => {
   const masterKey = await aesKey()
-  const blob = await sealJson(masterKey, { a: 1 })
+  const blob = await sealJson(masterKey, { a: 1 }, BLOB_VERSION_MASTER)
   assert.equal(blob.version, BLOB_VERSION_MASTER)
   // And a caller who only holds the master key can still get the value back.
   assert.deepEqual(await openBlob({ masterKey }, fromStorage(blob)), { a: 1 })
@@ -101,6 +102,37 @@ test('openBlob never falls back to the other era key', async () => {
   await assert.rejects(() => openBlob({ masterKey }, v2), MissingKeyError)
 })
 
+test('an era this build does not know raises rather than defaulting to master', async () => {
+  const masterKey = await aesKey()
+  const dekKey = await aesKey()
+  const keys = { masterKey, dekKey }
+  const base = fromStorage(await sealJson(masterKey, { a: 1 }, BLOB_VERSION_MASTER))
+
+  // A v3 blob from a newer client is NOT a v1 blob. Note this would have opened
+  // and returned { a: 1 } under a default-to-master route, because both slots
+  // hold the same key today — success is exactly what makes it dangerous.
+  for (const version of [3, 0, null, NaN, '2']) {
+    await assert.rejects(
+      () => openBlob(keys, { ...base, version } as VaultBlob),
+      UnknownBlobVersionError,
+      `version ${String(version)} must not be read as master-era`
+    )
+  }
+})
+
+test('the tag decides, even when it disagrees with the key that sealed the blob', async () => {
+  const masterKey = await aesKey()
+  const dekKey = await aesKey()
+  // Sealed under the DEK but mislabelled master — the exact mistake a key
+  // change without a tag change produces. It must fail loudly at the crypto
+  // layer, not quietly open something else.
+  const mislabelled = fromStorage(await sealJson(dekKey, { a: 1 }, BLOB_VERSION_MASTER))
+  await assert.rejects(
+    () => openBlob({ masterKey, dekKey }, mislabelled),
+    (err: unknown) => err instanceof Error && !(err instanceof MissingKeyError)
+  )
+})
+
 test('the wrong key still throws, never returns garbage', async () => {
   const dekKey = await aesKey()
   const other = await aesKey()
@@ -117,9 +149,57 @@ test('the wrong key still throws, never returns garbage', async () => {
 
 const entry = (id: string): HistoryEntry => ({ id, createdAt: 1, argument: `arg-${id}`, message: `msg-${id}` })
 
+/**
+ * Node has no IndexedDB, and history.ts treats that as "private browsing" and
+ * swallows it — so without this shim listEntries() returns [] on every path and
+ * every "local history survives" assertion compares [] to [] and would hold for
+ * a function that does nothing. The shim is what makes those assertions able to
+ * fail.
+ */
+function fakeIndexedDb(seed: HistoryEntry[] = []) {
+  const original = (globalThis as { indexedDB?: unknown }).indexedDB
+  const rows = new Map<string, HistoryEntry>(seed.map((e) => [e.id, e]))
+  // Requests hand results back asynchronously, because the caller assigns
+  // onsuccess on the line AFTER the call — firing synchronously would silently
+  // drop every result.
+  const request = (result: unknown) => {
+    const req: Record<string, unknown> = { result: undefined, onsuccess: null, onerror: null }
+    setTimeout(() => {
+      req.result = result
+      ;(req.onsuccess as (() => void) | null)?.()
+    }, 0)
+    return req
+  }
+  const store = {
+    getAll: () => request([...rows.values()]),
+    put: (e: HistoryEntry) => (rows.set(e.id, e), request(undefined)),
+    delete: (id: string) => (rows.delete(id), request(undefined)),
+    clear: () => (rows.clear(), request(undefined)),
+  }
+  const db = {
+    objectStoreNames: { contains: () => true },
+    createObjectStore: () => store,
+    transaction: () => ({ objectStore: () => store }),
+    close: () => {},
+  }
+  ;(globalThis as { indexedDB?: unknown }).indexedDB = {
+    open: () => {
+      const req: Record<string, unknown> = { result: db, onsuccess: null, onerror: null, onupgradeneeded: null }
+      setTimeout(() => (req.onsuccess as (() => void) | null)?.(), 0)
+      return req
+    },
+  }
+  return {
+    ids: () => [...rows.keys()].sort(),
+    restore: () => {
+      ;(globalThis as { indexedDB?: unknown }).indexedDB = original
+    },
+  }
+}
+
 /** Stand in for /api/history, so the blob under test is one that crossed the wire. */
-function fakeHistoryServer() {
-  const state: { body: string | null } = { body: null }
+function fakeHistoryServer(seedBlob: VaultBlob | null = null) {
+  const state: { body: string | null } = { body: seedBlob ? JSON.stringify(seedBlob) : null }
   const original = globalThis.fetch
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
     if (init?.method === 'PUT') {
@@ -228,6 +308,51 @@ test('pullAndMergeHistory reports "do not push" when it lacks the key the blob n
     assert.equal(await pullAndMergeHistory({ masterKey }), null)
     assert.equal(await pullAndMergeHistory({}), null)
   } finally {
+    server.restore()
+  }
+})
+
+test('a legacy v1 history blob on the server is read by a post-upgrade client', async () => {
+  // The production scenario the version tag exists for: this account's history
+  // was written by the old build and has never been touched since. It reaches
+  // the reader through the real transport, not straight into openBlob.
+  const masterKey = await aesKey()
+  const legacy = await legacySeal(masterKey, { v: 1, entries: [entry('from-old-build')] }, false)
+  const server = fakeHistoryServer(legacy)
+  const idb = fakeIndexedDb([entry('made-locally')])
+  try {
+    const merged = await pullAndMergeHistory({ masterKey, dekKey: await aesKey() })
+    assert.deepEqual(merged?.map((e) => e.id).sort(), ['from-old-build', 'made-locally'])
+    // The merge is written back to local storage, not just returned.
+    assert.deepEqual(idb.ids(), ['from-old-build', 'made-locally'])
+  } finally {
+    idb.restore()
+    server.restore()
+  }
+})
+
+test('a wrong key leaves local history intact and adds nothing from the remote blob', async () => {
+  const server = fakeHistoryServer()
+  const idb = fakeIndexedDb()
+  try {
+    const dekKey = await aesKey()
+    const wrongDek = await aesKey()
+    await pushHistory([entry('remote-only')], dekKey, BLOB_VERSION_DEK)
+
+    await saveEntry(entry('made-locally'))
+    assert.deepEqual(
+      (await listEntries()).map((e) => e.id),
+      ['made-locally'],
+      'the shim really does store entries — without it this list is empty and the assertions below are vacuous'
+    )
+
+    // Wrong key, not missing: the blob is unreadable by anyone holding this
+    // key, so the local list is what the panel shows.
+    const merged = await pullAndMergeHistory({ dekKey: wrongDek })
+    assert.deepEqual(merged?.map((e) => e.id), ['made-locally'])
+    assert.ok(!merged?.some((e) => e.id === 'remote-only'), 'nothing leaked out of the unreadable blob')
+  } finally {
+    idb.restore()
     server.restore()
   }
 })

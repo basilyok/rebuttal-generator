@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { sealJson, openJson } from '../src/vault'
+import { sealJson, openJson, BLOB_VERSION_MASTER } from '../src/vault'
 import { mergeEntries, type HistoryEntry } from '../src/history'
 
 // Node ships WebCrypto on globalThis.crypto (Node 20+), so the exact browser
@@ -13,7 +13,7 @@ async function testKey() {
 test('sealJson/openJson round-trip arbitrary JSON', async () => {
   const key = await testKey()
   const value = { entries: [{ id: 'a', argument: 'x', createdAt: 1 }], v: 1 }
-  const blob = await sealJson(key, value)
+  const blob = await sealJson(key, value, BLOB_VERSION_MASTER)
   assert.notEqual(blob.iv, '')
   const back = await openJson(key, blob)
   assert.deepEqual(back, value)
@@ -21,15 +21,15 @@ test('sealJson/openJson round-trip arbitrary JSON', async () => {
 
 test('every seal uses a fresh IV', async () => {
   const key = await testKey()
-  const a = await sealJson(key, { x: 1 })
-  const b = await sealJson(key, { x: 1 })
+  const a = await sealJson(key, { x: 1 }, BLOB_VERSION_MASTER)
+  const b = await sealJson(key, { x: 1 }, BLOB_VERSION_MASTER)
   assert.notEqual(a.iv, b.iv)
   assert.notEqual(a.ciphertext, b.ciphertext)
 })
 
 test('tampered ciphertext throws', async () => {
   const key = await testKey()
-  const blob = await sealJson(key, { x: 1 })
+  const blob = await sealJson(key, { x: 1 }, BLOB_VERSION_MASTER)
   const tampered = { ...blob, ciphertext: blob.ciphertext.slice(0, -4) + 'AAAA' }
   await assert.rejects(() => openJson(key, tampered))
 })

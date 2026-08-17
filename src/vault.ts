@@ -30,7 +30,6 @@ const KEY_ID = 'vault-key'
  * iterations matches current OWASP guidance for PBKDF2-HMAC-SHA256.
  */
 const PBKDF2_ITERATIONS = 600_000
-export const VAULT_VERSION = 1
 
 /**
  * Which key opens a blob. The tag travels WITH the data rather than in an
@@ -41,6 +40,15 @@ export const VAULT_VERSION = 1
  */
 export const BLOB_VERSION_MASTER = 1
 export const BLOB_VERSION_DEK = 2
+
+/**
+ * `VaultBlob.version` means KEY ERA and nothing else — reset gates on it, so a
+ * second meaning riding the same field is a live hazard. It used to double as a
+ * format version, which was invisible only because both constants were 1: bump
+ * a format version and every passphrase-sealed vault would start claiming the
+ * DEK era. A future format change needs its OWN field.
+ */
+export const VAULT_VERSION = BLOB_VERSION_MASTER
 
 export interface VaultBlob {
   salt: string
@@ -60,10 +68,26 @@ export class WrongPassphraseError extends VaultError {
     super('That passphrase did not unlock the vault.')
   }
 }
-/** The blob asked for a key this caller does not have — distinct from "wrong key". */
+/**
+ * The blob asked for a key this caller does not have — distinct from "wrong
+ * key", and callers branch on it (history declines to overwrite a blob it
+ * merely cannot open). The message is never shown to a user; the type is the
+ * signal, which is why it reads as a token rather than a sentence.
+ */
 export class MissingKeyError extends VaultError {
   constructor() {
     super('missing-key')
+  }
+}
+/**
+ * The blob is tagged with an era this build does not know — almost always
+ * written by a newer client. Distinct from a missing key because there is no
+ * key that would help, and distinct from corruption because the data is
+ * probably fine: both mean "leave it alone" rather than "overwrite it".
+ */
+export class UnknownBlobVersionError extends VaultError {
+  constructor(version: unknown) {
+    super(`unknown-blob-version:${String(version)}`)
   }
 }
 
@@ -237,15 +261,14 @@ async function sealWith(key: CryptoKey, bundle: KeyBundle, salt: Uint8Array): Pr
  * The salt field is carried for VaultBlob shape-compatibility only; it plays
  * no role in decryption here since the key is supplied directly, not derived.
  *
- * `version` records which key era sealed this blob (see BLOB_VERSION_*). It
- * defaults to the master era so a caller that has not been taught about the DEK
- * yet cannot silently mislabel its own ciphertext.
+ * `version` records which key era sealed this blob (see BLOB_VERSION_*), and is
+ * required on purpose. A default lets a caller that changed its key forget to
+ * change its tag, and that blob then decrypts under the wrong key: for the
+ * vault that surfaces to the user as "wrong passphrase" on data that is fine.
+ * Stating the era at every call site is the only thing that keeps the tag and
+ * the key moving together.
  */
-export async function sealJson(
-  key: CryptoKey,
-  value: unknown,
-  version: number = BLOB_VERSION_MASTER
-): Promise<VaultBlob> {
+export async function sealJson(key: CryptoKey, value: unknown, version: number): Promise<VaultBlob> {
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const plaintext = new TextEncoder().encode(JSON.stringify(value))
   const ciphertext = await crypto.subtle.encrypt(
@@ -271,7 +294,15 @@ export async function openJson<T = unknown>(key: CryptoKey, blob: VaultBlob): Pr
   return JSON.parse(new TextDecoder().decode(plaintext)) as T
 }
 
-/** Whichever of the two key eras the caller currently holds. Either may be absent mid-migration. */
+/**
+ * Whichever of the two key eras the caller currently holds. Either may be
+ * absent mid-migration.
+ *
+ * `masterKey` is the pre-DEK era key whoever derived it: a password account's
+ * login-derived key, or — for Google and passphrase accounts — the
+ * passphrase-derived key cached on this device. The era is a property of the
+ * blob, not of how the key was obtained.
+ */
 export interface BlobKeys {
   masterKey?: CryptoKey
   dekKey?: CryptoKey
@@ -282,10 +313,18 @@ export interface BlobKeys {
  * existed, which is always master-key sealed. Never falls back to "try the
  * other key" — a silent second attempt would mask a migration bug until the
  * day the first key stopped existing.
+ *
+ * The routing is total: an era this build does not recognise raises rather than
+ * landing on master by default. Defaulting would make openBlob do the one thing
+ * it promises not to — open a blob with a key its tag never named — and today,
+ * while both slots hold the same key, it would succeed and look correct.
  */
 export async function openBlob<T = unknown>(keys: BlobKeys, blob: VaultBlob): Promise<T> {
-  const wantsDek = blob.version === BLOB_VERSION_DEK
-  const key = wantsDek ? keys.dekKey : keys.masterKey
+  // Only `undefined` is "predates tagging". null, "2", NaN and friends are
+  // corruption or a format we do not know, and must not be read as v1.
+  const era = blob.version === undefined ? BLOB_VERSION_MASTER : blob.version
+  if (era !== BLOB_VERSION_MASTER && era !== BLOB_VERSION_DEK) throw new UnknownBlobVersionError(blob.version)
+  const key = era === BLOB_VERSION_DEK ? keys.dekKey : keys.masterKey
   if (!key) throw new MissingKeyError()
   return openJson<T>(key, blob)
 }

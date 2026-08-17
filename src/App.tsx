@@ -385,28 +385,43 @@ export default function App() {
     setTavilyDraft(loadTavilyKey())
     setShowApiKeyInput(getProvider(providerId).requiresKey && !loadStoredKey(providerId))
     setVaultState('unlocked')
-    void blobKeys()
-      .then(pullAndMergeHistory)
-      .then((merged) => {
-        if (isStale() || !merged) return
-        setHistoryEntries(merged)
-        // Sign-in uploads the device backlog: entries generated while signed
-        // out are already in the merge, so pushing it completes the sync.
-        void syncHistory(merged)
-      })
+    void mergeAndSyncHistory(isStale)
   }
 
   /** The password account's vault key: this session's, or the device cache. */
   const localVaultKey = async (): Promise<CryptoKey | null> => localKeyRef.current ?? (await cachedKey())
 
   /**
-   * One key still does both jobs: whatever unlocked this device's vault. Filling
-   * both slots with it reproduces exactly the cachedKey() lookup history.ts used
-   * to do internally; Task 5 is where the two slots start holding different keys.
+   * One key still does both jobs: whatever unlocked this device's vault, so
+   * both slots get it and every blob opens whichever way it is tagged. Task 5
+   * is where the two slots start holding different keys.
+   *
+   * Not identical to the cachedKey() lookup history.ts used to do: with
+   * IndexedDB blocked, a password account has its key in the ref but not in the
+   * cache, so history now syncs where it used to stay silently local. That is
+   * the same repair setupLocalVault already makes for the vault.
+   *
+   * Filling both slots is only safe because localKeyRef.current cannot shadow a
+   * DIFFERENT cached key — sign-out clears both. If that ever stops holding, a
+   * blob would open under a key its tag did not name.
    */
   const blobKeys = async (): Promise<BlobKeys> => {
     const key = await localVaultKey()
     return key ? { masterKey: key, dekKey: key } : {}
+  }
+
+  /**
+   * Pull remote history, show the merge, push it back. Shared because the guard
+   * that matters is easy to drop: `pullAndMergeHistory` returns null for a blob
+   * it could not open but that another key can, and pushing then overwrites it.
+   */
+  const mergeAndSyncHistory = async (isStale: () => boolean = () => false) => {
+    const merged = await pullAndMergeHistory(await blobKeys())
+    if (isStale() || !merged) return
+    setHistoryEntries(merged)
+    // Sign-in uploads the device backlog: entries generated while signed out
+    // are already in the merge, so pushing it completes the sync.
+    await syncHistory(merged)
   }
 
   /**
@@ -441,7 +456,9 @@ export default function App() {
       return
     }
     try {
-      const sealed = await sealJson(key, bundle)
+      // Master era: this key is the login-derived one, not a DEK. Task 5 flips
+      // the tag in the same edit that changes the key.
+      const sealed = await sealJson(key, bundle, BLOB_VERSION_MASTER)
       if (isStale()) return
       await saveVault(sealed)
       if (isStale()) return
@@ -1185,7 +1202,10 @@ export default function App() {
       // holds, which survives a blocked IndexedDB; a Google account keeps
       // using the device key exactly as before.
       const localKey = auth.user.provider === 'local' ? await localVaultKey() : null
-      const sealed = localKey ? await sealJson(localKey, bundle) : await resealWithDeviceKey(bundle, vaultBlob)
+      // Master era, as above: the tag must change with the key, never after it.
+      const sealed = localKey
+        ? await sealJson(localKey, bundle, BLOB_VERSION_MASTER)
+        : await resealWithDeviceKey(bundle, vaultBlob)
       if (sealed) {
         await saveVault(sealed)
         setVaultBlob(sealed)
@@ -1207,15 +1227,7 @@ export default function App() {
         await saveVault(sealed)
         setVaultBlob(sealed)
         setVaultState('unlocked')
-        void blobKeys()
-          .then(pullAndMergeHistory)
-          .then((merged) => {
-            if (!merged) return
-            setHistoryEntries(merged)
-            // Sign-in uploads the device backlog: entries generated while signed
-            // out are already in the merge, so pushing it completes the sync.
-            void syncHistory(merged)
-          })
+        void mergeAndSyncHistory()
       } else if (vaultBlob) {
         onVaultOpened(await unlock(vaultBlob, passphrase))
       }
