@@ -108,6 +108,12 @@ const fr = {
   'recovery.resetBlocked':
     "La configuration de la récupération n'est pas encore terminée sur ce compte. Connectez-vous une fois avec votre mot de passe pour la terminer.",
   'recovery.forgot': 'Mot de passe oublié ?',
+  'recovery.replacesOld': "Ceci remplace tout code précédent : l'ancien cesse de fonctionner dès maintenant.",
+  'recovery.rotateConfirm':
+    'Générer un nouveau code de récupération ? Votre code actuel cessera immédiatement de fonctionner et vous devrez enregistrer le nouveau.',
+  'recovery.promptLostBody':
+    "Vous avez un code de récupération, mais cet appareil n'a jamais vu confirmer que vous l'aviez enregistré : s'il a été perdu avant que vous ne le notiez, il ne vous rendra pas votre compte. Vous pouvez le remplacer maintenant.",
+  'recovery.promptLostAction': 'Générer un nouveau code',
 
   // --- language --------------------------------------------------------------
   'language.label': 'Langue',

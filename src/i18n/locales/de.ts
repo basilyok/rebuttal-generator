@@ -113,6 +113,12 @@ const de = {
   'recovery.resetBlocked':
     'Die Einrichtung der Wiederherstellung ist bei diesem Konto noch nicht fertig. Melde dich einmal mit deinem Passwort an, um sie abzuschließen.',
   'recovery.forgot': 'Passwort vergessen?',
+  'recovery.replacesOld': 'Das ersetzt jeden früheren Code — der bisherige funktioniert ab jetzt nicht mehr.',
+  'recovery.rotateConfirm':
+    'Einen neuen Wiederherstellungscode erzeugen? Dein aktueller Code funktioniert sofort nicht mehr, und du musst den neuen aufbewahren.',
+  'recovery.promptLostBody':
+    'Du hast einen Wiederherstellungscode, aber auf diesem Gerät wurde nie bestätigt, dass du ihn gespeichert hast — ging er verloren, bevor du ihn notiert hast, holt er dir dein Konto nicht zurück. Du kannst ihn jetzt durch einen neuen ersetzen.',
+  'recovery.promptLostAction': 'Neuen Code erzeugen',
 
   // --- language --------------------------------------------------------------
   'language.label': 'Sprache',

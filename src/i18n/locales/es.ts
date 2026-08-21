@@ -112,6 +112,12 @@ const es = {
   'recovery.resetBlocked':
     'La configuración de la recuperación aún no ha terminado en esta cuenta. Inicia sesión una vez con tu contraseña para terminarla.',
   'recovery.forgot': '¿Olvidaste tu contraseña?',
+  'recovery.replacesOld': 'Esto sustituye a cualquier código anterior: el que tenías deja de funcionar ahora mismo.',
+  'recovery.rotateConfirm':
+    '¿Generar un código de recuperación nuevo? Tu código actual dejará de funcionar de inmediato y tendrás que guardar el nuevo.',
+  'recovery.promptLostBody':
+    'Tienes un código de recuperación, pero en este dispositivo nunca se ha confirmado que lo guardaras: si se perdió antes de que lo anotaras, no te devolverá la cuenta. Puedes sustituirlo por uno nuevo ahora.',
+  'recovery.promptLostAction': 'Generar un código nuevo',
 
   // --- language --------------------------------------------------------------
   'language.label': 'Idioma',

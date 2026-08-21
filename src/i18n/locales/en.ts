@@ -115,6 +115,12 @@ const en: Record<string, string> = {
   'recovery.resetBlocked':
     'Recovery setup has not finished on this account yet. Sign in with your password once to finish it.',
   'recovery.forgot': 'Forgot your password?',
+  'recovery.replacesOld': 'This replaces any earlier code — the previous one stops working now.',
+  'recovery.rotateConfirm':
+    'Generate a new recovery code? Your current code stops working immediately, and you will need to save the new one.',
+  'recovery.promptLostBody':
+    'You have a recovery code, but this device has never seen it saved — if it was lost before you wrote it down, it will not get your account back. You can replace it with a new one now.',
+  'recovery.promptLostAction': 'Generate a new code',
 
   // --- language --------------------------------------------------------------
   'language.label': 'Language',

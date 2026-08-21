@@ -1032,6 +1032,18 @@ h1 {
   margin-top: 14px;
 }
 
+/* Rotation killed a code that may be on someone's desk. This line is the only
+   notice that happens, so it is styled to be read, not skimmed past. */
+.recovery-replaces {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-inline-start: 4px solid #b45309;
+  background: #fffbeb;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #713f12;
+}
+
 .recovery-confirm {
   display: flex;
   gap: 8px;

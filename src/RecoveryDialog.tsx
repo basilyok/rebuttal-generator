@@ -32,11 +32,18 @@ interface Props {
    * the screen it was drawn on.
    */
   code: string
-  busy: boolean
+  /**
+   * Whether this code replaced an earlier one, which the previous holder's
+   * paper copy did not survive. Rotation is silent on the server — saveDek
+   * overwrites `byRecovery` — so if this card does not say the old code is
+   * dead, nothing ever will, and a user keeps filing a string that opens
+   * nothing.
+   */
+  replacesOld: boolean
   onDone: () => void
 }
 
-export default function RecoveryDialog({ t, code, busy, onDone }: Props) {
+export default function RecoveryDialog({ t, code, replacesOld, onDone }: Props) {
   const [confirmed, setConfirmed] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -64,9 +71,11 @@ export default function RecoveryDialog({ t, code, busy, onDone }: Props) {
           it is announced as such to a screen reader without stealing focus. */}
       <output className="recovery-code">{code}</output>
 
-      <button className="button button-secondary" onClick={copy} disabled={busy}>
+      <button className="button button-secondary" onClick={copy}>
         {copied ? t('recovery.copied') : t('recovery.copy')}
       </button>
+
+      {replacesOld && <p className="recovery-replaces">{t('recovery.replacesOld')}</p>}
 
       <p className="vault-warning recovery-warning">⚠️ {t('recovery.warning')}</p>
 
@@ -75,7 +84,6 @@ export default function RecoveryDialog({ t, code, busy, onDone }: Props) {
           type="checkbox"
           checked={confirmed}
           onChange={(e) => setConfirmed(e.target.checked)}
-          disabled={busy}
         />
         {t('recovery.confirm')}
       </label>
@@ -84,7 +92,7 @@ export default function RecoveryDialog({ t, code, busy, onDone }: Props) {
           click. The code cannot be shown again, so an accidental close is a
           user who now needs to generate another one. */}
       <div className="controls vault-actions">
-        <button className="button button-primary" onClick={onDone} disabled={!confirmed || busy}>
+        <button className="button button-primary" onClick={onDone} disabled={!confirmed}>
           {t('recovery.done')}
         </button>
       </div>

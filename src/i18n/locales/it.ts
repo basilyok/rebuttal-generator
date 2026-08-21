@@ -111,6 +111,13 @@ const it = {
   'recovery.resetBlocked':
     'La configurazione del recupero non è ancora conclusa su questo account. Accedi una volta con la password per completarla.',
   'recovery.forgot': 'Password dimenticata?',
+  'recovery.replacesOld':
+    'Questo sostituisce qualsiasi codice precedente: quello di prima smette di funzionare da adesso.',
+  'recovery.rotateConfirm':
+    'Generare un nuovo codice di recupero? Il codice attuale smette subito di funzionare e dovrai conservare quello nuovo.',
+  'recovery.promptLostBody':
+    "Hai un codice di recupero, ma su questo dispositivo non è mai stato confermato che tu lo abbia salvato: se è andato perso prima che tu lo annotassi, non ti restituirà l'account. Puoi sostituirlo ora con uno nuovo.",
+  'recovery.promptLostAction': 'Genera un nuovo codice',
 
   // --- language --------------------------------------------------------------
   'language.label': 'Lingua',

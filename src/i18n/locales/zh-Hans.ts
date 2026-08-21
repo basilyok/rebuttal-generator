@@ -105,6 +105,10 @@ const zh_Hans = {
   'recovery.resetFailed': '用户名和恢复码对不上。',
   'recovery.resetBlocked': '这个账户的恢复设置还没完成。先用密码登录一次，把它设置好。',
   'recovery.forgot': '忘记密码了？',
+  'recovery.replacesOld': '这会替换掉之前的恢复码——旧的那串从现在起失效。',
+  'recovery.rotateConfirm': '要生成新的恢复码吗？现在这串会立即失效，你需要重新保存新的。',
+  'recovery.promptLostBody': '你有恢复码，但这台设备从未确认过你把它存好。如果它在你记下来之前就丢了，就没法用它找回账户。你可以现在换一串新的。',
+  'recovery.promptLostAction': '生成新的恢复码',
 
   // --- language --------------------------------------------------------------
   'language.label': '语言',

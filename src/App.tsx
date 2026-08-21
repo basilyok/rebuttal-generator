@@ -93,6 +93,12 @@ import {
   setupRecovery,
   type RecoveryStatus,
 } from './recovery'
+import {
+  INITIAL_RECOVERY_STATUS,
+  shouldOfferSetupPrompt,
+  hasAcknowledgedRecovery,
+  markRecoveryAcknowledged,
+} from './recoveryUi'
 import { AccountBar, VaultDialog, type VaultUiState } from './AccountBar'
 import { AuthDialog, type AuthMode } from './AuthDialog'
 import RecoveryDialog from './RecoveryDialog'
@@ -302,20 +308,30 @@ export default function App() {
    * the thing a reset strands. Cleared on sign-out beside localKeyRef.
    */
   const dekKeyRef = useRef<CryptoKey | null>(null)
-  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryStatus>('none')
+  // `unknown`, not `none` — see INITIAL_RECOVERY_STATUS. `none` is a claim the
+  // server has made; before the first fetchDek() we have not heard it.
+  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryStatus>(INITIAL_RECOVERY_STATUS)
   /**
    * The code to show, held only for as long as the card is on screen. It is
    * never written to localStorage, never put in the URL, and never logged: the
    * whole security model is that the server cannot read it, which is worth
    * nothing if the client leaves it somewhere durable.
    */
-  const [recoveryCode, setRecoveryCode] = useState<string | null>(null)
+  const [recoveryCode, setRecoveryCode] = useState<{ code: string; replacesOld: boolean } | null>(null)
   const [recoveryBusy, setRecoveryBusy] = useState(false)
   const [recoveryError, setRecoveryError] = useState('')
   // Per-session, deliberately not persisted: someone who dismissed the prompt
   // last week and still has no recovery code should be asked again. Dismissing
   // it costs them nothing, because the account bar keeps the same offer.
   const [recoveryPromptDismissed, setRecoveryPromptDismissed] = useState(false)
+  /**
+   * Whether anyone on this device has confirmed saving a code for this account.
+   * The server cannot answer this: it knows a record exists, not that the
+   * one-time display survived long enough to be read. Without it, a first
+   * display lost to a reload leaves an account that reports `ready` and a user
+   * holding nothing, and nothing ever asks again.
+   */
+  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false)
 
   // Always-current translator, for callbacks registered once (speech recognition)
   const tRef = useRef(t)
@@ -551,8 +567,8 @@ export default function App() {
    * if a sign-out or account switch replaced the key mid-flight, every write
    * below belongs to a session that is gone.
    */
-  const runRecoverySetup = async (username?: string) => {
-    const name = username ?? (auth.user?.provider === 'local' ? auth.user.name : null)
+  const runRecoverySetup = async (options: { username?: string; firstTime?: boolean } = {}) => {
+    const name = options.username ?? (auth.user?.provider === 'local' ? auth.user.name : null)
     const masterKey = localKeyRef.current
     if (!name || !masterKey) return
     // One at a time. Two overlapping runs mint two codes and the second
@@ -561,6 +577,25 @@ export default function App() {
     // exact failure this feature exists to prevent. The same guard covers a
     // click arriving while a code is still on screen unacknowledged.
     if (recoveryBusy || recoveryCode) return
+
+    /**
+     * Is this creating a first code, or destroying an existing one?
+     *
+     * `firstTime` is passed by the sign-up path rather than read from
+     * recoveryStatus, because adoptRecovery's setState has not reached this
+     * closure yet — the status here is still the pre-registration value, and
+     * trusting it would put a "this replaces your existing code" confirmation
+     * in front of someone who has never had one.
+     */
+    const replacesOld = !options.firstTime && recoveryStatus !== 'none'
+
+    // Rotation is destructive and irreversible: saveDek overwrites byRecovery,
+    // so the code on the user's paper stops working the instant this lands,
+    // BEFORE they have seen its replacement. That must not be one stray click
+    // on a 13px link two elements from Sign out. First-time setup destroys
+    // nothing and stays a single click.
+    if (replacesOld && !window.confirm(t('recovery.rotateConfirm'))) return
+
     const isStale = () => localKeyRef.current !== masterKey
     setRecoveryBusy(true)
     setRecoveryError('')
@@ -575,7 +610,7 @@ export default function App() {
       // only once BOTH the wrapped-DEK record and the code's verifier have
       // landed; a code displayed before that would verify against nothing, and
       // the user would file it away believing it works.
-      setRecoveryCode(code)
+      setRecoveryCode({ code, replacesOld })
     } catch {
       // One message for every failure. The distinctions setupRecovery draws
       // (stale master key, unreadable record, a DEK era already begun) are all
@@ -625,6 +660,18 @@ export default function App() {
       if (!isStale()) setVaultState('none')
     }
   }
+
+  /**
+   * Read this device's acknowledgement for whoever is signed in.
+   *
+   * Keyed on the account id, so switching accounts re-reads rather than
+   * carrying the previous user's answer over — one browser, two accounts, and
+   * only one of them may have seen a code.
+   */
+  useEffect(() => {
+    const id = auth.user?.id
+    setRecoveryAcknowledged(id ? hasAcknowledgedRecovery(id) : false)
+  }, [auth.user?.id])
 
   // Pull the encrypted vault once signed in, and open it silently if this device
   // already holds the derived key — the whole point is not asking again.
@@ -1346,7 +1393,7 @@ export default function App() {
       // into recoveryError, the account bar keeps offering setup, and the user
       // is signed in either way.
       if (isSignup && result.user.provider === 'local') {
-        await runRecoverySetup(result.user.name || username)
+        await runRecoverySetup({ username: result.user.name || username, firstTime: true })
       }
       // The vault effect runs adoptRecovery again when auth.user.id changes.
       // The duplicate fetch is tolerated rather than overlooked: it is one GET,
@@ -1396,7 +1443,11 @@ export default function App() {
     // The DEK leaves with it. Left behind, the next person to sign in on this
     // device would carry the previous account's data key into their session.
     dekKeyRef.current = null
-    setRecoveryStatus('none')
+    // Back to "not checked", not to "has none": the next sign-in on this device
+    // re-runs adoptRecovery, and until it answers we know nothing about that
+    // account either.
+    setRecoveryStatus(INITIAL_RECOVERY_STATUS)
+    setRecoveryAcknowledged(false)
     // Drop an undismissed code with the session. It belongs to the account that
     // just left, and the next person on this device must not read it off the
     // screen. The prompt's dismissal resets too, so the next sign-in is judged
@@ -1570,6 +1621,17 @@ export default function App() {
     }
   }
 
+  // Computed here rather than inline in the JSX below so the whole decision is
+  // one testable call. The inputs are exactly the five facts that matter; if a
+  // sixth ever appears it belongs in the function, not in a longer `&&`.
+  const setupPrompt = shouldOfferSetupPrompt({
+    provider: auth.user?.provider,
+    status: recoveryStatus,
+    dismissed: recoveryPromptDismissed,
+    codeShown: !!recoveryCode,
+    acknowledged: recoveryAcknowledged,
+  })
+
   return (
     <div className="container">
       <AccountBar
@@ -1604,41 +1666,52 @@ export default function App() {
       {recoveryCode && (
         <RecoveryDialog
           t={t}
-          code={recoveryCode}
-          busy={recoveryBusy}
-          onDone={() => setRecoveryCode(null)}
+          code={recoveryCode.code}
+          replacesOld={recoveryCode.replacesOld}
+          onDone={() => {
+            // The acknowledgement is recorded HERE, at the checkbox, and
+            // nowhere else — it means "a human confirmed they saved this",
+            // which is the one fact no server record can carry. Without it a
+            // display lost to a reload leaves an account reporting `ready` and
+            // a user holding nothing, and nothing asks again. Ever.
+            if (auth.user?.id) markRecoveryAcknowledged(auth.user.id)
+            setRecoveryAcknowledged(true)
+            setRecoveryCode(null)
+          }}
         />
       )}
 
-      {/* The nudge for accounts that predate this feature. Shown ONLY on a
-          confirmed `none` — `unknown` means the check failed, and offering
-          first-time setup there would push someone who already has a code
-          toward replacing it over a transient network error. Those users still
-          get the account-bar entry, which says what it does not know.
-          Suppressed while a code is on screen so the two do not stack. */}
-      {auth.user?.provider === 'local' &&
-        recoveryStatus === 'none' &&
-        !recoveryPromptDismissed &&
-        !recoveryCode && (
-          <div className="recovery-prompt" role="status">
-            <p>{t('recovery.promptBody')}</p>
-            <p className="key-help">{t('recovery.regenerateHint')}</p>
-            <div className="controls">
-              <button
-                className="button button-primary"
-                onClick={() => void runRecoverySetup()}
-                disabled={recoveryBusy}
-              >
-                {recoveryBusy ? t('recovery.working') : t('recovery.promptAction')}
-              </button>
-              {/* Dismissible, and it costs nothing to dismiss: the account bar
-                  keeps the same offer for as long as it is unanswered. */}
-              <button className="link-button" onClick={() => setRecoveryPromptDismissed(true)}>
-                {t('recovery.promptDismiss')}
-              </button>
-            </div>
+      {/* Two different prompts, and which one (if either) is a decision made in
+          shouldOfferSetupPrompt where it can be tested — see recoveryUi.ts.
+          `setup` offers a first code; `replace` says there is one out there
+          that nobody here has seen. Saying the wrong one is not cosmetic:
+          "you have no recovery code" is false and alarming for the second
+          user, and the button under it destroys a code that may be on their
+          desk. */}
+      {setupPrompt && (
+        <div className="recovery-prompt" role="status">
+          <p>{setupPrompt === 'setup' ? t('recovery.promptBody') : t('recovery.promptLostBody')}</p>
+          <p className="key-help">{t('recovery.regenerateHint')}</p>
+          <div className="controls">
+            <button
+              className="button button-primary"
+              onClick={() => void runRecoverySetup()}
+              disabled={recoveryBusy}
+            >
+              {recoveryBusy
+                ? t('recovery.working')
+                : setupPrompt === 'setup'
+                  ? t('recovery.promptAction')
+                  : t('recovery.promptLostAction')}
+            </button>
+            {/* Dismissible, and it costs nothing to dismiss: the account bar
+                keeps the same offer for as long as it is unanswered. */}
+            <button className="link-button" onClick={() => setRecoveryPromptDismissed(true)}>
+              {t('recovery.promptDismiss')}
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
       {updateAvailable && (
         <div className="success update-banner" role="status">

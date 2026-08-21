@@ -94,6 +94,10 @@ const REQUIRED_RECOVERY = [
   'recovery.resetFailed',
   'recovery.resetBlocked',
   'recovery.forgot',
+  'recovery.replacesOld',
+  'recovery.rotateConfirm',
+  'recovery.promptLostBody',
+  'recovery.promptLostAction',
 ]
 
 const load = async (file) => (await import(pathToFileURL(join(LOCALES_DIR, file)).href)).default

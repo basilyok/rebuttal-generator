@@ -8,7 +8,7 @@
     "preview": "vite preview",
     "start": "vite",
     "test": "node --import tsx --test \"tests/*.test.{mjs,ts}\"",
-    "test:offline": "node --import tsx --test tests/account.test.ts tests/auth-endpoints.unit.test.mjs tests/generate.unit.test.mjs tests/history.test.ts tests/i18n-account.test.mjs tests/instant.test.mjs tests/migration.test.ts tests/orchestration.test.ts tests/password.test.mjs tests/prompts.test.ts tests/ratelimit.test.mjs tests/recover-endpoints.test.mjs tests/recovery.test.ts tests/writebudget.test.mjs"
+    "test:offline": "node --import tsx --test tests/account.test.ts tests/auth-endpoints.unit.test.mjs tests/generate.unit.test.mjs tests/history.test.ts tests/i18n-account.test.mjs tests/instant.test.mjs tests/migration.test.ts tests/orchestration.test.ts tests/password.test.mjs tests/prompts.test.ts tests/ratelimit.test.mjs tests/recover-endpoints.test.mjs tests/recovery.test.ts tests/recovery-ui.test.ts tests/writebudget.test.mjs"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.84",
