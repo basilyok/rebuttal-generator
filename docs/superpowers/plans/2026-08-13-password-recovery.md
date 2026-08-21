@@ -1977,3 +1977,13 @@ Tasks 1, 2 and 4 are independent of each other. Task 5 needs 1, 2 and 4; Task 7 
 **The `replace` prompt is per-device, so it nags across devices.** Acknowledgement is stored in localStorage keyed by account id, so a user who set up recovery on their laptop is prompted once on their phone. It is dismissible and its copy offers a *replacement* rather than claiming they have nothing — but it is a real nag traded against a real silence (Task 6's C3: without any acknowledgement record, a first code lost to a reload is never re-prompted, ever).
 
 The alternative is a server-side flag, which costs a KV write against the shared 1000/day budget and an endpoint change. Not obviously wrong, just a different trade. Sanity-check the phone case during the walkthrough and decide then, with the real thing in front of you, rather than in the abstract now.
+
+---
+
+## The two pre-ship drills — added after Task 7's review
+
+Everything in this feature is unit-tested and **none of it has run in a browser**. The tests cover the parts most likely to be subtly wrong — the crypto, the write ordering, the `previous` fallback, the server gate, the error mapping. What they structurally cannot see: that the two Pages Functions are actually routed and reachable, that the real `/api/vault` 401 path behaves as assumed, whether focus actually moves in `ResetFlow`, whether `beforeunload` fires for real on a displayed code, and whether a password manager grabs the code field despite `autoComplete="off"`.
+
+**Drill 1 — the loop, once, against `wrangler pages dev` with a real KV binding.** Register → save an API key → sign out → reset with the code → confirm the key and one history entry are back on screen, and that the rotated code works on a second reset. One session, and it exercises routing, the 401 fast path, focus, and styling at the same time.
+
+**Drill 2 — one interruption.** In the same session: DevTools → Network → Offline, submit the reset, then go back online and retry with the **old** code. That is the `previous` fallback executing against real KV rather than a fake, and it is the only assertion in this feature whose failure is unrecoverable in production. It is also the fastest way to find out whether the interrupted-reset message reads as well to a real person as it does on paper.
