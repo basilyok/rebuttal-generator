@@ -285,3 +285,61 @@ should treat translation as its own task.
   credential, and rotated on every use.
 - **Both secrets lost is unrecoverable, by design.** No mitigation exists or
   should exist; the UI must say so plainly.
+
+---
+
+# Addendum: the "Shorter version" toggle (2026-08-14)
+
+Scope note: this is an unrelated feature, shipped on the same branch by decision,
+because the two touch disjoint code (prompts and reply UI versus crypto and auth)
+and one walkthrough is cheaper than two.
+
+## What it is
+
+A toggle on a generated reply that produces a **one-to-two-sentence** version plus
+the reference links from the original. Lazy: one extra model call, only on click.
+
+## The tension, recorded rather than re-argued
+
+The app deleted its old "brief, punchy rebuttal" mode on purpose — that zinger was
+the only thing visible without a click, so it was the thing most likely to get
+sent. Two constitution rules pull against a very short reply:
+
+- **Rule 1** (evidence is the active ingredient). Costello et al.: remove the
+  counter-evidence and the persuasive effect vanishes entirely. At one or two
+  sentences the evidence can only survive as a *specific particular* — a number, a
+  date, a named source — not as a summary of one.
+- **Rule 4** (never leave a concession standing). O'Keefe 1999, Allen 1991:
+  non-refutational two-sided messages underperform one-sided ones, so a shrink
+  that keeps "you're right that X" and drops the answer is *worse than not
+  conceding at all*.
+
+And one rule pulls **for** it: **rule 9** — "sized to their register… do not answer
+two sentences with an essay." A short reply is not a violation; it is what rule 9
+asks for when the venue is a text message or a comment.
+
+The 1–2 sentence target was chosen by the user with the evidence risk stated. It
+is not a misunderstanding to be corrected later.
+
+## What the design does about it
+
+- **Concessions are dropped entirely, never orphaned.** At this length there is no
+  room to answer one, so rule 4 is honoured by omission rather than by half.
+- **The surviving sentence must carry a checkable particular**, not gesture at one.
+  "Deaths fell 40% after the 2019 change" is a sentence with evidence in it;
+  "You're wrong, see the link" is not. This is the difference between short and
+  empty, and it is the prompt's main job.
+- **No zinger.** Rules 6 and 9 still bind: no sarcasm, no rhetorical question, no
+  closing flourish, nothing that invites a volley. Short is not punchy — the
+  prompt must say so, because "make it shorter" reads as "make it snappier" to a
+  model unless told otherwise.
+- **Condense the produced message, do not re-write from the argument.** This keeps
+  the citation set fixed, so the short text runs through the same
+  `stripUnverifiedUrls` validation and cannot become a fabrication hole.
+- The long version stays one click away; the weak-link note and briefing are
+  unchanged and remain private.
+
+## Naming
+
+**"Shorter version."** Deliberately not "Concise", "TL;DR", "Punchy" or "Sharp" —
+those promise wit, and wit is the failure mode.
