@@ -30,6 +30,13 @@ export interface VersionedReply {
   citations: Citation[]
   /** URLs the model invented in the full message, stripped before display */
   strippedUrls: string[]
+  /**
+   * The private briefing — their strongest case, and where the message answers
+   * it. Never sendable, and absent until the expander has fetched it.
+   */
+  theirCase?: string
+  /** One line per point of their case: answered where, or UNANSWERED */
+  answered?: string[]
   /** The condensed version, absent until the toggle has fetched it */
   shorter?: string
   /**
@@ -135,4 +142,23 @@ export function applyShorterResult<T extends VersionedReply>(
     shorterCitations: result.citations,
     shorterStrippedUrls: result.strippedUrls,
   }
+}
+
+/**
+ * Cache a briefing result onto the reply it was generated for — and onto no other
+ * one. Same race as `applyShorterResult`, same guard, smaller blast radius.
+ *
+ * The briefing is never sendable, so a misrouted one cannot be pasted to anybody.
+ * It is still read, believed and acted on: it is the panel that tells the user
+ * which of their opponent's points they left unanswered, and one describing a
+ * different argument entirely would send them back to edit a message that did not
+ * have that hole. "Wrong but not sendable" is still wrong.
+ */
+export function applyBriefingResult<T extends VersionedReply>(
+  prev: T | null,
+  forId: number,
+  result: { theirCase: string; answered: string[] }
+): T | null {
+  if (!prev || prev.id !== forId) return prev
+  return { ...prev, theirCase: result.theirCase, answered: result.answered }
 }

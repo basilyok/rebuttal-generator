@@ -16,7 +16,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { shownVersion, applyShorterResult, type VersionedReply } from '../src/replyView'
+import { shownVersion, applyShorterResult, applyBriefingResult, type VersionedReply } from '../src/replyView'
 import type { Citation } from '../src/providers'
 
 const FULL = 'You said the scheme costs more than it saves. Road deaths fell 41% after 2019.'
@@ -202,4 +202,34 @@ test('the reply card reads shown, never the reply own version-specific fields', 
   assert.ok(appSource.includes('shown.text'), 'expected the card to render shown.text')
   assert.ok(appSource.includes('shown.citations'), 'expected the card to read shown.citations')
   assert.ok(appSource.includes('shown.strippedUrls'), 'expected the badge to read shown.strippedUrls')
+})
+
+// --- and the same race in the briefing --------------------------------------
+//
+// Lower blast radius, not lower correctness. The briefing is never sendable, so a
+// misrouted one cannot be pasted to anyone — but it is the panel that tells the
+// user which of their opponent's points went unanswered, and one describing a
+// different argument sends them back to fix a hole their message does not have.
+
+const briefing = { theirCase: 'The strongest case for the road scheme costing more.', answered: ['cost — answered'] }
+
+test('a briefing result lands on the reply it was generated for', () => {
+  const next = applyBriefingResult(replyA, 7, briefing)
+  assert.equal(next?.theirCase, briefing.theirCase)
+  assert.deepEqual(next?.answered, briefing.answered)
+})
+
+test('a briefing result for an older reply is DROPPED, not written onto the new one', () => {
+  const next = applyBriefingResult(replyB, 7, briefing)
+  assert.equal(next, replyB, 'the current reply was replaced by a stale briefing')
+  assert.equal(next?.theirCase, undefined, 'reply B now carries a briefing about reply A')
+})
+
+test('two replies that read identically are still told apart by the briefing guard', () => {
+  const twin = reply({ id: 9, message: replyA.message })
+  assert.equal(applyBriefingResult(twin, 7, briefing), twin)
+})
+
+test('a briefing arriving after the reply is cleared writes nothing', () => {
+  assert.equal(applyBriefingResult(null, 7, briefing), null)
 })

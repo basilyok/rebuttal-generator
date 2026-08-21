@@ -60,7 +60,7 @@ import {
 } from './i18n'
 import { detectLanguage, isRtl, displayLanguageName } from './lang'
 import { fetchAuthState, signIn, signOut, saveLanguagePreference, authErrorMessage, SIGNED_OUT, type AuthState } from './auth'
-import { shownVersion, applyShorterResult } from './replyView'
+import { shownVersion, applyShorterResult, applyBriefingResult } from './replyView'
 import { generateInstant, InstantQuotaError, InstantTurnstileError } from './instant'
 import { getTurnstileToken } from './turnstile'
 import {
@@ -390,6 +390,9 @@ export default function App() {
   const [isBriefingOpen, setIsBriefingOpen] = useState(false)
   const [briefingLoading, setBriefingLoading] = useState(false)
   const [briefingError, setBriefingError] = useState('')
+  // The reply id the in-flight briefing call belongs to, or null. Same purpose as
+  // shorterRunRef: a call that outlives its reply must touch nothing.
+  const briefingRunRef = useRef<number | null>(null)
   // Which version of the message is on screen. `false` means the full one; this is
   // the single switch that both the rendered body and the copy button read.
   const [showShorter, setShowShorter] = useState(false)
@@ -403,6 +406,19 @@ export default function App() {
   const [article, setArticle] = useState<Article | null>(null)
   const [isFetchingArticle, setIsFetchingArticle] = useState(false)
   const [articleStatus, setArticleStatus] = useState('')
+
+  /**
+   * Collapse and forget the briefing. Called wherever the reply is replaced or
+   * cleared, and clearing `briefingLoading` matters for the same reason it does
+   * in `resetShorter` — otherwise the new reply's expander sits disabled under a
+   * spinner for a call about a reply nobody can see any more.
+   */
+  const resetBriefing = () => {
+    setIsBriefingOpen(false)
+    setBriefingError('')
+    setBriefingLoading(false)
+    briefingRunRef.current = null
+  }
 
   /**
    * Drop the shortened view. Called wherever the reply is replaced or cleared.
@@ -1080,6 +1096,7 @@ export default function App() {
     setTranscript('')
     setReply(null)
     resetShorter()
+    resetBriefing()
     setError('')
     setLastRun(null)
     setArticle(null)
@@ -1093,7 +1110,7 @@ export default function App() {
     setError('')
     setShareUrl('')
     setShowClaims(false)
-    setIsBriefingOpen(false)
+    resetBriefing()
     resetShorter()
     setLastRun(null)
     setInstantDone(null)
@@ -1121,6 +1138,7 @@ export default function App() {
     setArticle(null)
     setReply(null)
     resetShorter()
+    resetBriefing()
     setLastRun(null)
     try {
       const result = await fetchArticle(articleUrl, setArticleStatus)
@@ -1205,8 +1223,7 @@ export default function App() {
     setReply(null)
     setLastRun(null)
     setShareUrl('')
-    setIsBriefingOpen(false)
-    setBriefingError('')
+    resetBriefing()
     setShowClaims(false)
     resetShorter()
     setInstantDone(null)
@@ -1389,6 +1406,12 @@ export default function App() {
     const context = lastRequestRef.current
     if (!opening || !context || !model || !reply || reply.theirCase || briefingLoading) return
 
+    // Same identity guard as the shortening call. The user can press Generate while
+    // this is in flight, and a briefing that lands on the wrong reply is read,
+    // believed and acted on even though it can never be sent: it is what tells them
+    // which of their opponent's points went unanswered.
+    const forId = reply.id
+    briefingRunRef.current = forId
     setBriefingLoading(true)
     setBriefingError('')
     try {
@@ -1402,13 +1425,23 @@ export default function App() {
         onStatus: setProviderStatus,
       })
       const parsed = parseTheirCase(result.text)
-      setReply((prev) => (prev ? { ...prev, theirCase: parsed.theirCase, answered: parsed.answered } : prev))
+      setReply((prev) =>
+        applyBriefingResult(prev, forId, { theirCase: parsed.theirCase, answered: parsed.answered })
+      )
       addUsage(result.usage)
     } catch (err) {
+      // An error about a reply the user has already replaced is not one they can
+      // act on, and it would sit under a panel belonging to a different argument.
+      if (briefingRunRef.current !== forId) return
       setBriefingError(err instanceof Error ? err.message : t('error.briefing'))
     } finally {
-      setBriefingLoading(false)
-      setProviderStatus('')
+      // And an abandoned call must not clear a spinner that now belongs to the new
+      // reply's own briefing call.
+      if (briefingRunRef.current === forId) {
+        briefingRunRef.current = null
+        setBriefingLoading(false)
+        setProviderStatus('')
+      }
     }
   }
 
