@@ -137,13 +137,20 @@ const DEK_ERA = 2
  * readable version other than DEK_ERA — including a record written before
  * tagging, which vault.js stores as version 1 — is a refusal.
  *
- * A record that will not PARSE proceeds, and that direction is deliberate
- * rather than lax. Those bytes are already openable by nobody, so a reset
- * cannot make them worse; refusing instead would permanently lock the one
+ * A record that is not a usable object — bytes that will not parse, or that
+ * parse to `null`, a string or an array — proceeds, and that direction is
+ * deliberate rather than lax. Nothing there is openable by anybody already, so
+ * a reset cannot make it worse; refusing instead would permanently lock the one
  * caller who by definition cannot sign in to clear it out of the only escape
  * this feature offers. Unknown falls on the not-migrated side everywhere it
  * describes a blob we could still lose — this is the one place where it does
  * not, because there is nothing left to lose.
+ *
+ * The `typeof` test is load-bearing, not defensive padding: JSON.parse('null')
+ * SUCCEEDS, so without it the literal bytes `null` would take the refuse branch
+ * while `{not json` took the proceed branch — the exact opposite of what the
+ * paragraph above describes, and the kind of split a reader would never guess
+ * from either the code or the comment.
  */
 function strandedByReset(raw) {
   if (!raw) return false
@@ -153,7 +160,11 @@ function strandedByReset(raw) {
   } catch {
     return false
   }
-  return record?.version !== DEK_ERA
+  // Array.isArray is not padding either: `typeof [] === 'object'`, so an array
+  // would otherwise reach the version test, miss, and refuse — while carrying
+  // no blob and no era. Anything that is not a plain object is not a record.
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return false
+  return record.version !== DEK_ERA
 }
 
 const notMigrated = () =>

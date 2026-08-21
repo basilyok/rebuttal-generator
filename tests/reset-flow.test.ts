@@ -183,8 +183,22 @@ function fakeRecoverServer(seed: Seed) {
   const writes: string[] = []
   let interruptAfter = Infinity
   let serverErrorAfter = Infinity
-  let refuseNotMigrated = false
   const original = globalThis.fetch
+  // complete.js's strandedByReset, mirrored rather than switched on. A boolean
+  // flag would let this fake refuse on demand; deriving the refusal from the
+  // SEEDED BLOBS is what makes the test exercise the rule the endpoint applies,
+  // including the part where an absent record proceeds.
+  const stranded = (raw: string | null) => {
+    if (!raw) return false
+    let record
+    try {
+      record = JSON.parse(raw)
+    } catch {
+      return false
+    }
+    if (!record || typeof record !== 'object') return false
+    return record.version !== 2
+  }
 
   globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
     const path = String(url)
@@ -212,11 +226,11 @@ function fakeRecoverServer(seed: Seed) {
       // Re-verified here too: begin issues no token, so this endpoint trusts
       // nothing it said.
       if (body.recoveryAuth !== state.recoveryAuth) return failure()
-      // The server's migration gate, in the order the handler applies it:
-      // after verification, before the first write. Modelled here because on
-      // the real path it is the ONLY gate — the client's own check is answering
-      // 401s it reads as absence.
-      if (refuseNotMigrated) {
+      // The migration gate, in the order the handler applies it: after
+      // verification, before the first write. This is the ONLY gate on the real
+      // path — there is no client-side counterpart, because a signed-out
+      // client's blob reads are 401s it cannot tell from absence.
+      if (stranded(state.vault) || stranded(state.history)) {
         return new Response(
           JSON.stringify({ error: 'Recovery setup has not finished on this account yet.', code: 'not-migrated' }),
           { status: 409 }
@@ -267,9 +281,6 @@ function fakeRecoverServer(seed: Seed) {
     },
     serverErrorAfter: (n: number) => {
       serverErrorAfter = n
-    },
-    refuseNotMigrated: () => {
-      refuseNotMigrated = true
     },
     restore: () => {
       globalThis.fetch = original
@@ -414,7 +425,11 @@ test('a wrong code and an unknown username fail the same way, and change nothing
   }
 })
 
-test('a half-migrated account is refused before anything is derived or sent', async () => {
+test('a half-migrated account is refused by the SERVER, and told so plainly', async () => {
+  // There is no client-side check any more: it read two endpoints that answer
+  // 401 when signed out and folded that into "migrated", so it passed
+  // everything while its only real effect was accusing people of an unfinished
+  // setup whenever a request hiccuped. This asserts the refusal that exists.
   const dek = generateDek()
   const sealed = await sealedUnderCode('alice', CODE_A, dek)
   const server = fakeRecoverServer({
@@ -422,42 +437,22 @@ test('a half-migrated account is refused before anything is derived or sent', as
     dek: { byPassword: await wrapDek(await aesKey(), dek), byRecovery: sealed.blob },
     // A blob still sealed under the master key this reset would replace. The
     // reset rewraps the DEK and keeps it — this blob would be left with no key
-    // at all.
+    // at all. The history beside it is already migrated, so the gate has to
+    // look at both records rather than stop at the first healthy one.
     vault: await sealJson(await aesKey(), { anthropic: 'sk-x' }, BLOB_VERSION_MASTER),
     history: await sealJson(await aesKey(), { v: 1, entries: [] }, BLOB_VERSION_DEK),
   })
   try {
-    await assert.rejects(() => runReset('alice', CODE_A, 'a-brand-new-password'), RecoveryBlockedError)
-    assert.deepEqual(server.writes, [], 'the refusal must come before any write')
-    assert.equal(server.state.recoveryAuth, sealed.recoveryAuth)
-  } finally {
-    server.restore()
-  }
-})
-
-test('a 409 not-migrated reaches the user as the blocked message, not as a bad code', async () => {
-  // The production shape, exactly: signed out, so the client-side guard sees
-  // two 401s-read-as-null and waves the reset through; the SERVER is what
-  // refuses. Mapping that 409 to BadCredentialsError like every other non-2xx
-  // would tell the one user whose old password still works to go on hunting
-  // for a typo in a code that was correct.
-  const dek = generateDek()
-  const sealed = await sealedUnderCode('alice', CODE_A, dek)
-  const server = fakeRecoverServer({
-    recoveryAuth: sealed.recoveryAuth,
-    dek: { byPassword: await wrapDek(await aesKey(), dek), byRecovery: sealed.blob },
-  })
-  try {
-    server.refuseNotMigrated()
     const err = await runReset('alice', CODE_A, 'a-brand-new-password').then(
       () => null,
       (e) => e
     )
     assert.ok(err instanceof RecoveryBlockedError, 'a 409 not-migrated is a blocked reset, not a bad credential')
     assert.equal(resetFailure(failureCode(err)).key, 'recovery.resetBlocked')
-    // And it does not send the user back to re-type a code that was right.
+    // It must not send the user back to re-type a code that was correct.
     assert.equal(resetFailure(failureCode(err)).retryCode, false)
-    assert.deepEqual(server.writes, [])
+    assert.deepEqual(server.writes, [], 'the refusal must come before any write')
+    assert.equal(server.state.recoveryAuth, sealed.recoveryAuth, 'the old code still verifies')
     assert.equal(server.state.authHash, 'old-auth-hash', 'the old password still authenticates')
   } finally {
     server.restore()

@@ -239,13 +239,14 @@ export async function loginLocal(username: string, password: string): Promise<Au
  * The account is not in a state a reset can safely rewrite — some blob is still
  * sealed under the master key this reset is about to replace.
  *
- * Raised from TWO places, and only one of them is load-bearing.
- * recover/complete answers 409 `not-migrated` after the recovery code has
- * verified and before its first write; that is the enforcement, it holds for
- * anyone posting to the endpoint directly, and it is what the acceptance
- * criterion rests on. runReset also checks locally, which saves a round trip in
- * the rare case where a session exists — and which cannot see anything at all
- * while signed out. See the guard comment there.
+ * Raised from exactly one place: recoverComplete, mapping the endpoint's 409
+ * `not-migrated`. complete answers that after the recovery code has verified
+ * and before its first write, having read vault: and history: itself.
+ *
+ * There is no client-side counterpart, and runReset carries a comment saying
+ * why one must not be re-added: a signed-out caller's blob reads are 401s that
+ * every transport here folds into "absent", so the check it looks like it is
+ * making is not one it can make.
  */
 export class RecoveryBlockedError extends AccountError {
   constructor() {

@@ -367,13 +367,29 @@ export interface DekRecord {
    * and the handler stores exactly those — so a record last written by setup
    * has no previous generation. Absent is a real answer, not a defect.
    *
-   * It exists for the reset that died between complete's writes 1 and 3: the
-   * old password still authenticates, but the CURRENT byPassword is already
-   * sealed under the new password key. That session can only open the previous
-   * copy, and a caller that reads only `byPassword` reports the account as
-   * unopenable while the bytes that open it sit one field away. One generation
-   * deep, never a chain — complete.js drops the incoming record's own
-   * `previous` when it writes.
+   * WHAT IT IS, precisely: the pair the last complete() overwrote, kept
+   * unconditionally. NOT "the pair from an interrupted write" — nothing clears
+   * it on success, so on a healthy account this is simply the era before the
+   * last reset, sitting there with nobody needing it. Only `fromPrevious` from
+   * unwrapDekWithPrevious tells you an interruption actually happened; the
+   * presence of this field tells you only that the account has been reset at
+   * least once.
+   *
+   * Why it is worth keeping anyway: the reset that died between complete's
+   * writes 1 and 3 leaves the old password still authenticating while the
+   * CURRENT byPassword is already sealed under the new password key. That
+   * session can only open this copy, and a caller reading only `byPassword`
+   * reports the account as unopenable while the bytes that open it sit one
+   * field away. One generation deep, never a chain — complete.js drops the
+   * incoming record's own `previous` when it writes.
+   *
+   * The cost, stated rather than left for someone to find: a DEK copy wrapped
+   * under a SUPERSEDED password key outlives the reset that replaced it, so
+   * someone resetting because their old password leaked has that copy on the
+   * server until their next reset. It is still ciphertext this server cannot
+   * open, and the alternative — clearing it on success — needs the client to
+   * report a fallback it did not need, which is a signal an attacker controls.
+   * Named as a trade, not an oversight.
    */
   previous?: { byPassword: VaultBlob; byRecovery: VaultBlob } | null
 }
@@ -725,30 +741,34 @@ export async function setupRecovery(username: string, masterKey: CryptoKey): Pro
  * Nothing here logs, stores or URL-encodes the code or the password. The two
  * arguments exist only as arguments; what leaves this function is a one-way
  * hash of each and ciphertext the server cannot open.
+ *
+ * That claim is about THIS function and the value it returns is not covered by
+ * it. The rotated code goes to RecoveryDialog, whose Copy button writes it to
+ * the OS clipboard — deliberately, since saving the code is the whole point,
+ * and documented on that component's `code` prop. Cross-referenced here so the
+ * two docblocks do not read as contradicting each other.
  */
 export async function runReset(username: string, code: string, newPassword: string): Promise<string> {
-  /**
-   * A FAST PATH, NOT THE GATE. Say so plainly, because the shape of this line
-   * invites the opposite reading and an earlier version of this comment gave it.
+  /*
+   * NO CLIENT-SIDE MIGRATION CHECK HERE, and its absence is deliberate — do not
+   * add one back. There was one, calling isFullyMigrated(), and it could not
+   * work: that predicate reads /api/vault and /api/history, both of which
+   * answer 401 to a signed-out caller, and both transports fold 401 into `null`
+   * — which it reads as "no blobs, therefore migrated". Every reset is
+   * signed-out, so it returned true on 100% of real invocations while costing
+   * two requests that always 401.
    *
-   * What it cannot see: isFullyMigrated() reads /api/vault and /api/history,
-   * both of which answer 401 to a signed-out caller, and both transports fold
-   * 401 into `null` — indistinguishable from "no blob stored", which the
-   * predicate reads as migrated. Every reset this UI offers is signed-out, so
-   * on the path that matters this returns `true` unconditionally. There is no
-   * authenticated read available before a reset; a signed-out client cannot
-   * observe blob versions at all, and no amount of client code changes that.
+   * Its only observable production behaviour was a false accusation. A network
+   * failure on either read lands in isFullyMigrated's `catch { return false }`,
+   * and the user who forgot their password was told "recovery setup has not
+   * finished — sign in with your password once to finish it", which is both
+   * untrue and the one instruction they cannot follow.
    *
-   * The real refusal is recover/complete's, which reads the two records itself
-   * and answers 409 `not-migrated` after verifying the code and before its
-   * first write. That one holds for direct posters too, and RecoveryBlockedError
-   * reaches this caller from there either way.
-   *
-   * Kept, and kept first, for the case it CAN answer — a session that happens to
-   * still be live — where refusing here saves a round trip and a second of
-   * PBKDF2 that would only end in the same 409.
+   * The gate is recover/complete's: it reads the two records itself, after
+   * verifying the code and before its first write, and answers 409
+   * `not-migrated`. recoverComplete maps that back to RecoveryBlockedError, so
+   * this function still raises it — from the one place that can actually see.
    */
-  if (!(await isFullyMigrated())) throw new RecoveryBlockedError()
 
   // Throws WrongRecoveryCodeError on a malformed code before any request goes
   // out, which is what keeps a half-typed code off the endpoint's rate limiter.

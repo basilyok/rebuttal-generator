@@ -829,16 +829,28 @@ test('complete: an era nobody here recognises is refused, not waved through', as
   assert.deepEqual(spy.writes, [])
 })
 
-test('complete: a blob record that will not parse does NOT block the reset', async () => {
-  // The one place unknown falls the other way, and deliberately. Those bytes
-  // open for nobody already, so a reset cannot make them worse — while refusing
-  // would permanently lock the one caller who by definition cannot sign in to
-  // clear them out of the only escape this feature has.
-  const spy = await seedVerifiable({ 'vault:local:alice': '{not json' })
-  const res = await completeWith(spy)
-  assert.equal(res.status, 200)
-  assert.ok(spy.store['dek:local:alice'])
-})
+// The one place unknown falls the other way, and deliberately. None of these
+// bytes are openable by anybody already, so a reset cannot make them worse —
+// while refusing would permanently lock the one caller who by definition cannot
+// sign in to clear them out of the only escape this feature has.
+//
+// 'null' and '"nope"' are here because JSON.parse SUCCEEDS on both. Without the
+// typeof test in strandedByReset, the literal bytes `null` would take the
+// REFUSE branch while `{not json` took the proceed branch — the opposite of
+// what its docblock promises, and a split no reader would guess.
+for (const [label, raw] of [
+  ['will not parse', '{not json'],
+  ['parses to null', 'null'],
+  ['parses to a string', '"nope"'],
+  ['parses to an array', '[]'],
+]) {
+  test(`complete: a vault record that ${label} does NOT block the reset`, async () => {
+    const spy = await seedVerifiable({ 'vault:local:alice': raw })
+    const res = await completeWith(spy)
+    assert.equal(res.status, 200, label)
+    assert.ok(spy.store['dek:local:alice'], label)
+  })
+}
 
 test('complete: the migration gate sits AFTER verification, so it is not an oracle', async () => {
   // A half-migrated account plus a wrong code must be indistinguishable from

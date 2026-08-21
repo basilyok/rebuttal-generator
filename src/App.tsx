@@ -333,6 +333,12 @@ export default function App() {
    */
   const [resetOpen, setResetOpen] = useState(false)
   /**
+   * The username to start the sign-in field with, set only when a reset landed
+   * but the sign-in that follows it did not. Not a lock — see AuthDialog's
+   * prefillUsername — and cleared with the rest of the account state.
+   */
+  const [resetUsername, setResetUsername] = useState('')
+  /**
    * Whether anyone on this device has confirmed saving a code for this account.
    * The server cannot answer this: it knows a record exists, not that the
    * one-time display survived long enough to be read. Without it, a first
@@ -1525,6 +1531,10 @@ export default function App() {
     setResetOpen(false)
     setRecoveryCode({ code, replacesOld: true })
     setAuthError('')
+    // Prefilled before the dialog opens, so if the sign-in below fails the form
+    // left behind already names the account instead of asking someone who has
+    // just proved they forget things about it to type it again.
+    setResetUsername(username)
     setAuthDialog('signin')
     await handleAuthSubmit(username, password, '')
   }
@@ -1553,6 +1563,7 @@ export default function App() {
     // Nothing half-typed in a reset survives a sign-out either: the card names
     // an account by username, and the next person here is not that account.
     setResetOpen(false)
+    setResetUsername('')
     setAuthDialog(null)
     setAuthError('')
     // Wipe the device's history copy as well — entries AND key both leave this
@@ -1857,6 +1868,7 @@ export default function App() {
           // require auth.user to be null), so a signed-in local user here
           // means "re-enter your password": fix the username to the account's.
           fixedUsername={auth.user?.provider === 'local' ? auth.user.name : undefined}
+          prefillUsername={resetUsername}
           onModeChange={(m) => {
             setAuthError('')
             setAuthDialog(m)
@@ -1867,11 +1879,23 @@ export default function App() {
           // the username is fixed, which is the "re-enter your password" render
           // for an account already signed in — a reset from there would rewrite
           // the credentials of whoever is holding this device's data.
-          onForgotPassword={() => {
-            setAuthDialog(null)
-            setAuthError('')
-            setResetOpen(true)
-          }}
+          // WITHHELD WHILE A CODE IS ON SCREEN, and that is not cosmetic. The
+          // dialog is visible in exactly that state — a reset landed and its
+          // auto-sign-in did not — and the handler closes the sign-in form
+          // while the reset card stays gated on `!recoveryCode`. One click and
+          // both are gone: no sign-in form, no reset card, and a recovery code
+          // the user still has to save. Fixed here at the source rather than by
+          // loosening that gate, because the gate is what stops a reset being
+          // re-entered underneath the code it just produced.
+          onForgotPassword={
+            recoveryCode
+              ? undefined
+              : () => {
+                  setAuthDialog(null)
+                  setAuthError('')
+                  setResetOpen(true)
+                }
+          }
           onDismiss={() => {
             setAuthDialog(null)
             setAuthError('')

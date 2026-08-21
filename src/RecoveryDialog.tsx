@@ -287,7 +287,10 @@ function ResetFlow({ t, onReset, onCancel }: ResetProps) {
     <form
       ref={cardRef}
       tabIndex={-1}
-      className="vault-dialog auth-dialog recovery-reset"
+      // No class of its own: this card is a plain auth-shaped form and every
+      // rule it needs already belongs to those two. A `recovery-reset` hook
+      // with no rule behind it in index.css would read as styling that exists.
+      className="vault-dialog auth-dialog"
       role="dialog"
       aria-modal="false"
       aria-labelledby="recovery-reset-title"
