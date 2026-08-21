@@ -99,6 +99,7 @@ const fr = {
   'recovery.statusFinishing': 'Récupération inachevée · la terminer',
   'recovery.statusReady': 'Récupération prête · nouveau code',
   'recovery.statusUnknown': 'Récupération non vérifiée · nouveau code',
+  'recovery.statusStale': 'Le code de récupération peut être invalide · nouveau code',
   'recovery.resetTitle': 'Réinitialiser votre mot de passe',
   'recovery.resetIntro': "Saisissez votre nom d'utilisateur et le code de récupération que vous avez conservé.",
   'recovery.codeLabel': 'Code de récupération',
@@ -110,6 +111,8 @@ const fr = {
   'recovery.resetFailed': "Ce nom d'utilisateur et ce code de récupération ne correspondent pas.",
   'recovery.resetCorrupt':
     'L’enregistrement de récupération stocké est endommagé et ne peut pas être ouvert. Ressaisir le code n’y changera rien.',
+  'recovery.resetInterrupted':
+    'La réinitialisation a été interrompue. Essayez de vous connecter avec le nouveau mot de passe que vous venez de choisir : si cela fonctionne, la réinitialisation a abouti. Sinon, votre ancien mot de passe reste valable. Dans les deux cas, générez ensuite un nouveau code de récupération.',
   'recovery.resetBlocked':
     "La configuration de la récupération n'est pas encore terminée sur ce compte. Connectez-vous une fois avec votre mot de passe pour la terminer.",
   'recovery.forgot': 'Mot de passe oublié ?',

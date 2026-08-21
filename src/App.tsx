@@ -557,16 +557,29 @@ export default function App() {
       // moved to the new password's key — reading only that field reports the
       // session as unable to open its own DEK and leaves a v2 vault locked,
       // which is precisely the state `previous` was added to cover.
-      const dekKey = await importWrappingKey(
-        await unwrapDekWithPrevious(masterKey, record.byPassword, record.previous?.byPassword)
+      const { dek, fromPrevious } = await unwrapDekWithPrevious(
+        masterKey,
+        record.byPassword,
+        record.previous?.byPassword
       )
+      const dekKey = await importWrappingKey(dek)
       if (isStale()) return
       dekKeyRef.current = dekKey
       await ensureMigrated({ masterKey, dekKey })
       // Hoisted out of the setState argument: it is two round trips long, and
       // evaluating isStale() before them checked a session that was still live.
       const migrated = await isFullyMigrated()
-      if (!isStale()) setRecoveryStatus(recoveryStatusFor(true, migrated))
+      // `fromPrevious` outranks the migration answer, and this is the ONLY
+      // place that flag is read. It means this session's password opened the
+      // previous generation of the DEK — which can only happen if a reset
+      // stopped between complete's writes 1 and 3, which means `recovery:` now
+      // holds either the old code's verifier or the verifier for a code that
+      // was minted and never shown to anybody. Data is fine; the escape hatch
+      // may be gone. Without this the account computes `ready`, the prompt
+      // stays suppressed by this device's acknowledgement, and the user is
+      // never told their recovery code might open nothing — until the day they
+      // need it, which is the one day it cannot be fixed.
+      if (!isStale()) setRecoveryStatus(fromPrevious ? 'stale' : recoveryStatusFor(true, migrated))
     } catch {
       // A record this password cannot open means the account was reset from
       // another device, so this session's master key is stale; a failed fetch

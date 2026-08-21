@@ -97,6 +97,7 @@ const ko = {
   'recovery.statusFinishing': '복구 설정 미완료 · 마무리하기',
   'recovery.statusReady': '복구 준비됨 · 새 코드',
   'recovery.statusUnknown': '복구 상태 확인 안 됨 · 새 코드',
+  'recovery.statusStale': '복구 코드가 작동하지 않을 수 있음 · 새 코드',
   'recovery.resetTitle': '비밀번호 재설정',
   'recovery.resetIntro': '사용자 이름과 저장해 둔 복구 코드를 입력하세요.',
   'recovery.codeLabel': '복구 코드',
@@ -108,6 +109,8 @@ const ko = {
   'recovery.resetFailed': '사용자 이름과 복구 코드가 맞지 않아요.',
   'recovery.resetCorrupt':
     '저장된 복구 레코드가 손상되어 열 수 없습니다. 코드를 다시 입력해도 해결되지 않습니다.',
+  'recovery.resetInterrupted':
+    '재설정이 도중에 중단되었습니다. 방금 정한 새 비밀번호로 로그인해 보세요. 로그인되면 재설정이 완료된 것입니다. 안 되면 이전 비밀번호가 그대로 유효합니다. 어느 쪽이든 그 뒤에 새 복구 코드를 발급하세요.',
   'recovery.resetBlocked': '이 계정은 복구 설정이 아직 끝나지 않았어요. 비밀번호로 한 번 로그인해서 마무리해 주세요.',
   'recovery.forgot': '비밀번호를 잊으셨나요?',
   'recovery.leaveConfirm': '복구 코드가 아직 화면에 있고 다시 표시되지 않아요. 저장하지 않고 나갈까요?',

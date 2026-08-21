@@ -104,6 +104,7 @@ const de = {
   'recovery.statusFinishing': 'Wiederherstellung unfertig · abschließen',
   'recovery.statusReady': 'Wiederherstellung bereit · neuer Code',
   'recovery.statusUnknown': 'Wiederherstellung ungeprüft · neuer Code',
+  'recovery.statusStale': 'Wiederherstellungscode womöglich ungültig · neuer Code',
   'recovery.resetTitle': 'Passwort zurücksetzen',
   'recovery.resetIntro': 'Gib deinen Benutzernamen und den Wiederherstellungscode ein, den du aufbewahrt hast.',
   'recovery.codeLabel': 'Wiederherstellungscode',
@@ -115,6 +116,8 @@ const de = {
   'recovery.resetFailed': 'Benutzername und Wiederherstellungscode passen nicht zusammen.',
   'recovery.resetCorrupt':
     'Der gespeicherte Wiederherstellungsdatensatz ist beschädigt und lässt sich nicht öffnen. Den Code erneut einzugeben hilft nicht.',
+  'recovery.resetInterrupted':
+    'Die Zurücksetzung wurde unterbrochen. Versuchen Sie, sich mit dem soeben gewählten neuen Passwort anzumelden — klappt das, ist die Zurücksetzung durchgelaufen. Andernfalls gilt weiterhin Ihr altes Passwort. Erzeugen Sie danach in jedem Fall einen neuen Wiederherstellungscode.',
   'recovery.resetBlocked':
     'Die Einrichtung der Wiederherstellung ist bei diesem Konto noch nicht fertig. Melde dich einmal mit deinem Passwort an, um sie abzuschließen.',
   'recovery.forgot': 'Passwort vergessen?',

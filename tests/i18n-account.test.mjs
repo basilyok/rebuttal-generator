@@ -94,7 +94,7 @@ for (const file of sourceFiles(SRC_DIR)) {
   const text = readFileSync(file, 'utf8')
   for (const [, key] of text.matchAll(/t\(\s*'(recovery\.[A-Za-z0-9_.]+)'/g)) calledKeys.add(key)
 }
-for (const status of ['none', 'unknown', 'incomplete', 'ready']) calledKeys.add(recoveryLabelKey(status))
+for (const status of ['none', 'unknown', 'incomplete', 'ready', 'stale']) calledKeys.add(recoveryLabelKey(status))
 // Every branch resetFailure has, including the default one — '' stands in for
 // the throw that carries no machine code at all (a dropped connection).
 for (const code of [
@@ -103,6 +103,8 @@ for (const code of [
   'corrupt-dek-record',
   'recovery-blocked',
   'rate-limited',
+  'reset-interrupted',
+  'server-error',
   '',
 ]) {
   calledKeys.add(resetFailure(code).key)
@@ -141,6 +143,10 @@ const MUST_DIFFER = [
   // over the other sends a user with a damaged record back to a code that was
   // always correct, which is the exact harm the two error types exist to avoid.
   ['recovery.resetFailed', 'recovery.resetCorrupt'],
+  // "That did not match" versus "the reset may have partly gone through, try
+  // both passwords". One sends the user back to a code that is already spent;
+  // the other is the only message that gets them back into their account.
+  ['recovery.resetFailed', 'recovery.resetInterrupted'],
 ]
 
 for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {

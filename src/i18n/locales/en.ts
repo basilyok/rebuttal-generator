@@ -106,6 +106,7 @@ const en: Record<string, string> = {
   'recovery.statusFinishing': 'Recovery setup unfinished · finish it',
   'recovery.statusReady': 'Recovery ready · new code',
   'recovery.statusUnknown': 'Recovery unchecked · new code',
+  'recovery.statusStale': 'Recovery code may not work · new code',
   'recovery.resetTitle': 'Reset your password',
   'recovery.resetIntro': 'Enter your username and the recovery code you saved.',
   'recovery.codeLabel': 'Recovery code',
@@ -117,6 +118,8 @@ const en: Record<string, string> = {
   'recovery.resetFailed': 'That username and recovery code did not match.',
   'recovery.resetCorrupt':
     'That stored recovery record is damaged and cannot be opened. Trying the code again will not help.',
+  'recovery.resetInterrupted':
+    'Something interrupted the reset. Try signing in with the new password you just chose — if it works, the reset went through. If not, your old password still works. Either way, generate a fresh recovery code afterwards.',
   'recovery.resetBlocked':
     'Recovery setup has not finished on this account yet. Sign in with your password once to finish it.',
   'recovery.forgot': 'Forgot your password?',

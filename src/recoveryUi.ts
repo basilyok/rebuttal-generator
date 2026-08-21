@@ -46,6 +46,8 @@ export function recoveryLabelKey(status: RecoveryStatus): string {
       return 'recovery.statusUnknown'
     case 'none':
       return 'recovery.statusNone'
+    case 'stale':
+      return 'recovery.statusStale'
   }
 }
 
@@ -98,6 +100,16 @@ export function shouldOfferSetupPrompt({
   if (dismissed || codeShown) return null
   if (status === 'none') return 'setup'
   if (status === 'unknown') return null
+  // `stale` prompts THROUGH an acknowledgement, and it is the only status that
+  // does. Every other case treats "someone on this device saved a code" as the
+  // end of the conversation, which is right — but here we have positive
+  // evidence that an interrupted reset moved the verifier out from under
+  // whatever they saved. The code in their hands may open nothing, and the
+  // acknowledgement is exactly what would otherwise keep them from ever being
+  // told. `replace` is the correct copy for it too: there may well be a live
+  // code out there, so this must offer a replacement rather than claim they
+  // have none.
+  if (status === 'stale') return 'replace'
   return acknowledged ? null : 'replace'
 }
 
@@ -180,12 +192,29 @@ export function resetFailure(code: string): ResetFailure {
       return { key: 'recovery.resetBlocked', retryCode: false }
     case 'rate-limited':
       return { key: 'account.rateLimited', retryCode: false }
+    case 'reset-interrupted':
+      // THE CASE THIS FUNCTION USED TO GET WRONG. An earlier version of the
+      // default branch below asserted that "recoverComplete is the only writer
+      // and it either returned ok or did not run" — which is precisely the
+      // disjunction the `previous` pair exists because it is FALSE. complete
+      // has four writes and no transaction; a drop or a fault can leave 1, 1-2
+      // or 1-3 applied. After a stop at write 3 the user's new password already
+      // works and they have just typed it; after a stop at write 1 their old
+      // one does; from write 2 onward their code is spent either way. So this
+      // says try both and mint a fresh code, and it must never send them back
+      // to the code field.
+      return { key: 'recovery.resetInterrupted', retryCode: false }
+    case 'server-error':
+      // Reachable only from the phase BEFORE recoverComplete — runReset wraps
+      // everything from that call onward as reset-interrupted. begin writes
+      // nothing, so here "try again in a moment" really is the whole story.
+      return { key: 'account.serverError', retryCode: false }
     default:
-      // Includes a dropped connection, which throws a TypeError with whatever
-      // message the runtime chose. Nothing has changed on the server in that
-      // case — recoverComplete is the only writer and it either returned ok or
-      // did not run — so "try again in a moment" is both true and the right
-      // instruction.
+      // Any code this function does not know. It keeps server-error's message
+      // because that is the least-committal thing to say, NOT because nothing
+      // was written — do not restore that claim. The one branch where the write
+      // state is genuinely unknown is reset-interrupted above, and runReset is
+      // what routes failures into it; this branch describes the leftovers.
       return { key: 'account.serverError', retryCode: false }
   }
 }

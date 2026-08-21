@@ -103,6 +103,7 @@ const es = {
   'recovery.statusFinishing': 'Recuperación sin terminar · terminarla',
   'recovery.statusReady': 'Recuperación lista · código nuevo',
   'recovery.statusUnknown': 'Recuperación sin comprobar · código nuevo',
+  'recovery.statusStale': 'El código de recuperación quizá no sirva · código nuevo',
   'recovery.resetTitle': 'Restablece tu contraseña',
   'recovery.resetIntro': 'Escribe tu nombre de usuario y el código de recuperación que guardaste.',
   'recovery.codeLabel': 'Código de recuperación',
@@ -114,6 +115,8 @@ const es = {
   'recovery.resetFailed': 'Ese nombre de usuario y ese código de recuperación no coinciden.',
   'recovery.resetCorrupt':
     'El registro de recuperación guardado está dañado y no se puede abrir. Volver a introducir el código no servirá de nada.',
+  'recovery.resetInterrupted':
+    'Algo interrumpió el restablecimiento. Prueba a iniciar sesión con la nueva contraseña que acabas de elegir: si funciona, el restablecimiento se completó. Si no, tu contraseña anterior sigue siendo válida. En cualquier caso, genera después un código de recuperación nuevo.',
   'recovery.resetBlocked':
     'La configuración de la recuperación aún no ha terminado en esta cuenta. Inicia sesión una vez con tu contraseña para terminarla.',
   'recovery.forgot': '¿Olvidaste tu contraseña?',

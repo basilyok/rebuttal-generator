@@ -99,6 +99,7 @@ const pt_BR = {
   'recovery.statusFinishing': 'Recuperação incompleta · concluir',
   'recovery.statusReady': 'Recuperação pronta · novo código',
   'recovery.statusUnknown': 'Recuperação não verificada · novo código',
+  'recovery.statusStale': 'O código de recuperação pode não funcionar · novo código',
   'recovery.resetTitle': 'Redefinir sua senha',
   'recovery.resetIntro': 'Digite seu nome de usuário e o código de recuperação que você guardou.',
   'recovery.codeLabel': 'Código de recuperação',
@@ -110,6 +111,8 @@ const pt_BR = {
   'recovery.resetFailed': 'Esse nome de usuário e esse código de recuperação não combinam.',
   'recovery.resetCorrupt':
     'O registro de recuperação salvo está danificado e não pode ser aberto. Digitar o código de novo não vai adiantar.',
+  'recovery.resetInterrupted':
+    'Algo interrompeu a redefinição. Tente entrar com a nova senha que você acabou de escolher: se funcionar, a redefinição foi concluída. Se não, sua senha antiga continua valendo. De todo modo, gere um novo código de recuperação depois.',
   'recovery.resetBlocked':
     'A configuração da recuperação ainda não terminou nesta conta. Entre uma vez com sua senha para concluir.',
   'recovery.forgot': 'Esqueceu sua senha?',

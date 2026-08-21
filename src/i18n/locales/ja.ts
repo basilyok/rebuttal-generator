@@ -98,6 +98,7 @@ const ja = {
   'recovery.statusFinishing': '復旧の設定が未完了 · 完了する',
   'recovery.statusReady': '復旧の準備完了 · 新しいコード',
   'recovery.statusUnknown': '復旧の状態は未確認 · 新しいコード',
+  'recovery.statusStale': '復旧コードが使えない可能性 · 新しいコード',
   'recovery.resetTitle': 'パスワードを再設定',
   'recovery.resetIntro': 'ユーザー名と、控えておいた復旧コードを入力してください。',
   'recovery.codeLabel': '復旧コード',
@@ -109,6 +110,8 @@ const ja = {
   'recovery.resetFailed': 'そのユーザー名と復旧コードは一致しません。',
   'recovery.resetCorrupt':
     '保存された復旧レコードが壊れていて開けません。コードを入力し直しても解決しません。',
+  'recovery.resetInterrupted':
+    '再設定が途中で中断されました。いま決めた新しいパスワードでサインインしてみてください。入れれば再設定は完了しています。入れなければ、以前のパスワードがそのまま有効です。どちらの場合も、そのあとで新しい復旧コードを発行してください。',
   'recovery.resetBlocked': 'このアカウントは復旧の設定がまだ終わっていません。パスワードで一度サインインして完了させてください。',
   'recovery.forgot': 'パスワードをお忘れですか？',
   'recovery.leaveConfirm': '復旧コードはまだ画面に表示されていて、二度と表示されません。保存せずに移動しますか？',

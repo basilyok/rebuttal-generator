@@ -254,6 +254,28 @@ export class RecoveryBlockedError extends AccountError {
 }
 
 /**
+ * The reset MAY have partly landed, and we cannot tell.
+ *
+ * Raised by runReset for any failure of recoverComplete() that is not one of
+ * the endpoint's own pre-write refusals. There is no way to narrow it from the
+ * client: complete.js has no transaction, its four writes can stop after any
+ * one of them, and both a dropped connection and its own 500 look identical
+ * whether they arrived before write 1 or after write 3.
+ *
+ * The distinction is not academic. After a stop at write 3 the user's NEW
+ * password already works and they have just typed it; after a stop at write 1
+ * their old one does. "Try again" is wrong for both, and "wrong code" is worse
+ * than wrong — the code is spent from write 2 onward, so the retry it invites
+ * can only fail. What the user can actually do is try both passwords and then
+ * mint a fresh code, which is what recovery.resetInterrupted tells them.
+ */
+export class ResetInterruptedError extends AccountError {
+  constructor() {
+    super('reset-interrupted')
+  }
+}
+
+/**
  * Both generations of the recovery-wrapped DEK copy, exactly as begin serves
  * them.
  *
@@ -288,6 +310,11 @@ export async function recoverBegin(username: string, recoveryAuth: string): Prom
     }
   }
   if (response.status === 429) throw new RateLimitedError()
+  // A fault is not a credential verdict. begin writes nothing, so a 500 here
+  // means the account is untouched and the code is still whatever it was —
+  // reporting it as "did not match" would tell someone holding a correct code
+  // that it is wrong.
+  if (data?.code === 'server-error' || response.status >= 500) throw new AuthServerError()
   // One error for a wrong code, an unknown username, and an account with no DEK
   // record — matching the endpoint, which answers all three identically on
   // purpose. Mapping them apart here would invent a distinction the response
@@ -318,9 +345,19 @@ export async function recoverComplete(args: {
   // and makes a reset safe. Told apart from a credential failure only because
   // the server tells them apart, and it can only do that after verifying.
   if (data?.code === 'not-migrated') throw new RecoveryBlockedError()
-  // Anything else — including the 500 for a verified code against an account
-  // with no user record — is "the reset did not happen". That is the only fact
-  // the caller needs, and it is true of every non-2xx: the endpoint's writes
-  // begin only after both credential checks have passed.
+  // A FAULT, NOT A VERDICT — and on this endpoint specifically, a fault whose
+  // blast radius is unknown. complete.js wraps ALL FOUR of its writes in one
+  // try and answers 500 from the catch, so a KV failure on write 2 or 3 arrives
+  // here long after the DEK record was overwritten and the verifier rotated.
+  // Calling that 'bad-credentials' was this transport's worst bug: it sends the
+  // user back to re-enter a code that was correct, their retry meets a verifier
+  // that has already moved, and every attempt from then on answers "did not
+  // match" — while their old password still works and nothing in the UI ever
+  // says so. runReset turns this into a reset-interrupted, which is the message
+  // that actually helps.
+  if (data?.code === 'server-error' || response.status >= 500) throw new AuthServerError()
+  // What is left is 401 bad-credentials, and the endpoint verifies before its
+  // first write — so this branch, unlike the one above, really does mean
+  // nothing happened.
   throw new BadCredentialsError()
 }

@@ -97,6 +97,7 @@ const zh_Hans = {
   'recovery.statusFinishing': '恢复设置未完成 · 去完成',
   'recovery.statusReady': '恢复已就绪 · 换一串新码',
   'recovery.statusUnknown': '恢复状态未知 · 换一串新码',
+  'recovery.statusStale': '恢复代码可能已失效 · 新代码',
   'recovery.resetTitle': '重置密码',
   'recovery.resetIntro': '输入你的用户名和保存好的恢复码。',
   'recovery.codeLabel': '恢复码',
@@ -108,6 +109,8 @@ const zh_Hans = {
   'recovery.resetFailed': '用户名和恢复码对不上。',
   'recovery.resetCorrupt':
     '存储的恢复记录已损坏，无法打开。重新输入代码也无济于事。',
+  'recovery.resetInterrupted':
+    '重置被中断了。请试着用你刚设置的新密码登录：能登录说明重置已经完成；不能登录，则原来的密码仍然有效。无论哪种情况，之后都请生成一个新的恢复代码。',
   'recovery.resetBlocked': '这个账户的恢复设置还没完成。先用密码登录一次，把它设置好。',
   'recovery.forgot': '忘记密码了？',
   'recovery.leaveConfirm': '恢复码还在屏幕上，而且不会再显示。要不保存就离开吗？',

@@ -42,7 +42,9 @@ test('a healthy record opens from the current copy and never consults the previo
   // A previous copy that would throw if it were reached: sealed under someone
   // else's key entirely.
   const previous = await wrapDek(await aesKey(), dek)
-  assert.equal(hex(await unwrapDekWithPrevious(key, current, previous)), hex(dek))
+  const opened = await unwrapDekWithPrevious(key, current, previous)
+  assert.equal(hex(opened.dek), hex(dek))
+  assert.equal(opened.fromPrevious, false, 'a healthy record must not claim it fell back')
 })
 
 test('the previous copy is used when the credential is one generation behind the record', async () => {
@@ -57,11 +59,16 @@ test('the previous copy is used when the credential is one generation behind the
   // The primary attempt fails exactly the way a wrong credential does — which
   // is why dropping the fallback is invisible except to the one user it strands.
   await assert.rejects(() => unwrapDek(held, current), WrongRecoveryCodeError)
+  const opened = await unwrapDekWithPrevious(held, current, previous)
   assert.equal(
-    hex(await unwrapDekWithPrevious(held, current, previous)),
+    hex(opened.dek),
     hex(dek),
     'the previous generation must be tried before the credential is called wrong'
   )
+  // The flag adoptRecovery reads. Without it a session that only got in via the
+  // previous copy — proof that a reset stopped partway — reports `ready`, and
+  // the user is never told their recovery code may open nothing.
+  assert.equal(opened.fromPrevious, true, 'a fallback must be reportable to the one caller that acts on it')
 })
 
 test('a damaged current copy still falls back, and the fallback repairs rather than reports', async () => {
@@ -73,7 +80,9 @@ test('a damaged current copy still falls back, and the fallback repairs rather t
   // with CorruptDekRecordError rather than a key mismatch.
   const current: VaultBlob = { ...good, ciphertext: good.ciphertext.slice(0, 8) }
   await assert.rejects(() => unwrapDek(held, current), CorruptDekRecordError)
-  assert.equal(hex(await unwrapDekWithPrevious(held, current, good)), hex(dek))
+  const repaired = await unwrapDekWithPrevious(held, current, good)
+  assert.equal(hex(repaired.dek), hex(dek))
+  assert.equal(repaired.fromPrevious, true)
 })
 
 test('with both copies shut, the retryable verdict is the one reported', async () => {
@@ -173,6 +182,7 @@ function fakeRecoverServer(seed: Seed) {
   }
   const writes: string[] = []
   let interruptAfter = Infinity
+  let serverErrorAfter = Infinity
   let refuseNotMigrated = false
   const original = globalThis.fetch
 
@@ -213,20 +223,36 @@ function fakeRecoverServer(seed: Seed) {
         )
       }
       const previousRaw = JSON.parse(state.dek)
+      // Two ways a write sequence stops partway, and they are NOT the same
+      // thing to a caller. `interruptAfter` drops the connection — the client
+      // sees a TypeError. `serverErrorAfter` returns 500 with writes already
+      // applied, which is the shape complete.js's catch actually produces:
+      // its try wraps all four writes, so a KV fault on write 2 or 3 answers
+      // 500 long after the record was overwritten and the verifier moved.
+      let failed = false
       const bump = (label: string) => {
         if (writes.length >= interruptAfter) throw new TypeError('network interrupted')
+        if (writes.length >= serverErrorAfter) {
+          failed = true
+          return false
+        }
         writes.push(label)
+        return true
       }
-      bump('dek')
-      state.dek = JSON.stringify({
-        byPassword: clean(body.dek.byPassword),
-        byRecovery: clean(body.dek.byRecovery),
-        previous: { byPassword: previousRaw.byPassword, byRecovery: previousRaw.byRecovery },
-      })
-      bump('recovery')
-      state.recoveryAuth = body.recoveryAuthNext
-      bump('password')
-      state.authHash = body.authHash
+      const serverError = () =>
+        new Response(JSON.stringify({ error: 'Something went wrong. Please try again.', code: 'server-error' }), {
+          status: 500,
+        })
+      if (bump('dek')) {
+        state.dek = JSON.stringify({
+          byPassword: clean(body.dek.byPassword),
+          byRecovery: clean(body.dek.byRecovery),
+          previous: { byPassword: previousRaw.byPassword, byRecovery: previousRaw.byRecovery },
+        })
+      }
+      if (bump('recovery')) state.recoveryAuth = body.recoveryAuthNext
+      if (bump('password')) state.authHash = body.authHash
+      if (failed) return serverError()
       return ok({ ok: true })
     }
     throw new Error(`unexpected POST ${path}`)
@@ -238,6 +264,9 @@ function fakeRecoverServer(seed: Seed) {
     dek: () => JSON.parse(state.dek),
     interruptAfter: (n: number) => {
       interruptAfter = n
+    },
+    serverErrorAfter: (n: number) => {
+      serverErrorAfter = n
     },
     refuseNotMigrated: () => {
       refuseNotMigrated = true
@@ -309,7 +338,16 @@ test('a reset interrupted between its first two writes is still recoverable — 
   })
   try {
     server.interruptAfter(1) // die after the dek: write, before the verifier moves
-    await assert.rejects(() => runReset('alice', CODE_A, 'first-attempt-password'))
+    const dropped = await runReset('alice', CODE_A, 'first-attempt-password').then(
+      () => null,
+      (e) => e
+    )
+    // A dropped connection is the other shape of a partly-applied reset, and it
+    // gets the same honest message. Write 1 landed here, so "nothing happened"
+    // would be false.
+    assert.equal(resetFailure(failureCode(dropped)).key, 'recovery.resetInterrupted')
+    assert.equal(resetFailure(failureCode(dropped)).retryCode, false)
+    assert.deepEqual(server.writes, ['dek'])
 
     // What the account looks like now: the stored byRecovery is sealed under a
     // code whose verifier never landed, so it opens for nobody, while the
@@ -421,6 +459,48 @@ test('a 409 not-migrated reaches the user as the blocked message, not as a bad c
     assert.equal(resetFailure(failureCode(err)).retryCode, false)
     assert.deepEqual(server.writes, [])
     assert.equal(server.state.authHash, 'old-auth-hash', 'the old password still authenticates')
+  } finally {
+    server.restore()
+  }
+})
+
+test('a 500 from complete must NOT send the user back to re-type a correct code', async () => {
+  // complete.js's try wraps all four writes and its catch answers 500, so a KV
+  // fault on write 2 or 3 is a 500 raised AFTER the record was overwritten and
+  // the verifier rotated. Reporting that as a credential failure sends the user
+  // to a retry that can never succeed: begin now checks a verifier their code
+  // no longer matches, so every attempt answers "did not match" — for ever,
+  // while their old password quietly still works and nothing says so.
+  const dek = generateDek()
+  const sealed = await sealedUnderCode('alice', CODE_A, dek)
+  const server = fakeRecoverServer({
+    recoveryAuth: sealed.recoveryAuth,
+    dek: { byPassword: await wrapDek(await aesKey(), dek), byRecovery: sealed.blob },
+  })
+  try {
+    server.serverErrorAfter(2) // writes 1 and 2 land, then the fault
+    const err = await runReset('alice', CODE_A, 'a-brand-new-password').then(
+      () => null,
+      (e) => e
+    )
+    assert.ok(err, 'the reset reported a failure')
+
+    // The state the user is now in, asserted rather than assumed: their code is
+    // spent. This is what makes "try the code again" a dead end.
+    assert.notEqual(server.state.recoveryAuth, sealed.recoveryAuth, 'the verifier already rotated')
+    assert.deepEqual(server.writes, ['dek', 'recovery'])
+
+    const failure = resetFailure(failureCode(err))
+    assert.equal(
+      failure.retryCode,
+      false,
+      'a partly-applied reset must not blame the recovery code — the retry it invites cannot succeed'
+    )
+    assert.notEqual(failure.key, 'recovery.resetFailed', 'and it must not say "that did not match"')
+    // The message that actually gets them back in: try both passwords, then
+    // mint a fresh code. Distinct from account.serverError, which claims
+    // nothing happened — here writes 1 and 2 demonstrably did.
+    assert.equal(failure.key, 'recovery.resetInterrupted')
   } finally {
     server.restore()
   }

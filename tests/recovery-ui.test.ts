@@ -17,11 +17,12 @@ import assert from 'node:assert/strict'
 import {
   INITIAL_RECOVERY_STATUS,
   recoveryLabelKey,
+  resetFailure,
   shouldOfferSetupPrompt,
 } from '../src/recoveryUi'
 import type { RecoveryStatus } from '../src/recovery'
 
-const ALL_STATUSES: RecoveryStatus[] = ['none', 'unknown', 'incomplete', 'ready']
+const ALL_STATUSES: RecoveryStatus[] = ['none', 'unknown', 'incomplete', 'ready', 'stale']
 
 const inputs = (over: Partial<Parameters<typeof shouldOfferSetupPrompt>[0]> = {}) => ({
   provider: 'local',
@@ -73,6 +74,38 @@ test('a record nobody on this device ever saw offers a REPLACEMENT, not setup', 
 
 test('an acknowledged account is left alone', () => {
   assert.equal(shouldOfferSetupPrompt(inputs({ status: 'ready', acknowledged: true })), null)
+  assert.equal(shouldOfferSetupPrompt(inputs({ status: 'incomplete', acknowledged: true })), null)
+})
+
+test('stale prompts THROUGH an acknowledgement — the one status that does', () => {
+  // `stale` is set only when this session's password had to open the PREVIOUS
+  // generation of the DEK, which is proof that a reset stopped between
+  // complete's writes 1 and 3 and moved the verifier out from under whatever
+  // the user saved. The acknowledgement is exactly what would otherwise keep
+  // them from ever being told, so it must not silence this one.
+  assert.equal(shouldOfferSetupPrompt(inputs({ status: 'stale', acknowledged: true })), 'replace')
+  assert.equal(shouldOfferSetupPrompt(inputs({ status: 'stale', acknowledged: false })), 'replace')
+  // A replacement, never first-time setup: there may well be a live code out
+  // there, and "you have no recovery code" would be false.
+  assert.notEqual(
+    shouldOfferSetupPrompt(inputs({ status: 'stale', acknowledged: true })),
+    shouldOfferSetupPrompt(inputs({ status: 'none', acknowledged: true })),
+  )
+  // Still silenced by the two things that silence everything.
+  assert.equal(shouldOfferSetupPrompt(inputs({ status: 'stale', dismissed: true })), null)
+  assert.equal(shouldOfferSetupPrompt(inputs({ status: 'stale', codeShown: true })), null)
+  assert.equal(shouldOfferSetupPrompt(inputs({ provider: 'google', status: 'stale' })), null)
+})
+
+test('a failure that may have partly landed never blames the recovery code', () => {
+  // The three verdicts that must stay apart. Collapsing any pair of them tells
+  // somebody something false about what just happened to their account.
+  const interrupted = resetFailure('reset-interrupted')
+  assert.equal(interrupted.retryCode, false, 'the code is spent from write 2 onward — a retry cannot succeed')
+  assert.notEqual(interrupted.key, resetFailure('bad-credentials').key)
+  assert.notEqual(interrupted.key, resetFailure('server-error').key, 'may-have-landed is not the same as did-not-run')
+  // begin writes nothing, so its faults really do mean "nothing happened".
+  assert.equal(resetFailure('server-error').retryCode, false)
 })
 
 test('dismissal and a visible code both silence every prompt', () => {

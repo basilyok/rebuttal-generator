@@ -102,6 +102,7 @@ const it = {
   'recovery.statusFinishing': 'Recupero incompleto · completalo',
   'recovery.statusReady': 'Recupero pronto · nuovo codice',
   'recovery.statusUnknown': 'Recupero non verificato · nuovo codice',
+  'recovery.statusStale': 'Il codice di ripristino potrebbe non funzionare · nuovo codice',
   'recovery.resetTitle': 'Reimposta la password',
   'recovery.resetIntro': 'Inserisci il tuo nome utente e il codice di recupero che hai conservato.',
   'recovery.codeLabel': 'Codice di recupero',
@@ -113,6 +114,8 @@ const it = {
   'recovery.resetFailed': 'Questo nome utente e questo codice di recupero non corrispondono.',
   'recovery.resetCorrupt':
     'Il record di ripristino salvato è danneggiato e non può essere aperto. Reinserire il codice non servirà a nulla.',
+  'recovery.resetInterrupted':
+    'Qualcosa ha interrotto la reimpostazione. Prova ad accedere con la nuova password appena scelta: se funziona, la reimpostazione è andata a buon fine. Altrimenti la vecchia password è ancora valida. In ogni caso, genera poi un nuovo codice di ripristino.',
   'recovery.resetBlocked':
     'La configurazione del recupero non è ancora conclusa su questo account. Accedi una volta con la password per completarla.',
   'recovery.forgot': 'Password dimenticata?',
