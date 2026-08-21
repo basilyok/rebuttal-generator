@@ -238,6 +238,12 @@ const de = {
   'reply.noSourcesRetrieved':
     'Für diese Antwort wurden keine Quellen gefunden. Jede Tatsachenbehauptung darin ist ungeprüft — sieh alles nach, worauf du dich stützen willst.',
   'reply.sourcesTitle': 'Quellen',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Kürzere Fassung',
+  'reply.showFull': 'Vollständige Nachricht',
+  'reply.shorterBuilding': 'Wird gekürzt…',
+  'reply.shorterShowing': 'Kopieren übernimmt diese kürzere Fassung',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Bevor du sendest — die schwache Stelle in deiner Position',
@@ -279,6 +285,7 @@ const de = {
   'error.generic': 'Die Antwort konnte nicht geschrieben werden',
   'error.refreshModels': 'Die Modellliste konnte nicht aktualisiert werden',
   'error.briefing': 'Das Argument der Gegenseite konnte nicht erstellt werden.',
+  'error.shorter': 'Die Nachricht konnte nicht gekürzt werden.',
   'error.publish': 'Diese Antwort konnte nicht veröffentlicht werden.',
   'error.loadShared': 'Diese geteilte Antwort konnte nicht geladen werden.',
   'error.article': 'Der Artikel konnte nicht geladen werden. Füg den Text am besten direkt ein.',

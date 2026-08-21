@@ -26,6 +26,7 @@ import {
   messagePrompt,
   honestCheckPrompt,
   theirCasePrompt,
+  shorterPrompt,
   parseMessage,
   parseCheck,
   parseTheirCase,
@@ -140,6 +141,14 @@ interface Reply {
   toVerify?: string[]
   theirCase?: string
   answered?: string[]
+  /**
+   * The one-to-two-sentence version, generated on first toggle and cached here.
+   * Sendable, unlike everything else optional on this object — it is the same
+   * message, condensed, and it has been through the same URL check.
+   */
+  shorter?: string
+  /** URLs the shortening call invented, stripped before it was ever displayed */
+  shorterStrippedUrls?: string[]
   /** True when this reply came from Instant mode (no key, our server paid) */
   instant?: boolean
 }
@@ -366,11 +375,35 @@ export default function App() {
   const [isBriefingOpen, setIsBriefingOpen] = useState(false)
   const [briefingLoading, setBriefingLoading] = useState(false)
   const [briefingError, setBriefingError] = useState('')
+  // Which version of the message is on screen. `false` means the full one; this is
+  // the single switch that both the rendered body and the copy button read.
+  const [showShorter, setShowShorter] = useState(false)
+  const [shorterLoading, setShorterLoading] = useState(false)
+  const [shorterError, setShorterError] = useState('')
   const [inputMode, setInputMode] = useState<'text' | 'url'>('text')
   const [articleUrl, setArticleUrl] = useState('')
   const [article, setArticle] = useState<Article | null>(null)
   const [isFetchingArticle, setIsFetchingArticle] = useState(false)
   const [articleStatus, setArticleStatus] = useState('')
+
+  /** Every path that replaces the reply must also drop the shortened view. */
+  const resetShorter = () => {
+    setShowShorter(false)
+    setShorterError('')
+  }
+
+  /**
+   * The text the user is actually looking at, and therefore the text the copy button
+   * must put on the clipboard. Deriving both from this one expression is the whole
+   * defence against the bug where someone copies what they believe is the short
+   * version and pastes the long one. Falls back to the full message whenever the
+   * short one is not ready — while it is still generating, or after it failed.
+   */
+  const shownMessage = reply ? (showShorter && reply.shorter ? reply.shorter : reply.message) : ''
+
+  /** The invented-URL count for whichever version is on screen, for the same reason. */
+  const shownStrippedUrls =
+    reply && showShorter && reply.shorter ? reply.shorterStrippedUrls ?? [] : reply?.strippedUrls ?? []
 
   // --- history: local-first, encrypted-sync second (see src/history.ts) ---
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([])
@@ -1032,6 +1065,7 @@ export default function App() {
     setShareUrl('')
     setShowClaims(false)
     setIsBriefingOpen(false)
+    resetShorter()
     setLastRun(null)
     setInstantDone(null)
     setReply({
@@ -1143,6 +1177,7 @@ export default function App() {
     setIsBriefingOpen(false)
     setBriefingError('')
     setShowClaims(false)
+    resetShorter()
     setInstantDone(null)
     // A BYOK run makes any earlier Instant quota/exhaustion state stale — a
     // key on file means neither applies anymore.
@@ -1344,6 +1379,59 @@ export default function App() {
     }
   }
 
+  /**
+   * The "Shorter version" toggle. See CONSTITUTION.md rules 1, 4, 6 and 9, and the
+   * addendum in docs/superpowers/specs/2026-08-13-password-recovery-design.md — the
+   * length was chosen deliberately, and `shorterPrompt` carries the reasons.
+   *
+   * Lazy like the briefing: one call on the first open, cached on the reply
+   * afterwards, so a toggle nobody uses costs nothing. Toggling back shows the full
+   * message again; the short version is never the only thing the user can see.
+   */
+  const toggleShorter = async () => {
+    // Instant replies bought one server-paid call and have no key to spend on a
+    // second, exactly as with the briefing — the control stays hidden for them,
+    // and this guard covers any other route in.
+    if (reply?.instant) return
+    const showing = !showShorter
+    setShowShorter(showing)
+    const context = lastRequestRef.current
+    if (!showing || !context || !model || !reply || reply.shorter || shorterLoading) return
+
+    setShorterLoading(true)
+    setShorterError('')
+    try {
+      const result = await generateText({
+        provider,
+        model,
+        apiKey,
+        // Condense the message we already produced, never the original argument: that
+        // is what keeps the citation set fixed and lets the check below be meaningful.
+        system: shorterPrompt(context.promptContext, reply.message),
+        userContent: context.userContent,
+        length: 'detailed',
+        onStatus: setProviderStatus,
+      })
+      const parsed = parseMessage(result.text)
+      // Same gate as the full message, against the same allowed set — a shortening
+      // call is still a model call, and a URL it invents must not reach the clipboard.
+      const verified = stripUnverifiedUrls(parsed.message, reply.citations)
+      if (!verified.text.trim()) throw new Error(t('error.shorter'))
+      setReply((prev) =>
+        prev ? { ...prev, shorter: verified.text, shorterStrippedUrls: verified.strippedUrls } : prev
+      )
+      addUsage(result.usage)
+    } catch (err) {
+      // Fall back to the full message rather than showing an empty send zone: the
+      // long version is the one that is always safe to be looking at.
+      setShowShorter(false)
+      setShorterError(err instanceof Error ? err.message : t('error.shorter'))
+    } finally {
+      setShorterLoading(false)
+      setProviderStatus('')
+    }
+  }
+
   const saveTavilyKey = () => {
     const key = tavilyDraft.trim()
     if (key) localStorage.setItem(TAVILY_KEY_STORAGE, key)
@@ -1356,8 +1444,10 @@ export default function App() {
   const copyMessage = async () => {
     if (!reply) return
     try {
-      // Only the message — never the strategy line, weak-link note, or briefing
-      await navigator.clipboard.writeText(reply.message)
+      // Only the message — never the strategy line, weak-link note, or briefing —
+      // and specifically the version currently on screen. `shownMessage` is the one
+      // place that choice is made, so what is copied cannot drift from what is read.
+      await navigator.clipboard.writeText(shownMessage)
       setMessageCopied(true)
       setTimeout(() => setMessageCopied(false), 2500)
     } catch {
@@ -2497,12 +2587,40 @@ export default function App() {
               </button>
             </div>
             <div className="message-body">
-              <RichText text={reply.message} />
+              <RichText text={shownMessage} />
             </div>
+
+            {/* Instant replies have no key paying for a second call, so this control is
+                hidden for them exactly as the briefing expander is. */}
+            {!reply.instant && (
+              <div className="shorter-row">
+                <button
+                  type="button"
+                  className="shorter-toggle"
+                  onClick={toggleShorter}
+                  aria-pressed={showShorter}
+                  disabled={shorterLoading}
+                >
+                  {showShorter && reply.shorter ? t('reply.showFull') : t('reply.shorter')}
+                  {shorterLoading && <span className="spinner shorter-spinner"></span>}
+                </button>
+                {shorterLoading && <span className="shorter-note">{t('reply.shorterBuilding')}</span>}
+                {/* Says which version is on screen, because the copy button copies THAT
+                    one and the two are very different messages to send. */}
+                {!shorterLoading && showShorter && reply.shorter && (
+                  <span className="shorter-note">{t('reply.shorterShowing')}</span>
+                )}
+                {shorterError && (
+                  <span className="shorter-note shorter-error" role="alert">
+                    ⚠️ {shorterError}
+                  </span>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
-              className={`claim-badge ${reply.strippedUrls.length ? 'claim-badge-warn' : ''}`}
+              className={`claim-badge ${shownStrippedUrls.length ? 'claim-badge-warn' : ''}`}
               onClick={() => setShowClaims(!showClaims)}
               aria-expanded={showClaims}
               aria-controls="claim-panel"
@@ -2512,8 +2630,8 @@ export default function App() {
                 : reply.citations.length === 1
                   ? t('reply.sourcesCitedOne')
                   : t('reply.sourcesCited', { count: reply.citations.length })}
-              {reply.strippedUrls.length === 1 && t('reply.linksRemovedOne')}
-              {reply.strippedUrls.length > 1 && t('reply.linksRemoved', { count: reply.strippedUrls.length })}
+              {shownStrippedUrls.length === 1 && t('reply.linksRemovedOne')}
+              {shownStrippedUrls.length > 1 && t('reply.linksRemoved', { count: shownStrippedUrls.length })}
               {reply.toVerify?.length ? t('reply.toCheck', { count: reply.toVerify.length }) : ''}
             </button>
 
@@ -2521,11 +2639,11 @@ export default function App() {
               <div className="collapsible-clip">
                 <div className="claim-panel-body">
                   {reply.citations.length > 0 && <SourceList citations={reply.citations} title={t('reply.sourcesTitle')} />}
-                  {reply.strippedUrls.length > 0 && (
+                  {shownStrippedUrls.length > 0 && (
                     <p className="claim-warn">
-                      {reply.strippedUrls.length === 1
+                      {shownStrippedUrls.length === 1
                         ? t('reply.claimWarnOne')
-                        : t('reply.claimWarn', { count: reply.strippedUrls.length })}
+                        : t('reply.claimWarn', { count: shownStrippedUrls.length })}
                     </p>
                   )}
                   {reply.toVerify?.length ? (

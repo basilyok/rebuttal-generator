@@ -237,6 +237,12 @@ const it = {
   'reply.noSourcesRetrieved':
     'Per questa risposta non è stata recuperata nessuna fonte. Nessuna affermazione di fatto qui dentro è verificata: controlla tutto ciò su cui pensi di appoggiarti.',
   'reply.sourcesTitle': 'Fonti',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Versione più breve',
+  'reply.showFull': 'Messaggio completo',
+  'reply.shorterBuilding': 'Sto accorciando…',
+  'reply.shorterShowing': 'Copia userà questa versione più breve',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Prima di inviare — il punto debole della tua posizione',
@@ -278,6 +284,7 @@ const it = {
   'error.generic': 'Non è stato possibile scrivere la risposta',
   'error.refreshModels': "Non è stato possibile aggiornare l'elenco dei modelli",
   'error.briefing': "Non è stato possibile costruire la tesi dell'altra persona.",
+  'error.shorter': 'Non è stato possibile accorciare il messaggio.',
   'error.publish': 'Non è stato possibile pubblicare questa risposta.',
   'error.loadShared': 'Non è stato possibile caricare la risposta condivisa.',
   'error.article': "Non è stato possibile caricare l'articolo. Prova a incollare il testo.",

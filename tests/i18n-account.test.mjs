@@ -176,3 +176,53 @@ for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
     }
   })
 }
+
+// --- the "Shorter version" toggle strings -----------------------------------
+//
+// Same method as the block above, and for the same reason: derived from CALL
+// SITES rather than hand-listed, and asserted against the value a lookup
+// returns rather than against a line of source. The recovery scan above only
+// looks for `recovery.*`, so these keys are invisible to it — hence a second
+// scan rather than a second hand-written list.
+//
+// These carry a specific harm the generic checks would miss, so they get their
+// own MUST_DIFFER pair: the toggle's two labels are the only thing telling the
+// user which version is on screen, and Copy copies whichever one that is. A
+// locale that renders "Shorter version" for both states leaves the user pasting
+// a message they did not read.
+const shorterKeys = new Set()
+for (const file of sourceFiles(SRC_DIR)) {
+  const text = readFileSync(file, 'utf8')
+  for (const [, key] of text.matchAll(/t\(\s*'((?:reply\.short|reply\.showFull|error\.shorter)[A-Za-z0-9_.]*)'/g)) {
+    shorterKeys.add(key)
+  }
+}
+const REQUIRED_SHORTER = [...shorterKeys].sort()
+
+test('the derived list found the shorter-version call sites at all', () => {
+  // A regex that matches nothing would make every test below vacuous.
+  for (const key of ['reply.shorter', 'reply.showFull', 'reply.shorterBuilding', 'error.shorter']) {
+    assert.ok(REQUIRED_SHORTER.includes(key), `expected the scan to find ${key}`)
+  }
+})
+
+for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
+  test(`${file} carries the shorter-version strings`, async () => {
+    const strings = await load(file)
+    for (const key of REQUIRED_SHORTER) {
+      const value = strings[key]
+      assert.equal(typeof value, 'string', `${file} is missing ${key}`)
+      assert.ok(value.trim().length > 0, `${file} has an empty ${key}`)
+      if (file !== 'en.ts') assert.notEqual(value, english[key], `${file} left ${key} in English`)
+    }
+  })
+
+  test(`${file} labels the two toggle states differently`, async () => {
+    const strings = await load(file)
+    assert.notEqual(
+      strings['reply.shorter'].trim(),
+      strings['reply.showFull'].trim(),
+      `${file} uses one label for both states of the shorter-version toggle`,
+    )
+  })
+}

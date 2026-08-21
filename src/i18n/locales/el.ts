@@ -241,6 +241,12 @@ const el = {
   'reply.noSourcesRetrieved':
     'Δεν βρέθηκε καμία πηγή για αυτή την απάντηση. Κάθε πραγματολογικός ισχυρισμός μέσα της είναι ανεπιβεβαίωτος — έλεγξε ό,τι σκοπεύεις να επικαλεστείς.',
   'reply.sourcesTitle': 'Πηγές',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Πιο σύντομη εκδοχή',
+  'reply.showFull': 'Πλήρες μήνυμα',
+  'reply.shorterBuilding': 'Συντόμευση…',
+  'reply.shorterShowing': 'Η αντιγραφή θα πάρει αυτή τη σύντομη εκδοχή',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Πριν το στείλεις — το αδύναμο σημείο της δικής σου θέσης',
@@ -282,6 +288,7 @@ const el = {
   'error.generic': 'Δεν μπόρεσα να γράψω την απάντηση',
   'error.refreshModels': 'Δεν μπόρεσα να ανανεώσω τη λίστα μοντέλων',
   'error.briefing': 'Δεν μπόρεσα να φτιάξω το επιχείρημα της άλλης πλευράς.',
+  'error.shorter': 'Δεν μπόρεσα να συντομεύσω το μήνυμα.',
   'error.publish': 'Δεν μπόρεσα να δημοσιεύσω αυτή την απάντηση.',
   'error.loadShared': 'Αυτή η κοινοποιημένη απάντηση δεν φόρτωσε.',
   'error.article': 'Δεν μπόρεσα να φορτώσω το άρθρο. Δοκίμασε να επικολλήσεις το κείμενο.',

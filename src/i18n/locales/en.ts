@@ -238,6 +238,12 @@ const en: Record<string, string> = {
   'reply.noSourcesRetrieved':
     'No sources were retrieved for this reply. Every factual claim in it is unverified — check anything you plan to lean on.',
   'reply.sourcesTitle': 'Sources',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Shorter version',
+  'reply.showFull': 'Full message',
+  'reply.shorterBuilding': 'Shortening…',
+  'reply.shorterShowing': 'Copy will send this shorter version',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Before you send — the weak point in your position',
@@ -279,6 +285,7 @@ const en: Record<string, string> = {
   'error.generic': 'Could not write the reply',
   'error.refreshModels': 'Could not refresh the model list',
   'error.briefing': 'Could not build their case.',
+  'error.shorter': 'Could not shorten the message.',
   'error.publish': 'Could not publish this rebuttal.',
   'error.loadShared': 'That shared rebuttal could not be loaded.',
   'error.article': 'Could not load that article. Try pasting the text instead.',

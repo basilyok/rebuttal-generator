@@ -231,6 +231,12 @@ const fr = {
   'reply.noSourcesRetrieved':
     "Aucune source n'a été récupérée pour cette réponse. Chaque affirmation factuelle qu'elle contient est donc non vérifiée — contrôlez tout ce sur quoi vous comptez vous appuyer.",
   'reply.sourcesTitle': 'Sources',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Version plus courte',
+  'reply.showFull': 'Message complet',
+  'reply.shorterBuilding': 'Raccourcissement…',
+  'reply.shorterShowing': 'Copier reprendra cette version plus courte',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': "⚠️ Avant d'envoyer — le point faible de votre position",
@@ -272,6 +278,7 @@ const fr = {
   'error.generic': "Impossible d'écrire la réponse",
   'error.refreshModels': "Impossible d'actualiser la liste des modèles",
   'error.briefing': 'Impossible de reconstituer son argumentaire.',
+  'error.shorter': 'Impossible de raccourcir le message.',
   'error.publish': 'Impossible de publier cette réponse.',
   'error.loadShared': "Cette réponse partagée n'a pas pu être chargée.",
   'error.article': 'Impossible de charger cet article. Essayez plutôt de coller le texte.',

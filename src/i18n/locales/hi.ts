@@ -229,6 +229,12 @@ const hi = {
   'reply.noSourcesRetrieved':
     'इस जवाब के लिए कोई स्रोत नहीं मिला। इसमें लिखी हर तथ्य वाली बात बिना जाँची हुई है — जिस पर भी टिकने का इरादा हो, उसे पहले खुद देख लें।',
   'reply.sourcesTitle': 'स्रोत',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'छोटा रूप',
+  'reply.showFull': 'पूरा संदेश',
+  'reply.shorterBuilding': 'छोटा किया जा रहा है…',
+  'reply.shorterShowing': 'कॉपी करने पर यही छोटा रूप जाएगा',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ भेजने से पहले — आपकी अपनी बात का कमज़ोर हिस्सा',
@@ -270,6 +276,7 @@ const hi = {
   'error.generic': 'जवाब नहीं लिखा जा सका',
   'error.refreshModels': 'मॉडल की सूची ताज़ा नहीं हो सकी',
   'error.briefing': 'उनका पक्ष तैयार नहीं हो सका।',
+  'error.shorter': 'संदेश छोटा नहीं किया जा सका।',
   'error.publish': 'यह जवाब प्रकाशित नहीं हो सका।',
   'error.loadShared': 'वह साझा किया हुआ जवाब खुल नहीं सका।',
   'error.article': 'वह लेख नहीं खुल सका। इसके बजाय टेक्स्ट कॉपी करके यहाँ डाल दें।',

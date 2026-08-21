@@ -235,6 +235,12 @@ const es = {
   'reply.noSourcesRetrieved':
     'No se encontró ninguna fuente para esta respuesta. Ningún dato que aparezca en ella está verificado: comprueba todo aquello en lo que pienses apoyarte.',
   'reply.sourcesTitle': 'Fuentes',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Versión más corta',
+  'reply.showFull': 'Mensaje completo',
+  'reply.shorterBuilding': 'Acortando…',
+  'reply.shorterShowing': 'Copiar usará esta versión más corta',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Antes de enviar: el punto débil de tu postura',
@@ -276,6 +282,7 @@ const es = {
   'error.generic': 'No se pudo escribir la respuesta',
   'error.refreshModels': 'No se pudo actualizar la lista de modelos',
   'error.briefing': 'No se pudo construir su argumento.',
+  'error.shorter': 'No se pudo acortar el mensaje.',
   'error.publish': 'No se pudo publicar esta réplica.',
   'error.loadShared': 'No se pudo cargar esa réplica compartida.',
   'error.article': 'No se pudo cargar ese artículo. Prueba a pegar el texto.',

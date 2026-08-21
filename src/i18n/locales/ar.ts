@@ -231,6 +231,12 @@ const ar = {
   'reply.noSourcesRetrieved':
     'لم تُجلب أي مصادر لهذا الرد. كل ما فيه من ادعاءات واقعية غير موثَّق — تحقّق من كل ما تنوي الاعتماد عليه.',
   'reply.sourcesTitle': 'المصادر',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'نسخة أقصر',
+  'reply.showFull': 'الرسالة الكاملة',
+  'reply.shorterBuilding': 'جارٍ الاختصار…',
+  'reply.shorterShowing': 'سينسخ الزر هذه النسخة الأقصر',
 
   // --- نقطة الضعف والإحاطة ----------------------------------------------------
   'weakLink.title': '⚠️ قبل أن ترسل — نقطة الضعف في موقفك',
@@ -272,6 +278,7 @@ const ar = {
   'error.generic': 'تعذّرت كتابة الرد',
   'error.refreshModels': 'تعذّر تحديث قائمة النماذج',
   'error.briefing': 'تعذّر بناء حجّة الطرف الآخر.',
+  'error.shorter': 'تعذّر اختصار الرسالة.',
   'error.publish': 'تعذّر نشر هذا الرد.',
   'error.loadShared': 'تعذّر تحميل الرد المشارَك.',
   'error.article': 'تعذّر تحميل هذا المقال. جرّب لصق النص بدلاً من ذلك.',

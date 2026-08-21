@@ -653,6 +653,59 @@ h1 {
   color: #4c5fd7;
 }
 
+/* The "Shorter version" toggle. Deliberately quiet — a secondary text button under
+   the message, not a second call to action competing with Copy. The short version is
+   an option, and the full message is what the app is for. */
+.shorter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.shorter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4c5fd7;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin-inline-start: -6px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.shorter-toggle:hover:not(:disabled) {
+  color: #3446b8;
+}
+
+.shorter-toggle:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.shorter-spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+}
+
+.shorter-note {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.shorter-error {
+  color: #92400e;
+}
+
 .claim-badge {
   margin-top: 16px;
   width: 100%;

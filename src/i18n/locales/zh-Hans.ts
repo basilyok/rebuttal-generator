@@ -225,6 +225,12 @@ const zh_Hans = {
   'reply.noSourcesRetrieved':
     '这封回复没有检索到任何来源。里面的每一句事实性说法都未经核实——凡是你打算靠它站住脚的，先自己查一下。',
   'reply.sourcesTitle': '来源',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': '更短的版本',
+  'reply.showFull': '完整消息',
+  'reply.shorterBuilding': '正在缩短…',
+  'reply.shorterShowing': '复制的就是这个更短的版本',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ 发出去之前——你这一方最弱的地方',
@@ -266,6 +272,7 @@ const zh_Hans = {
   'error.generic': '没能写出这封回复',
   'error.refreshModels': '没能刷新模型列表',
   'error.briefing': '没能整理出对方的说法。',
+  'error.shorter': '没能缩短这条消息。',
   'error.publish': '没能发布这封回复。',
   'error.loadShared': '这个分享出来的回复打不开。',
   'error.article': '这篇文章加载不了。把正文直接粘贴进来试试。',

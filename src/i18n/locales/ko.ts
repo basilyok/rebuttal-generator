@@ -226,6 +226,12 @@ const ko = {
   'reply.noSourcesRetrieved':
     '이 답장에는 가져온 자료가 하나도 없어요. 여기 담긴 사실 주장은 전부 확인되지 않은 것이니, 기대어 말할 부분은 직접 확인해 보세요.',
   'reply.sourcesTitle': '출처',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': '짧은 버전',
+  'reply.showFull': '전체 메시지',
+  'reply.shorterBuilding': '줄이는 중…',
+  'reply.shorterShowing': '복사하면 이 짧은 버전이 복사돼요',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ 보내기 전에 — 내 주장에서 가장 약한 곳',
@@ -267,6 +273,7 @@ const ko = {
   'error.generic': '답장을 쓰지 못했어요',
   'error.refreshModels': '모델 목록을 새로 가져오지 못했어요',
   'error.briefing': '상대의 논리를 정리하지 못했어요.',
+  'error.shorter': '메시지를 줄이지 못했어요.',
   'error.publish': '이 반론을 올리지 못했어요.',
   'error.loadShared': '공유된 반론을 불러오지 못했어요.',
   'error.article': '그 기사를 불러오지 못했어요. 대신 본문을 붙여넣어 보세요.',

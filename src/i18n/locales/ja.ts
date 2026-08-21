@@ -227,6 +227,12 @@ const ja = {
   'reply.noSourcesRetrieved':
     'この返信では出典を 1 件も取得できませんでした。事実にあたる部分はどれも未確認です。よりどころにするつもりのところは、自分で確かめてください。',
   'reply.sourcesTitle': '出典',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': '短い版',
+  'reply.showFull': '全文',
+  'reply.shorterBuilding': '短くしています…',
+  'reply.shorterShowing': 'コピーするとこの短い版になります',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ 送る前に — あなたの主張の弱いところ',
@@ -268,6 +274,7 @@ const ja = {
   'error.generic': '返信を作成できませんでした',
   'error.refreshModels': 'モデル一覧を更新できませんでした',
   'error.briefing': '相手の言い分を組み立てられませんでした。',
+  'error.shorter': 'メッセージを短くできませんでした。',
   'error.publish': 'この反論を公開できませんでした。',
   'error.loadShared': '共有された反論を読み込めませんでした。',
   'error.article': 'その記事を読み込めませんでした。本文を貼り付けてみてください。',
