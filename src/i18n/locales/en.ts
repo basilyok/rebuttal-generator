@@ -79,6 +79,43 @@ const en: Record<string, string> = {
     'That is a different account. To keep accounts separate, this device has been signed out and its history on this device cleared — sign in again to continue.',
   'account.authError': 'Sign-in did not complete. Please try again.',
 
+  // --- recovery --------------------------------------------------------------
+  // Order matters in the dialog: the "you can always make a new one" line comes
+  // before the warning, because that is what makes a one-time display bearable.
+  // The warning itself must stay blunt in every language — a softened
+  // translation would mislead someone about a permanent, unfixable outcome.
+  'recovery.title': 'Your recovery code',
+  'recovery.blurb':
+    'This code is what gets you back into your saved keys and history if you ever forget your password. You will only see it this once, so save it somewhere you will still have it later — a password manager, or on paper.',
+  'recovery.regenerateHint':
+    'You can generate a new code any time while you are signed in, so losing one is a chore rather than a disaster.',
+  'recovery.copy': 'Copy code',
+  'recovery.copied': 'Copied',
+  'recovery.warning':
+    'If you lose both your password and this code, your saved API keys and history cannot be recovered — not by us, not by anyone.',
+  'recovery.confirm': 'I have saved this code somewhere safe',
+  'recovery.done': 'Done',
+  'recovery.working': 'Setting up…',
+  'recovery.setupFailed':
+    'Could not set up your recovery code just now. Please try again, or sign in again if this keeps happening.',
+  'recovery.promptBody':
+    'You do not have a recovery code yet. Without one, forgetting your password means permanently losing your saved keys and history.',
+  'recovery.promptAction': 'Set up recovery',
+  'recovery.promptDismiss': 'Not now',
+  'recovery.statusNone': 'Set up recovery',
+  'recovery.statusFinishing': 'Finishing recovery setup…',
+  'recovery.statusReady': 'Recovery ready · new code',
+  'recovery.statusUnknown': 'Recovery unchecked · new code',
+  'recovery.resetTitle': 'Reset your password',
+  'recovery.resetIntro': 'Enter your username and the recovery code you saved.',
+  'recovery.codeLabel': 'Recovery code',
+  'recovery.newPassword': 'New password',
+  'recovery.resetAction': 'Reset password',
+  'recovery.resetFailed': 'That username and recovery code did not match.',
+  'recovery.resetBlocked':
+    'Recovery setup has not finished on this account yet. Sign in with your password once to finish it.',
+  'recovery.forgot': 'Forgot your password?',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Language',
   'language.switchToEnglish': 'English',

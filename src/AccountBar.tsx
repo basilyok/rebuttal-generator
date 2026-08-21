@@ -17,6 +17,7 @@ import type { TFunction } from './i18n'
 import { SUPPORTED } from './i18n'
 import { LANGUAGE_ENDONYMS } from './lang'
 import type { AuthState } from './auth'
+import type { RecoveryStatus } from './recovery'
 
 interface BarProps {
   t: TFunction
@@ -27,6 +28,14 @@ interface BarProps {
   onSignInClick: () => void
   onSignOut: () => void
   onUnlockClick: () => void
+  /**
+   * Where this account stands on recovery. Four values, and `unknown` is not a
+   * synonym for `none`: it means the check itself failed, so offering
+   * first-time setup on it would be offering it to someone who may already have
+   * a code. See the label below for what each one says.
+   */
+  recoveryStatus: RecoveryStatus
+  onSetupRecovery: () => void
 }
 
 export type VaultUiState = 'none' | 'locked' | 'unlocked' | 'saving'
@@ -40,6 +49,8 @@ export function AccountBar({
   onSignInClick,
   onSignOut,
   onUnlockClick,
+  recoveryStatus,
+  onSetupRecovery,
 }: BarProps) {
   const [showBenefits, setShowBenefits] = useState(false)
 
@@ -80,6 +91,29 @@ export function AccountBar({
               )}
               {vaultState === 'unlocked' && <span className="vault-synced">🔓 {t('account.keysSynced')}</span>}
               {vaultState === 'saving' && <span className="vault-synced">{t('account.syncing')}</span>}
+              {/* Recovery lives beside the vault indicator because it is the
+                  same subject — what happens to the encrypted keys — and it is
+                  a button in EVERY state, never only when unprovisioned.
+                  Setup can be interrupted between storing the wrapped DEK and
+                  registering the code's verifier, which leaves the status
+                  reading `ready` while the issued code opens nothing. No
+                  client-side check can spot that (the endpoint that could would
+                  be an oracle for which accounts have recovery), so the
+                  mitigation is that re-running setup — which rewrites both — is
+                  always one click away. A user holding a dead code always has a
+                  way out. Password accounts only: Google accounts have no
+                  password-derived key to wrap a DEK under. */}
+              {auth.user.provider === 'local' && (
+                <button className="link-button recovery-status" onClick={onSetupRecovery}>
+                  {recoveryStatus === 'ready'
+                    ? t('recovery.statusReady')
+                    : recoveryStatus === 'incomplete'
+                      ? t('recovery.statusFinishing')
+                      : recoveryStatus === 'unknown'
+                        ? t('recovery.statusUnknown')
+                        : t('recovery.statusNone')}
+                </button>
+              )}
               {auth.user.picture && <img className="account-avatar" src={auth.user.picture} alt="" />}
               <span className="account-name">{auth.user.name || auth.user.email}</span>
               <button className="link-button" onClick={onSignOut}>

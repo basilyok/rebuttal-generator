@@ -79,6 +79,39 @@ const it = {
     'Questo è un altro account. Per tenere gli account separati, questo dispositivo è stato disconnesso e la cronologia su questo dispositivo è stata cancellata — accedi di nuovo per continuare.',
   'account.authError': "L'accesso non è stato completato. Riprova.",
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': 'Il tuo codice di recupero',
+  'recovery.blurb':
+    'Questo codice è ciò che ti riporta alle tue chiavi e alla tua cronologia salvate se dimentichi la password. Lo vedrai solo questa volta, quindi conservalo dove lo ritroverai: in un gestore di password, oppure su carta.',
+  'recovery.regenerateHint':
+    "Puoi generare un codice nuovo quando vuoi, finché hai effettuato l'accesso: perderne uno è una seccatura, non un disastro.",
+  'recovery.copy': 'Copia il codice',
+  'recovery.copied': 'Copiato',
+  'recovery.warning':
+    'Se perdi sia la password sia questo codice, le tue chiavi API e la tua cronologia salvate non sono recuperabili — né da noi, né da nessun altro.',
+  'recovery.confirm': 'Ho salvato questo codice in un posto sicuro',
+  'recovery.done': 'Fatto',
+  'recovery.working': 'Configurazione…',
+  'recovery.setupFailed':
+    'Non è stato possibile configurare il codice di recupero in questo momento. Riprova, oppure accedi di nuovo se continua a succedere.',
+  'recovery.promptBody':
+    'Non hai ancora un codice di recupero. Senza, dimenticare la password significa perdere per sempre le chiavi e la cronologia salvate.',
+  'recovery.promptAction': 'Configura il recupero',
+  'recovery.promptDismiss': 'Non ora',
+  'recovery.statusNone': 'Configura il recupero',
+  'recovery.statusFinishing': 'Sto completando la configurazione…',
+  'recovery.statusReady': 'Recupero pronto · nuovo codice',
+  'recovery.statusUnknown': 'Recupero non verificato · nuovo codice',
+  'recovery.resetTitle': 'Reimposta la password',
+  'recovery.resetIntro': 'Inserisci il tuo nome utente e il codice di recupero che hai conservato.',
+  'recovery.codeLabel': 'Codice di recupero',
+  'recovery.newPassword': 'Nuova password',
+  'recovery.resetAction': 'Reimposta la password',
+  'recovery.resetFailed': 'Questo nome utente e questo codice di recupero non corrispondono.',
+  'recovery.resetBlocked':
+    'La configurazione del recupero non è ancora conclusa su questo account. Accedi una volta con la password per completarla.',
+  'recovery.forgot': 'Password dimenticata?',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Lingua',
   'language.switchToEnglish': 'English',

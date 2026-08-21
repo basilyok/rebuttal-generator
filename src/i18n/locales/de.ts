@@ -81,6 +81,39 @@ const de = {
   'account.syncing': 'Wird gespeichert…',
   'account.vaultSaved': 'Deine Schlüssel sind verschlüsselt und gespeichert.',
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': 'Dein Wiederherstellungscode',
+  'recovery.blurb':
+    'Mit diesem Code kommst du wieder an deine gespeicherten Schlüssel und deinen Verlauf, falls du dein Passwort vergisst. Du siehst ihn nur dieses eine Mal — bewahr ihn also dort auf, wo du ihn später noch findest: in einem Passwort-Manager oder auf Papier.',
+  'recovery.regenerateHint':
+    'Solange du angemeldet bist, kannst du jederzeit einen neuen Code erzeugen — einen verlorenen Code zu ersetzen ist also lästig, aber kein Drama.',
+  'recovery.copy': 'Code kopieren',
+  'recovery.copied': 'Kopiert',
+  'recovery.warning':
+    'Wenn du dein Passwort und diesen Code beide verlierst, lassen sich deine gespeicherten API-Schlüssel und dein Verlauf nicht wiederherstellen — von uns nicht und von sonst niemandem.',
+  'recovery.confirm': 'Ich habe diesen Code sicher aufbewahrt',
+  'recovery.done': 'Fertig',
+  'recovery.working': 'Wird eingerichtet…',
+  'recovery.setupFailed':
+    'Der Wiederherstellungscode ließ sich gerade nicht einrichten. Versuch es noch einmal, oder melde dich neu an, wenn es weiter nicht klappt.',
+  'recovery.promptBody':
+    'Du hast noch keinen Wiederherstellungscode. Ohne ihn bedeutet ein vergessenes Passwort, dass deine gespeicherten Schlüssel und dein Verlauf für immer weg sind.',
+  'recovery.promptAction': 'Wiederherstellung einrichten',
+  'recovery.promptDismiss': 'Jetzt nicht',
+  'recovery.statusNone': 'Wiederherstellung einrichten',
+  'recovery.statusFinishing': 'Einrichtung wird abgeschlossen…',
+  'recovery.statusReady': 'Wiederherstellung bereit · neuer Code',
+  'recovery.statusUnknown': 'Wiederherstellung ungeprüft · neuer Code',
+  'recovery.resetTitle': 'Passwort zurücksetzen',
+  'recovery.resetIntro': 'Gib deinen Benutzernamen und den Wiederherstellungscode ein, den du aufbewahrt hast.',
+  'recovery.codeLabel': 'Wiederherstellungscode',
+  'recovery.newPassword': 'Neues Passwort',
+  'recovery.resetAction': 'Passwort zurücksetzen',
+  'recovery.resetFailed': 'Benutzername und Wiederherstellungscode passen nicht zusammen.',
+  'recovery.resetBlocked':
+    'Die Einrichtung der Wiederherstellung ist bei diesem Konto noch nicht fertig. Melde dich einmal mit deinem Passwort an, um sie abzuschließen.',
+  'recovery.forgot': 'Passwort vergessen?',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Sprache',
   'language.switchToEnglish': 'Englisch',

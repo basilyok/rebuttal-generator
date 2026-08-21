@@ -76,6 +76,39 @@ const fr = {
     "Il s'agit d'un autre compte. Pour garder les comptes séparés, cet appareil a été déconnecté et l'historique présent sur cet appareil effacé — reconnectez-vous pour continuer.",
   'account.authError': "La connexion n'a pas abouti. Réessayez.",
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': 'Votre code de récupération',
+  'recovery.blurb':
+    "Ce code est ce qui vous rend l'accès à vos clés et à votre historique enregistrés si vous oubliez votre mot de passe. Vous ne le verrez que cette fois : conservez-le à un endroit où vous le retrouverez plus tard — un gestionnaire de mots de passe, ou sur papier.",
+  'recovery.regenerateHint':
+    'Vous pouvez générer un nouveau code à tout moment tant que vous êtes connecté : en perdre un est donc une corvée, pas une catastrophe.',
+  'recovery.copy': 'Copier le code',
+  'recovery.copied': 'Copié',
+  'recovery.warning':
+    "Si vous perdez à la fois votre mot de passe et ce code, vos clés d'API et votre historique enregistrés seront irrécupérables — ni par nous, ni par personne.",
+  'recovery.confirm': "J'ai enregistré ce code en lieu sûr",
+  'recovery.done': 'Terminé',
+  'recovery.working': 'Configuration…',
+  'recovery.setupFailed':
+    'Impossible de configurer votre code de récupération pour le moment. Réessayez, ou reconnectez-vous si cela persiste.',
+  'recovery.promptBody':
+    "Vous n'avez pas encore de code de récupération. Sans lui, oublier votre mot de passe signifie perdre définitivement vos clés et votre historique enregistrés.",
+  'recovery.promptAction': 'Configurer la récupération',
+  'recovery.promptDismiss': 'Pas maintenant',
+  'recovery.statusNone': 'Configurer la récupération',
+  'recovery.statusFinishing': 'Fin de la configuration…',
+  'recovery.statusReady': 'Récupération prête · nouveau code',
+  'recovery.statusUnknown': 'Récupération non vérifiée · nouveau code',
+  'recovery.resetTitle': 'Réinitialiser votre mot de passe',
+  'recovery.resetIntro': "Saisissez votre nom d'utilisateur et le code de récupération que vous avez conservé.",
+  'recovery.codeLabel': 'Code de récupération',
+  'recovery.newPassword': 'Nouveau mot de passe',
+  'recovery.resetAction': 'Réinitialiser le mot de passe',
+  'recovery.resetFailed': "Ce nom d'utilisateur et ce code de récupération ne correspondent pas.",
+  'recovery.resetBlocked':
+    "La configuration de la récupération n'est pas encore terminée sur ce compte. Connectez-vous une fois avec votre mot de passe pour la terminer.",
+  'recovery.forgot': 'Mot de passe oublié ?',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Langue',
   'language.switchToEnglish': 'English',

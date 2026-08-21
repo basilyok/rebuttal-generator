@@ -80,6 +80,39 @@ const es = {
     'Esa es otra cuenta. Para mantener las cuentas separadas, se cerró la sesión en este dispositivo y se borró el historial guardado en él: inicia sesión de nuevo para continuar.',
   'account.authError': 'El inicio de sesión no se completó. Inténtalo de nuevo.',
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': 'Tu código de recuperación',
+  'recovery.blurb':
+    'Este código es lo que te devuelve el acceso a tus claves y tu historial guardados si algún día olvidas tu contraseña. Solo lo verás esta vez, así que guárdalo en un sitio donde lo sigas teniendo más adelante: un gestor de contraseñas, o en papel.',
+  'recovery.regenerateHint':
+    'Puedes generar un código nuevo cuando quieras mientras tengas la sesión iniciada, así que perder uno es una molestia, no un desastre.',
+  'recovery.copy': 'Copiar código',
+  'recovery.copied': 'Copiado',
+  'recovery.warning':
+    'Si pierdes tu contraseña y también este código, tus claves de API y tu historial guardados no se pueden recuperar: ni por nosotros, ni por nadie.',
+  'recovery.confirm': 'He guardado este código en un lugar seguro',
+  'recovery.done': 'Listo',
+  'recovery.working': 'Configurando…',
+  'recovery.setupFailed':
+    'No se ha podido configurar tu código de recuperación ahora mismo. Inténtalo de nuevo, o vuelve a iniciar sesión si sigue pasando.',
+  'recovery.promptBody':
+    'Todavía no tienes un código de recuperación. Sin él, olvidar tu contraseña significa perder para siempre tus claves y tu historial guardados.',
+  'recovery.promptAction': 'Configurar la recuperación',
+  'recovery.promptDismiss': 'Ahora no',
+  'recovery.statusNone': 'Configurar la recuperación',
+  'recovery.statusFinishing': 'Terminando la configuración…',
+  'recovery.statusReady': 'Recuperación lista · código nuevo',
+  'recovery.statusUnknown': 'Recuperación sin comprobar · código nuevo',
+  'recovery.resetTitle': 'Restablece tu contraseña',
+  'recovery.resetIntro': 'Escribe tu nombre de usuario y el código de recuperación que guardaste.',
+  'recovery.codeLabel': 'Código de recuperación',
+  'recovery.newPassword': 'Contraseña nueva',
+  'recovery.resetAction': 'Restablecer contraseña',
+  'recovery.resetFailed': 'Ese nombre de usuario y ese código de recuperación no coinciden.',
+  'recovery.resetBlocked':
+    'La configuración de la recuperación aún no ha terminado en esta cuenta. Inicia sesión una vez con tu contraseña para terminarla.',
+  'recovery.forgot': '¿Olvidaste tu contraseña?',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Idioma',
   'language.switchToEnglish': 'English',

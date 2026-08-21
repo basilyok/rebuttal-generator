@@ -90,10 +90,12 @@ import {
   isFullyMigrated,
   recoveryStatusFor,
   sealEra,
+  setupRecovery,
   type RecoveryStatus,
 } from './recovery'
 import { AccountBar, VaultDialog, type VaultUiState } from './AccountBar'
 import { AuthDialog, type AuthMode } from './AuthDialog'
+import RecoveryDialog from './RecoveryDialog'
 import {
   register as registerAccount,
   loginLocal,
@@ -301,6 +303,19 @@ export default function App() {
    */
   const dekKeyRef = useRef<CryptoKey | null>(null)
   const [recoveryStatus, setRecoveryStatus] = useState<RecoveryStatus>('none')
+  /**
+   * The code to show, held only for as long as the card is on screen. It is
+   * never written to localStorage, never put in the URL, and never logged: the
+   * whole security model is that the server cannot read it, which is worth
+   * nothing if the client leaves it somewhere durable.
+   */
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null)
+  const [recoveryBusy, setRecoveryBusy] = useState(false)
+  const [recoveryError, setRecoveryError] = useState('')
+  // Per-session, deliberately not persisted: someone who dismissed the prompt
+  // last week and still has no recovery code should be asked again. Dismissing
+  // it costs them nothing, because the account bar keeps the same offer.
+  const [recoveryPromptDismissed, setRecoveryPromptDismissed] = useState(false)
 
   // Always-current translator, for callbacks registered once (speech recognition)
   const tRef = useRef(t)
@@ -517,6 +532,65 @@ export default function App() {
       // means we simply do not know. Either way, leave the DEK unadopted rather
       // than guessing. The next successful sign-in resolves it.
       if (!isStale()) setRecoveryStatus('unknown')
+    }
+  }
+
+  /**
+   * Provision recovery, or re-provision it. One function for both, because
+   * setupRecovery makes no distinction: it reuses the stored DEK when there is
+   * one and mints a fresh code either way, so "set up" and "generate a new
+   * code" are literally the same call. That is what lets the account bar offer
+   * it in every status, including `ready` — see the comment on the button in
+   * AccountBar.tsx for why a `ready` account still needs the offer.
+   *
+   * `username` is passed explicitly on the sign-up path: `auth` is refetched
+   * after this runs, so auth.user is still the pre-registration value (null)
+   * at the moment we need the name to salt the code's derivation with.
+   *
+   * Staleness is measured against localKeyRef, exactly as adoptRecovery does:
+   * if a sign-out or account switch replaced the key mid-flight, every write
+   * below belongs to a session that is gone.
+   */
+  const runRecoverySetup = async (username?: string) => {
+    const name = username ?? (auth.user?.provider === 'local' ? auth.user.name : null)
+    const masterKey = localKeyRef.current
+    if (!name || !masterKey) return
+    // One at a time. Two overlapping runs mint two codes and the second
+    // overwrites the first server-side, so whichever card the user is reading
+    // may be the dead one — and a code that looks fine but opens nothing is the
+    // exact failure this feature exists to prevent. The same guard covers a
+    // click arriving while a code is still on screen unacknowledged.
+    if (recoveryBusy || recoveryCode) return
+    const isStale = () => localKeyRef.current !== masterKey
+    setRecoveryBusy(true)
+    setRecoveryError('')
+    try {
+      const { code, dekKey } = await setupRecovery(name, masterKey)
+      if (isStale()) return
+      dekKeyRef.current = dekKey
+      const migrated = await isFullyMigrated()
+      if (isStale()) return
+      setRecoveryStatus(recoveryStatusFor(true, migrated))
+      // Shown only now, after setupRecovery has resolved. It returns the code
+      // only once BOTH the wrapped-DEK record and the code's verifier have
+      // landed; a code displayed before that would verify against nothing, and
+      // the user would file it away believing it works.
+      setRecoveryCode(code)
+    } catch {
+      // One message for every failure. The distinctions setupRecovery draws
+      // (stale master key, unreadable record, a DEK era already begun) are all
+      // "not right now" from here: none of them is something the user can act
+      // on differently, and the safe next step is the same in each — try again,
+      // or sign in again and try. Nothing has been shown, so nothing false is
+      // believed.
+      if (!isStale()) setRecoveryError(t('recovery.setupFailed'))
+    } finally {
+      // Unconditional, unlike the writes above. `busy` describes this control,
+      // not the account: leaving it stuck true because the session changed
+      // mid-flight would lock the next signed-in user out of setup entirely,
+      // and no run can be in flight to be misrepresented (the guard above
+      // permits only one).
+      setRecoveryBusy(false)
     }
   }
 
@@ -1212,11 +1286,14 @@ export default function App() {
    * path. Google accounts do not reach here at all.
    */
   const handleAuthSubmit = async (username: string, password: string, email: string) => {
+    // Captured before anything can close the dialog: the sign-up path owes the
+    // user a recovery code, and `authDialog` is null by the time we get there.
+    const isSignup = authDialog === 'signup'
     setAuthBusy(true)
     setAuthError('')
     try {
       const result =
-        authDialog === 'signup'
+        isSignup
           ? await registerAccount(username, password, email)
           : await loginLocal(username, password)
       // REFUSE a different account while one is signed in. By this point the
@@ -1257,6 +1334,20 @@ export default function App() {
       // them if it is not.
       const adopted = localKeyRef.current
       await adoptRecovery(() => localKeyRef.current !== adopted)
+      // A brand-new account is provisioned on the spot rather than prompted
+      // later: the master key is in hand, there is no data yet to migrate, and
+      // an account that has never had a code is the one that loses everything
+      // to a forgotten password. Awaited, so dekKeyRef is populated before the
+      // vault effect seals this account's first blob — sealing under the master
+      // key first and migrating a moment later would be two writes and a window
+      // where the vault is v1, for no gain.
+      //
+      // A failure here is not a failed sign-up. runRecoverySetup swallows it
+      // into recoveryError, the account bar keeps offering setup, and the user
+      // is signed in either way.
+      if (isSignup && result.user.provider === 'local') {
+        await runRecoverySetup(result.user.name || username)
+      }
       // The vault effect runs adoptRecovery again when auth.user.id changes.
       // The duplicate fetch is tolerated rather than overlooked: it is one GET,
       // it is idempotent, and the alternative — a flag saying "already done for
@@ -1306,6 +1397,13 @@ export default function App() {
     // device would carry the previous account's data key into their session.
     dekKeyRef.current = null
     setRecoveryStatus('none')
+    // Drop an undismissed code with the session. It belongs to the account that
+    // just left, and the next person on this device must not read it off the
+    // screen. The prompt's dismissal resets too, so the next sign-in is judged
+    // on its own account's status.
+    setRecoveryCode(null)
+    setRecoveryError('')
+    setRecoveryPromptDismissed(false)
     setAuthDialog(null)
     setAuthError('')
     // Wipe the device's history copy as well — entries AND key both leave this
@@ -1490,7 +1588,57 @@ export default function App() {
         onUnlockClick={() =>
           auth.user?.provider === 'local' ? setAuthDialog('signin') : setVaultPrompt('unlock')
         }
+        recoveryStatus={recoveryStatus}
+        onSetupRecovery={() => void runRecoverySetup()}
       />
+
+      {/* Kept next to the bar the action was taken from. The page-wide `error`
+          banner sits far below the fold, which is no use for a control up
+          here. */}
+      {recoveryError && (
+        <div className="error" role="alert">
+          ⚠️ {recoveryError}
+        </div>
+      )}
+
+      {recoveryCode && (
+        <RecoveryDialog
+          t={t}
+          code={recoveryCode}
+          busy={recoveryBusy}
+          onDone={() => setRecoveryCode(null)}
+        />
+      )}
+
+      {/* The nudge for accounts that predate this feature. Shown ONLY on a
+          confirmed `none` — `unknown` means the check failed, and offering
+          first-time setup there would push someone who already has a code
+          toward replacing it over a transient network error. Those users still
+          get the account-bar entry, which says what it does not know.
+          Suppressed while a code is on screen so the two do not stack. */}
+      {auth.user?.provider === 'local' &&
+        recoveryStatus === 'none' &&
+        !recoveryPromptDismissed &&
+        !recoveryCode && (
+          <div className="recovery-prompt" role="status">
+            <p>{t('recovery.promptBody')}</p>
+            <p className="key-help">{t('recovery.regenerateHint')}</p>
+            <div className="controls">
+              <button
+                className="button button-primary"
+                onClick={() => void runRecoverySetup()}
+                disabled={recoveryBusy}
+              >
+                {recoveryBusy ? t('recovery.working') : t('recovery.promptAction')}
+              </button>
+              {/* Dismissible, and it costs nothing to dismiss: the account bar
+                  keeps the same offer for as long as it is unanswered. */}
+              <button className="link-button" onClick={() => setRecoveryPromptDismissed(true)}>
+                {t('recovery.promptDismiss')}
+              </button>
+            </div>
+          </div>
+        )}
 
       {updateAvailable && (
         <div className="success update-banner" role="status">

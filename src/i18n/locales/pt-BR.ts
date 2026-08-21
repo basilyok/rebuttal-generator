@@ -76,6 +76,39 @@ const pt_BR = {
     'Essa é uma conta diferente. Para manter as contas separadas, este dispositivo foi desconectado e o histórico salvo nele foi apagado — entre de novo para continuar.',
   'account.authError': 'Não deu para concluir a entrada. Tente de novo.',
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': 'Seu código de recuperação',
+  'recovery.blurb':
+    'Este código é o que devolve o acesso às suas chaves e ao seu histórico salvos se você esquecer a senha. Você só vai vê-lo desta vez, então guarde num lugar em que ainda o tenha depois: um gerenciador de senhas, ou no papel.',
+  'recovery.regenerateHint':
+    'Você pode gerar um código novo quando quiser enquanto estiver conectado — perder um é chateação, não tragédia.',
+  'recovery.copy': 'Copiar código',
+  'recovery.copied': 'Copiado',
+  'recovery.warning':
+    'Se você perder a senha e também este código, suas chaves de API e seu histórico salvos não podem ser recuperados — nem por nós, nem por ninguém.',
+  'recovery.confirm': 'Guardei este código em um lugar seguro',
+  'recovery.done': 'Pronto',
+  'recovery.working': 'Configurando…',
+  'recovery.setupFailed':
+    'Não deu para configurar seu código de recuperação agora. Tente de novo, ou entre na conta outra vez se continuar assim.',
+  'recovery.promptBody':
+    'Você ainda não tem um código de recuperação. Sem ele, esquecer a senha significa perder para sempre suas chaves e seu histórico salvos.',
+  'recovery.promptAction': 'Configurar recuperação',
+  'recovery.promptDismiss': 'Agora não',
+  'recovery.statusNone': 'Configurar recuperação',
+  'recovery.statusFinishing': 'Terminando a configuração…',
+  'recovery.statusReady': 'Recuperação pronta · novo código',
+  'recovery.statusUnknown': 'Recuperação não verificada · novo código',
+  'recovery.resetTitle': 'Redefinir sua senha',
+  'recovery.resetIntro': 'Digite seu nome de usuário e o código de recuperação que você guardou.',
+  'recovery.codeLabel': 'Código de recuperação',
+  'recovery.newPassword': 'Nova senha',
+  'recovery.resetAction': 'Redefinir senha',
+  'recovery.resetFailed': 'Esse nome de usuário e esse código de recuperação não combinam.',
+  'recovery.resetBlocked':
+    'A configuração da recuperação ainda não terminou nesta conta. Entre uma vez com sua senha para concluir.',
+  'recovery.forgot': 'Esqueceu sua senha?',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Idioma',
   'language.switchToEnglish': 'English',
