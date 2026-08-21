@@ -76,6 +76,55 @@ const pt_BR = {
     'Essa é uma conta diferente. Para manter as contas separadas, este dispositivo foi desconectado e o histórico salvo nele foi apagado — entre de novo para continuar.',
   'account.authError': 'Não deu para concluir a entrada. Tente de novo.',
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': 'Seu código de recuperação',
+  'recovery.blurb':
+    'Este código é o que devolve o acesso às suas chaves e ao seu histórico salvos se você esquecer a senha. Você só vai vê-lo desta vez, então guarde num lugar em que ainda o tenha depois: um gerenciador de senhas, ou no papel.',
+  'recovery.regenerateHint':
+    'Você pode gerar um código novo quando quiser enquanto estiver conectado — perder um é chateação, não tragédia.',
+  'recovery.copy': 'Copiar código',
+  'recovery.copied': 'Copiado',
+  'recovery.warning':
+    'Se você perder a senha e também este código, suas chaves de API e seu histórico salvos não podem ser recuperados — nem por nós, nem por ninguém.',
+  'recovery.confirm': 'Guardei este código em um lugar seguro',
+  'recovery.done': 'Pronto',
+  'recovery.working': 'Configurando…',
+  'recovery.setupFailed':
+    'Não deu para configurar seu código de recuperação agora. Tente de novo, ou entre na conta outra vez se continuar assim.',
+  'recovery.promptBody':
+    'Você ainda não tem um código de recuperação. Sem ele, esquecer a senha significa perder para sempre suas chaves e seu histórico salvos.',
+  'recovery.promptAction': 'Configurar recuperação',
+  'recovery.promptDismiss': 'Agora não',
+  'recovery.statusNone': 'Configurar recuperação',
+  'recovery.statusFinishing': 'Recuperação incompleta · concluir',
+  'recovery.statusReady': 'Recuperação pronta · novo código',
+  'recovery.statusUnknown': 'Recuperação não verificada · novo código',
+  'recovery.statusStale': 'O código de recuperação pode não funcionar · novo código',
+  'recovery.resetTitle': 'Redefinir sua senha',
+  'recovery.resetIntro': 'Digite seu nome de usuário e o código de recuperação que você guardou.',
+  'recovery.codeLabel': 'Código de recuperação',
+  'recovery.newPassword': 'Nova senha',
+  'recovery.resetAction': 'Redefinir senha',
+  'recovery.resetContinue': 'Continuar',
+  'recovery.resetBack': 'Voltar',
+  'recovery.resetWorking': 'Redefinindo…',
+  'recovery.resetFailed': 'Esse nome de usuário e esse código de recuperação não combinam.',
+  'recovery.resetCorrupt':
+    'O registro de recuperação salvo está danificado e não pode ser aberto. Digitar o código de novo não vai adiantar.',
+  'recovery.resetInterrupted':
+    'Algo interrompeu a redefinição. Tente entrar com a nova senha que você acabou de escolher: se funcionar, a redefinição foi concluída. Se não, sua senha antiga continua valendo. De todo modo, gere um novo código de recuperação depois.',
+  'recovery.resetBlocked':
+    'A configuração da recuperação ainda não terminou nesta conta. Entre uma vez com sua senha para concluir.',
+  'recovery.forgot': 'Esqueceu sua senha?',
+  'recovery.leaveConfirm':
+    'Seu código de recuperação ainda está na tela e não será mostrado de novo. Sair sem guardá-lo?',
+  'recovery.replacesOld': 'Isto substitui qualquer código anterior — o que você tinha para de funcionar agora.',
+  'recovery.rotateConfirm':
+    'Gerar um novo código de recuperação? Seu código atual para de funcionar na hora, e você vai precisar guardar o novo.',
+  'recovery.promptLostBody':
+    'Você tem um código de recuperação, mas neste aparelho nunca foi confirmado que você o guardou: se ele se perdeu antes de você anotar, não traz sua conta de volta. Você pode trocá-lo por um novo agora.',
+  'recovery.promptLostAction': 'Gerar um novo código',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Idioma',
   'language.switchToEnglish': 'English',
@@ -183,6 +232,13 @@ const pt_BR = {
   'reply.noSourcesRetrieved':
     'Nenhuma fonte foi encontrada para esta resposta. Cada afirmação de fato aqui está sem verificação — confira qualquer ponto em que você for se apoiar.',
   'reply.sourcesTitle': 'Fontes',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Versão mais curta',
+  'reply.showFull': 'Mensagem completa',
+  'reply.shorterBuilding': 'Encurtando…',
+  'reply.shorterShowing': 'Copiar vai usar esta versão mais curta',
+  'reply.showingFull': 'Mostrando a mensagem completa',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Antes de enviar — o ponto fraco da sua posição',
@@ -224,6 +280,7 @@ const pt_BR = {
   'error.generic': 'Não deu para escrever a resposta',
   'error.refreshModels': 'Não deu para atualizar a lista de modelos',
   'error.briefing': 'Não deu para montar o argumento do outro lado.',
+  'error.shorter': 'Não deu para encurtar a mensagem.',
   'error.publish': 'Não deu para publicar esta resposta.',
   'error.loadShared': 'Não deu para carregar essa resposta compartilhada.',
   'error.article': 'Não deu para carregar esse artigo. Tente colar o texto direto.',

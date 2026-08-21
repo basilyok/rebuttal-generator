@@ -158,7 +158,7 @@ export async function onRequestPost({ request, env }) {
       // and basil can never become two accounts (or two different vault keys).
       name: displayName,
     })
-    sessionId = await createSession(env, user.id)
+    sessionId = await createSession(env, user)
   } catch (err) {
     // A KV outage or a thrown crypto call here would otherwise surface as a
     // bare platform 500 with no JSON body — the client can only render that

@@ -17,6 +17,8 @@ import type { TFunction } from './i18n'
 import { SUPPORTED } from './i18n'
 import { LANGUAGE_ENDONYMS } from './lang'
 import type { AuthState } from './auth'
+import type { RecoveryStatus } from './recovery'
+import { recoveryLabelKey } from './recoveryUi'
 
 interface BarProps {
   t: TFunction
@@ -27,6 +29,16 @@ interface BarProps {
   onSignInClick: () => void
   onSignOut: () => void
   onUnlockClick: () => void
+  /**
+   * Where this account stands on recovery. Four values, and `unknown` is not a
+   * synonym for `none`: it means the check itself failed, so offering
+   * first-time setup on it would be offering it to someone who may already have
+   * a code. See the label below for what each one says.
+   */
+  recoveryStatus: RecoveryStatus
+  /** A setup run is in flight; it costs ~600k PBKDF2 rounds plus two writes. */
+  recoveryBusy: boolean
+  onSetupRecovery: () => void
 }
 
 export type VaultUiState = 'none' | 'locked' | 'unlocked' | 'saving'
@@ -40,6 +52,9 @@ export function AccountBar({
   onSignInClick,
   onSignOut,
   onUnlockClick,
+  recoveryStatus,
+  recoveryBusy,
+  onSetupRecovery,
 }: BarProps) {
   const [showBenefits, setShowBenefits] = useState(false)
 
@@ -80,6 +95,30 @@ export function AccountBar({
               )}
               {vaultState === 'unlocked' && <span className="vault-synced">🔓 {t('account.keysSynced')}</span>}
               {vaultState === 'saving' && <span className="vault-synced">{t('account.syncing')}</span>}
+              {/* Recovery lives beside the vault indicator because it is the
+                  same subject — what happens to the encrypted keys — and it is
+                  a button in EVERY state, never only when unprovisioned.
+                  Setup can be interrupted between storing the wrapped DEK and
+                  registering the code's verifier, which leaves the status
+                  reading `ready` while the issued code opens nothing. No
+                  client-side check can spot that (the endpoint that could would
+                  be an oracle for which accounts have recovery), so the
+                  mitigation is that re-running setup — which rewrites both — is
+                  always one click away. A user holding a dead code always has a
+                  way out. Password accounts only: Google accounts have no
+                  password-derived key to wrap a DEK under. */}
+              {auth.user.provider === 'local' && (
+                <button
+                  className="link-button recovery-status"
+                  onClick={onSetupRecovery}
+                  // Setup is a second of PBKDF2 and two network writes. Without
+                  // this the control looks inert and invites the second click
+                  // the run guard then has to refuse.
+                  disabled={recoveryBusy}
+                >
+                  {recoveryBusy ? t('recovery.working') : t(recoveryLabelKey(recoveryStatus))}
+                </button>
+              )}
               {auth.user.picture && <img className="account-avatar" src={auth.user.picture} alt="" />}
               <span className="account-name">{auth.user.name || auth.user.email}</span>
               <button className="link-button" onClick={onSignOut}>

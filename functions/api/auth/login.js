@@ -205,7 +205,7 @@ export async function onRequestPost({ request, env }) {
     if (!valid || !recordRaw) return failure()
 
     user = await upsertUser(env, { provider: 'local', subject: username, refreshAfterMs: REFRESH_AFTER_MS })
-    sessionId = await createSession(env, user.id)
+    sessionId = await createSession(env, user)
   } catch (err) {
     // Same idiom as google/callback.js and register.js: an unexpected KV or
     // crypto failure gets our own JSON shape, not a bare platform 500. But

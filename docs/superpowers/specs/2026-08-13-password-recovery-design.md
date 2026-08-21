@@ -76,11 +76,13 @@ record, because reset rewrites the two independently and the write ordering in
 The user record gains `credentialVersion` (integer, defaulting to 0 when
 absent, so existing records need no backfill).
 
-**Recovery code format:** 128 bits of entropy, Crockford base32, displayed as
-`XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`. Crockford because it excludes I/L/O/U, so the
-code survives being read off a screen and typed by hand — which is how it will
-actually be used. 128 bits keeps offline attack infeasible even against someone
-holding the wrapped blob.
+**Recovery code format:** 24 Crockford base32 characters — six groups of four,
+displayed as `XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`. At 5 bits per character that is
+**120 bits** of entropy. Crockford because it excludes I/L/O/U, so the code
+survives being read off a screen and typed by hand, which is how it will
+actually be used. 120 bits keeps offline attack infeasible even against someone
+holding the wrapped blob; the length was chosen for legibility, and the entropy
+follows from it rather than the other way round.
 
 ## The recovery verifier (correction to an earlier draft)
 
@@ -101,7 +103,7 @@ recoveryAuth = PBKDF2(recoveryKey, salt = recoveryCode, 1)
 stored as `hashAuth(recoveryAuth)` through the existing
 `functions/_lib/password.js` helper and checked with the same `verifyAuth`.
 The recovery code itself still never reaches the server, and a KV leak yields a
-verifier useless without the 128-bit code behind it.
+verifier useless without the 120-bit code behind it.
 
 This also improves the read half: `byRecovery` is released only to a request
 that has already proven possession, so the blob cannot be harvested.
@@ -140,20 +142,47 @@ code would be the wrong default, and rotation is nearly free since that record
 is being rewritten regardless.
 
 **Write order inside `complete` is load-bearing.** KV offers no transaction, so
-the three writes go: **`dek:` first, then `recovery:`, then `password:` last.**
-The password record is what makes the new password usable, so it must be the
-last thing to land — until it does, the account remains entirely on its old
-credentials and every earlier write is inert. If any write fails partway, the
-old password still works and its `byPassword` copy still unwraps `DEK`; the
-user retries and nothing is lost. Writing `password:` first would leave a new
-password whose wrapped `DEK` was never stored — an account that authenticates
-but cannot decrypt anything.
+the writes go: **`dek:` first, then `recovery:`, then `password:`, then the
+`credentialVersion` bump.** The password record is what makes the new password
+usable, so it must land after the material it unlocks. Writing `password:`
+first would leave a new password whose wrapped `DEK` was never stored — an
+account that authenticates but cannot decrypt anything.
 
-One consequence to accept: a failure between the `dek:` and `recovery:` writes
-leaves the new `byRecovery` stored against the *old* verifier, so the new
-recovery code will not work while the old one still does. The old password and
-old code both still function, so the account is intact and a retry converges —
-but the plan must not display the new code until `complete` returns success.
+> **Correction (2026-08-13, found in Task 3's code review).** An earlier version
+> of this paragraph claimed every write before `password:` is "inert," and that
+> a partial failure leaves the old password working "so the account is intact."
+> **That was wrong, and it would have shipped permanent data loss.**
+>
+> Write 1 does not add the new wrapped copies — it *overwrites* the old ones.
+> So between write 1 and write 2 the old password still authenticates and the
+> old code still verifies, but `byPassword` is now sealed under the new password
+> key and `byRecovery` under the new code. Neither credential the user holds can
+> open the DEK, and the new code cannot even pass `begin` because its verifier
+> has not landed yet. A client that crashed, lost the network, or closed the tab
+> in that window leaves a vault nobody can ever open.
+>
+> The error was conflating *authentication* with *decryption*: the old
+> credentials keep signing in, which is what made the claim look true, while the
+> ciphertext they point at has already moved to the new key era.
+
+**The fix: `dek:` carries both key eras.** `complete` reads the existing record
+and write 1 stores the new pair alongside the old one under `previous`:
+
+```json
+{ "byPassword": "…new…", "byRecovery": "…new…", "previous": { "byPassword": "…old…", "byRecovery": "…old…" }, "version": 1 }
+```
+
+Clients try the current pair and fall back to `previous`. Every intermediate
+state is then openable by some credential the user actually holds, and the
+ordering argument becomes true rather than merely stated. `previous` is pruned
+on the next successful `complete` or `PUT /api/dek`. Cost: one extra KV read on
+an operation that happens roughly once per account per lifetime.
+
+**Rotation is mandatory, not optional.** `recoveryAuthNext` is a required field.
+An optional-rotation path would leave a captured `complete` body replayable
+indefinitely (without rotation the verifier never moves), and it would make the
+write sequence conditional on a request field — the one thing the ordering
+argument cannot tolerate.
 
 **Existing sessions die on reset.** Sessions are `session:<id>` with no
 per-user index, so they cannot be enumerated. Instead the user record carries
@@ -256,3 +285,61 @@ should treat translation as its own task.
   credential, and rotated on every use.
 - **Both secrets lost is unrecoverable, by design.** No mitigation exists or
   should exist; the UI must say so plainly.
+
+---
+
+# Addendum: the "Shorter version" toggle (2026-08-14)
+
+Scope note: this is an unrelated feature, shipped on the same branch by decision,
+because the two touch disjoint code (prompts and reply UI versus crypto and auth)
+and one walkthrough is cheaper than two.
+
+## What it is
+
+A toggle on a generated reply that produces a **one-to-two-sentence** version plus
+the reference links from the original. Lazy: one extra model call, only on click.
+
+## The tension, recorded rather than re-argued
+
+The app deleted its old "brief, punchy rebuttal" mode on purpose — that zinger was
+the only thing visible without a click, so it was the thing most likely to get
+sent. Two constitution rules pull against a very short reply:
+
+- **Rule 1** (evidence is the active ingredient). Costello et al.: remove the
+  counter-evidence and the persuasive effect vanishes entirely. At one or two
+  sentences the evidence can only survive as a *specific particular* — a number, a
+  date, a named source — not as a summary of one.
+- **Rule 4** (never leave a concession standing). O'Keefe 1999, Allen 1991:
+  non-refutational two-sided messages underperform one-sided ones, so a shrink
+  that keeps "you're right that X" and drops the answer is *worse than not
+  conceding at all*.
+
+And one rule pulls **for** it: **rule 9** — "sized to their register… do not answer
+two sentences with an essay." A short reply is not a violation; it is what rule 9
+asks for when the venue is a text message or a comment.
+
+The 1–2 sentence target was chosen by the user with the evidence risk stated. It
+is not a misunderstanding to be corrected later.
+
+## What the design does about it
+
+- **Concessions are dropped entirely, never orphaned.** At this length there is no
+  room to answer one, so rule 4 is honoured by omission rather than by half.
+- **The surviving sentence must carry a checkable particular**, not gesture at one.
+  "Deaths fell 40% after the 2019 change" is a sentence with evidence in it;
+  "You're wrong, see the link" is not. This is the difference between short and
+  empty, and it is the prompt's main job.
+- **No zinger.** Rules 6 and 9 still bind: no sarcasm, no rhetorical question, no
+  closing flourish, nothing that invites a volley. Short is not punchy — the
+  prompt must say so, because "make it shorter" reads as "make it snappier" to a
+  model unless told otherwise.
+- **Condense the produced message, do not re-write from the argument.** This keeps
+  the citation set fixed, so the short text runs through the same
+  `stripUnverifiedUrls` validation and cannot become a fabrication hole.
+- The long version stays one click away; the weak-link note and briefing are
+  unchanged and remain private.
+
+## Naming
+
+**"Shorter version."** Deliberately not "Concise", "TL;DR", "Punchy" or "Sharp" —
+those promise wit, and wit is the failure mode.

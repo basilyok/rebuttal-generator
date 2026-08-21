@@ -81,6 +81,55 @@ const de = {
   'account.syncing': 'Wird gespeichert…',
   'account.vaultSaved': 'Deine Schlüssel sind verschlüsselt und gespeichert.',
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': 'Dein Wiederherstellungscode',
+  'recovery.blurb':
+    'Mit diesem Code kommst du wieder an deine gespeicherten Schlüssel und deinen Verlauf, falls du dein Passwort vergisst. Du siehst ihn nur dieses eine Mal — bewahr ihn also dort auf, wo du ihn später noch findest: in einem Passwort-Manager oder auf Papier.',
+  'recovery.regenerateHint':
+    'Solange du angemeldet bist, kannst du jederzeit einen neuen Code erzeugen — einen verlorenen Code zu ersetzen ist also lästig, aber kein Drama.',
+  'recovery.copy': 'Code kopieren',
+  'recovery.copied': 'Kopiert',
+  'recovery.warning':
+    'Wenn du dein Passwort und diesen Code beide verlierst, lassen sich deine gespeicherten API-Schlüssel und dein Verlauf nicht wiederherstellen — von uns nicht und von sonst niemandem.',
+  'recovery.confirm': 'Ich habe diesen Code sicher aufbewahrt',
+  'recovery.done': 'Fertig',
+  'recovery.working': 'Wird eingerichtet…',
+  'recovery.setupFailed':
+    'Der Wiederherstellungscode ließ sich gerade nicht einrichten. Versuch es noch einmal, oder melde dich neu an, wenn es weiter nicht klappt.',
+  'recovery.promptBody':
+    'Du hast noch keinen Wiederherstellungscode. Ohne ihn bedeutet ein vergessenes Passwort, dass deine gespeicherten Schlüssel und dein Verlauf für immer weg sind.',
+  'recovery.promptAction': 'Wiederherstellung einrichten',
+  'recovery.promptDismiss': 'Jetzt nicht',
+  'recovery.statusNone': 'Wiederherstellung einrichten',
+  'recovery.statusFinishing': 'Wiederherstellung unfertig · abschließen',
+  'recovery.statusReady': 'Wiederherstellung bereit · neuer Code',
+  'recovery.statusUnknown': 'Wiederherstellung ungeprüft · neuer Code',
+  'recovery.statusStale': 'Wiederherstellungscode womöglich ungültig · neuer Code',
+  'recovery.resetTitle': 'Passwort zurücksetzen',
+  'recovery.resetIntro': 'Gib deinen Benutzernamen und den Wiederherstellungscode ein, den du aufbewahrt hast.',
+  'recovery.codeLabel': 'Wiederherstellungscode',
+  'recovery.newPassword': 'Neues Passwort',
+  'recovery.resetAction': 'Passwort zurücksetzen',
+  'recovery.resetContinue': 'Weiter',
+  'recovery.resetBack': 'Zurück',
+  'recovery.resetWorking': 'Wird zurückgesetzt…',
+  'recovery.resetFailed': 'Benutzername und Wiederherstellungscode passen nicht zusammen.',
+  'recovery.resetCorrupt':
+    'Der gespeicherte Wiederherstellungsdatensatz ist beschädigt und lässt sich nicht öffnen. Den Code erneut einzugeben hilft nicht.',
+  'recovery.resetInterrupted':
+    'Die Zurücksetzung wurde unterbrochen. Versuchen Sie, sich mit dem soeben gewählten neuen Passwort anzumelden — klappt das, ist die Zurücksetzung durchgelaufen. Andernfalls gilt weiterhin Ihr altes Passwort. Erzeugen Sie danach in jedem Fall einen neuen Wiederherstellungscode.',
+  'recovery.resetBlocked':
+    'Die Einrichtung der Wiederherstellung ist bei diesem Konto noch nicht fertig. Melde dich einmal mit deinem Passwort an, um sie abzuschließen.',
+  'recovery.forgot': 'Passwort vergessen?',
+  'recovery.leaveConfirm':
+    'Dein Wiederherstellungscode steht noch auf dem Bildschirm und wird nicht wieder angezeigt. Weggehen, ohne ihn zu speichern?',
+  'recovery.replacesOld': 'Das ersetzt jeden früheren Code — der bisherige funktioniert ab jetzt nicht mehr.',
+  'recovery.rotateConfirm':
+    'Einen neuen Wiederherstellungscode erzeugen? Dein aktueller Code funktioniert sofort nicht mehr, und du musst den neuen aufbewahren.',
+  'recovery.promptLostBody':
+    'Du hast einen Wiederherstellungscode, aber auf diesem Gerät wurde nie bestätigt, dass du ihn gespeichert hast — ging er verloren, bevor du ihn notiert hast, holt er dir dein Konto nicht zurück. Du kannst ihn jetzt durch einen neuen ersetzen.',
+  'recovery.promptLostAction': 'Neuen Code erzeugen',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Sprache',
   'language.switchToEnglish': 'Englisch',
@@ -189,6 +238,13 @@ const de = {
   'reply.noSourcesRetrieved':
     'Für diese Antwort wurden keine Quellen gefunden. Jede Tatsachenbehauptung darin ist ungeprüft — sieh alles nach, worauf du dich stützen willst.',
   'reply.sourcesTitle': 'Quellen',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Kürzere Fassung',
+  'reply.showFull': 'Vollständige Nachricht',
+  'reply.shorterBuilding': 'Wird gekürzt…',
+  'reply.shorterShowing': 'Kopieren übernimmt diese kürzere Fassung',
+  'reply.showingFull': 'Vollständige Nachricht wird angezeigt',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Bevor du sendest — die schwache Stelle in deiner Position',
@@ -230,6 +286,7 @@ const de = {
   'error.generic': 'Die Antwort konnte nicht geschrieben werden',
   'error.refreshModels': 'Die Modellliste konnte nicht aktualisiert werden',
   'error.briefing': 'Das Argument der Gegenseite konnte nicht erstellt werden.',
+  'error.shorter': 'Die Nachricht konnte nicht gekürzt werden.',
   'error.publish': 'Diese Antwort konnte nicht veröffentlicht werden.',
   'error.loadShared': 'Diese geteilte Antwort konnte nicht geladen werden.',
   'error.article': 'Der Artikel konnte nicht geladen werden. Füg den Text am besten direkt ein.',

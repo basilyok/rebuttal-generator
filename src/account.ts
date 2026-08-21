@@ -18,6 +18,7 @@
 // am I" (here) and "what can decrypt" (vault.ts) separable concerns.
 
 import type { AccountUser } from './auth'
+import type { VaultBlob } from './vault'
 
 /**
  * Frozen, not tunable. This value is baked into every stored authHash and every
@@ -105,7 +106,15 @@ const toBase64 = (bytes: Uint8Array): string => {
   return btoa(binary)
 }
 
-async function pbkdf2(secret: BufferSource, salt: BufferSource, iterations: number): Promise<ArrayBuffer> {
+/**
+ * Exported for src/recovery.ts, which derives its own credentials with the
+ * same construction. Shared rather than copied on purpose: this is the one
+ * helper where a future hardening (a different hash, a wider output) must
+ * reach both paths at once. A second copy would let the recovery derivation
+ * drift quietly out of step with the password one, and the only symptom would
+ * be a docblock that claims equal strength while no longer delivering it.
+ */
+export async function pbkdf2(secret: BufferSource, salt: BufferSource, iterations: number): Promise<ArrayBuffer> {
   const material = await crypto.subtle.importKey('raw', secret, 'PBKDF2', false, ['deriveBits'])
   return crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, material, 256)
 }
@@ -212,4 +221,144 @@ export async function loginLocal(username: string, password: string): Promise<Au
   // than re-deriving "trim + lowercase" ad hoc at each call site.
   const user = await postAuth('/api/auth/login', { username: normalizeUsername(username), authHash })
   return { user, masterKeyBytes }
+}
+
+// --- password reset by recovery code ----------------------------------------
+//
+// Two calls, and the split is the safety property. `begin` writes nothing: it
+// only proves possession of the code and hands back the DEK copy that code
+// opens, so every failure up to and including it leaves the account exactly as
+// it was — the old password still signs in, the old code still verifies.
+// `complete` is where anything changes, and it changes everything at once.
+//
+// Neither the code nor the new password appears here. What crosses the wire is
+// `recoveryAuth` (a one-way function of the code), `authHash` (a one-way
+// function of the new password) and ciphertext this server cannot open.
+
+/**
+ * The account is not in a state a reset can safely rewrite — some blob is still
+ * sealed under the master key this reset is about to replace.
+ *
+ * Raised from exactly one place: recoverComplete, mapping the endpoint's 409
+ * `not-migrated`. complete answers that after the recovery code has verified
+ * and before its first write, having read vault: and history: itself.
+ *
+ * There is no client-side counterpart, and runReset carries a comment saying
+ * why one must not be re-added: a signed-out caller's blob reads are 401s that
+ * every transport here folds into "absent", so the check it looks like it is
+ * making is not one it can make.
+ */
+export class RecoveryBlockedError extends AccountError {
+  constructor() {
+    super('recovery-blocked')
+  }
+}
+
+/**
+ * The reset MAY have partly landed, and we cannot tell.
+ *
+ * Raised by runReset for any failure of recoverComplete() that is not one of
+ * the endpoint's own pre-write refusals. There is no way to narrow it from the
+ * client: complete.js has no transaction, its four writes can stop after any
+ * one of them, and both a dropped connection and its own 500 look identical
+ * whether they arrived before write 1 or after write 3.
+ *
+ * The distinction is not academic. After a stop at write 3 the user's NEW
+ * password already works and they have just typed it; after a stop at write 1
+ * their old one does. "Try again" is wrong for both, and "wrong code" is worse
+ * than wrong — the code is spent from write 2 onward, so the retry it invites
+ * can only fail. What the user can actually do is try both passwords and then
+ * mint a fresh code, which is what recovery.resetInterrupted tells them.
+ */
+export class ResetInterruptedError extends AccountError {
+  constructor() {
+    super('reset-interrupted')
+  }
+}
+
+/**
+ * Both generations of the recovery-wrapped DEK copy, exactly as begin serves
+ * them.
+ *
+ * `previousByRecovery` is not an optimisation and callers may not drop it. A
+ * reset interrupted between complete's first and second writes leaves the
+ * CURRENT byRecovery sealed under a code whose verifier never landed — so the
+ * code the caller just proved possession of can only open the previous copy.
+ * A caller that reads only `byRecovery` hands that user ciphertext they cannot
+ * open and calls their correct code wrong. See unwrapDekWithPrevious().
+ */
+export interface RecoveredDek {
+  byRecovery: VaultBlob
+  previousByRecovery: VaultBlob | null
+}
+
+/** Step one: prove the code and receive the DEK copies it may open. */
+export async function recoverBegin(username: string, recoveryAuth: string): Promise<RecoveredDek> {
+  const response = await fetch('/api/auth/recover/begin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ username: normalizeUsername(username), recoveryAuth }),
+  })
+  const data = await response.json().catch(() => null)
+  if (response.ok && data?.byRecovery) {
+    return {
+      byRecovery: data.byRecovery as VaultBlob,
+      // `?? null` rather than a presence check: an older deployment that does
+      // not serve the field at all and one with no previous generation are the
+      // same thing to the caller — no fallback available.
+      previousByRecovery: (data.previousByRecovery ?? null) as VaultBlob | null,
+    }
+  }
+  if (response.status === 429) throw new RateLimitedError()
+  // A fault is not a credential verdict. begin writes nothing, so a 500 here
+  // means the account is untouched and the code is still whatever it was —
+  // reporting it as "did not match" would tell someone holding a correct code
+  // that it is wrong.
+  if (data?.code === 'server-error' || response.status >= 500) throw new AuthServerError()
+  // One error for a wrong code, an unknown username, and an account with no DEK
+  // record — matching the endpoint, which answers all three identically on
+  // purpose. Mapping them apart here would invent a distinction the response
+  // does not carry.
+  throw new BadCredentialsError()
+}
+
+/** Step two: install the new password, the re-wrapped DEK, and the rotated code. */
+export async function recoverComplete(args: {
+  username: string
+  recoveryAuth: string
+  authHash: string
+  recoveryAuthNext: string
+  dek: { byPassword: VaultBlob; byRecovery: VaultBlob }
+}): Promise<void> {
+  const response = await fetch('/api/auth/recover/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ ...args, username: normalizeUsername(args.username) }),
+  })
+  if (response.ok) return
+  if (response.status === 429) throw new RateLimitedError()
+  const data = await response.json().catch(() => null)
+  // The one refusal a user can act on differently: some blob is still v1, and
+  // signing in once with the old password — which still works, because this
+  // endpoint refused before its first write — is what finishes the migration
+  // and makes a reset safe. Told apart from a credential failure only because
+  // the server tells them apart, and it can only do that after verifying.
+  if (data?.code === 'not-migrated') throw new RecoveryBlockedError()
+  // A FAULT, NOT A VERDICT — and on this endpoint specifically, a fault whose
+  // blast radius is unknown. complete.js wraps ALL FOUR of its writes in one
+  // try and answers 500 from the catch, so a KV failure on write 2 or 3 arrives
+  // here long after the DEK record was overwritten and the verifier rotated.
+  // Calling that 'bad-credentials' was this transport's worst bug: it sends the
+  // user back to re-enter a code that was correct, their retry meets a verifier
+  // that has already moved, and every attempt from then on answers "did not
+  // match" — while their old password still works and nothing in the UI ever
+  // says so. runReset turns this into a reset-interrupted, which is the message
+  // that actually helps.
+  if (data?.code === 'server-error' || response.status >= 500) throw new AuthServerError()
+  // What is left is 401 bad-credentials, and the endpoint verifies before its
+  // first write — so this branch, unlike the one above, really does mean
+  // nothing happened.
+  throw new BadCredentialsError()
 }

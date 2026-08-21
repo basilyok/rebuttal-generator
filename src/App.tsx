@@ -26,6 +26,7 @@ import {
   messagePrompt,
   honestCheckPrompt,
   theirCasePrompt,
+  shorterPrompt,
   parseMessage,
   parseCheck,
   parseTheirCase,
@@ -59,6 +60,7 @@ import {
 } from './i18n'
 import { detectLanguage, isRtl, displayLanguageName } from './lang'
 import { fetchAuthState, signIn, signOut, saveLanguagePreference, authErrorMessage, SIGNED_OUT, type AuthState } from './auth'
+import { shownVersion, applyShorterResult, applyBriefingResult } from './replyView'
 import { generateInstant, InstantQuotaError, InstantTurnstileError } from './instant'
 import { getTurnstileToken } from './turnstile'
 import {
@@ -71,15 +73,37 @@ import {
   resealWithDeviceKey,
   forgetDeviceKey,
   adoptKey,
-  unlockWithKey,
   sealJson,
+  openBlob,
   cachedKey,
   WrongPassphraseError,
+  // Only the DEK tag is named here now: every seal site takes its era from
+  // sealEra() rather than choosing a constant, which is the point of the helper.
+  BLOB_VERSION_DEK,
+  type BlobKeys,
   type KeyBundle,
   type VaultBlob,
 } from './vault'
+import {
+  fetchDek,
+  unwrapDekWithPrevious,
+  importWrappingKey,
+  ensureMigrated,
+  isFullyMigrated,
+  recoveryStatusFor,
+  sealEra,
+  setupRecovery,
+  type RecoveryStatus,
+} from './recovery'
+import {
+  INITIAL_RECOVERY_STATUS,
+  shouldOfferSetupPrompt,
+  hasAcknowledgedRecovery,
+  markRecoveryAcknowledged,
+} from './recoveryUi'
 import { AccountBar, VaultDialog, type VaultUiState } from './AccountBar'
 import { AuthDialog, type AuthMode } from './AuthDialog'
+import RecoveryDialog from './RecoveryDialog'
 import {
   register as registerAccount,
   loginLocal,
@@ -106,6 +130,11 @@ import {
  * everything else is private briefing for the sender. See CONSTITUTION.md.
  */
 interface Reply {
+  /**
+   * Identifies this generation, so an async call that started against an earlier
+   * reply cannot write its result onto a later one. See `applyShorterResult`.
+   */
+  id: number
   message: string
   strategy: string
   context: { goal: string; audience: string; length: string } | null
@@ -118,9 +147,26 @@ interface Reply {
   toVerify?: string[]
   theirCase?: string
   answered?: string[]
+  /**
+   * The one-to-two-sentence version, generated on first toggle and cached here.
+   * Sendable, unlike everything else optional on this object — it is the same
+   * message, condensed, and it has been through the same URL check.
+   */
+  shorter?: string
+  /** URLs the shortening call invented, stripped before it was ever displayed */
+  shorterStrippedUrls?: string[]
   /** True when this reply came from Instant mode (no key, our server paid) */
   instant?: boolean
 }
+
+/**
+ * Monotonic, module-scoped: every reply the app ever shows gets a distinct id.
+ * Not a hash of the message — regenerating the same argument can legitimately
+ * produce identical text, and two replies that read alike must still be told
+ * apart by anything holding a reference to one of them.
+ */
+let replyIdCounter = 0
+const nextReplyId = () => ++replyIdCounter
 
 const keyStorageId = (providerId: string) => `api_key_${providerId}`
 
@@ -278,6 +324,61 @@ export default function App() {
   // A password account's vault key, held for this session — still works where
   // IndexedDB is blocked and the persistent cache is a no-op. Cleared on sign-out.
   const localKeyRef = useRef<CryptoKey | null>(null)
+  /**
+   * The account's DEK, unwrapped for this session. Present only once recovery
+   * has been provisioned, and only for password accounts. While it is set it is
+   * the key EVERY new write uses — a reset replaces the master key and keeps
+   * this one, so a blob sealed under the master key after migration would be
+   * the thing a reset strands. Cleared on sign-out beside localKeyRef.
+   */
+  const dekKeyRef = useRef<CryptoKey | null>(null)
+  // `unknown`, not `none` — see INITIAL_RECOVERY_STATUS. `none` is a claim the
+  // server has made; before the first fetchDek() we have not heard it.
+  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryStatus>(INITIAL_RECOVERY_STATUS)
+  /**
+   * The code to show, held only for as long as the card is on screen. It is
+   * never written to localStorage, never put in the URL, and never logged: the
+   * whole security model is that the server cannot read it, which is worth
+   * nothing if the client leaves it somewhere durable.
+   */
+  const [recoveryCode, setRecoveryCode] = useState<{ code: string; replacesOld: boolean } | null>(null)
+  const [recoveryBusy, setRecoveryBusy] = useState(false)
+  const [recoveryError, setRecoveryError] = useState('')
+  // Per-session, deliberately not persisted: someone who dismissed the prompt
+  // last week and still has no recovery code should be asked again. Dismissing
+  // it costs them nothing, because the account bar keeps the same offer.
+  const [recoveryPromptDismissed, setRecoveryPromptDismissed] = useState(false)
+  /**
+   * The reset card is open. Separate from `authDialog` rather than a third mode
+   * of it: this flow signs nobody in until it has finished, it owns two steps of
+   * its own state, and the one thing it must never become is a place where an
+   * ordinary sign-in can be attempted — the account it is about to rewrite is
+   * identified by a recovery code, not by a session.
+   */
+  const [resetOpen, setResetOpen] = useState(false)
+  /**
+   * The username to start the sign-in field with, set only when a reset landed
+   * but the sign-in that follows it did not. Not a lock — see AuthDialog's
+   * prefillUsername — and cleared with the rest of the account state.
+   */
+  const [resetUsername, setResetUsername] = useState('')
+  /**
+   * Whether anyone on this device has confirmed saving a code for this account.
+   * The server cannot answer this: it knows a record exists, not that the
+   * one-time display survived long enough to be read. Without it, a first
+   * display lost to a reload leaves an account that reports `ready` and a user
+   * holding nothing, and nothing ever asks again.
+   */
+  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false)
+  /**
+   * The real mutual exclusion for runRecoverySetup. `recoveryBusy` is a render
+   * signal and nothing more: reading it in the guard tested a value captured at
+   * the last render, so two clicks dispatched before React re-rendered both saw
+   * `false` and both ran. Two runs mint two codes, the second overwrites the
+   * first server-side, and the card the user is reading may be the dead one.
+   * A ref is set synchronously, in the same tick as the check.
+   */
+  const recoveryRunRef = useRef(false)
 
   // Always-current translator, for callbacks registered once (speech recognition)
   const tRef = useRef(t)
@@ -289,11 +390,58 @@ export default function App() {
   const [isBriefingOpen, setIsBriefingOpen] = useState(false)
   const [briefingLoading, setBriefingLoading] = useState(false)
   const [briefingError, setBriefingError] = useState('')
+  // The reply id the in-flight briefing call belongs to, or null. Same purpose as
+  // shorterRunRef: a call that outlives its reply must touch nothing.
+  const briefingRunRef = useRef<number | null>(null)
+  // Which version of the message is on screen. `false` means the full one; this is
+  // the single switch that both the rendered body and the copy button read.
+  const [showShorter, setShowShorter] = useState(false)
+  const [shorterLoading, setShorterLoading] = useState(false)
+  const [shorterError, setShorterError] = useState('')
+  // The reply id the in-flight shortening call belongs to, or null. Read by that
+  // call before it touches any state that is not the reply itself.
+  const shorterRunRef = useRef<number | null>(null)
   const [inputMode, setInputMode] = useState<'text' | 'url'>('text')
   const [articleUrl, setArticleUrl] = useState('')
   const [article, setArticle] = useState<Article | null>(null)
   const [isFetchingArticle, setIsFetchingArticle] = useState(false)
   const [articleStatus, setArticleStatus] = useState('')
+
+  /**
+   * Collapse and forget the briefing. Called wherever the reply is replaced or
+   * cleared, and clearing `briefingLoading` matters for the same reason it does
+   * in `resetShorter` — otherwise the new reply's expander sits disabled under a
+   * spinner for a call about a reply nobody can see any more.
+   */
+  const resetBriefing = () => {
+    setIsBriefingOpen(false)
+    setBriefingError('')
+    setBriefingLoading(false)
+    briefingRunRef.current = null
+  }
+
+  /**
+   * Drop the shortened view. Called wherever the reply is replaced or cleared.
+   *
+   * Clearing `shorterLoading` matters as much as the rest: a call belonging to a
+   * reply the user can no longer see must not leave the NEW reply's toggle
+   * disabled under a spinner. `shorterRunRef` is what stops that abandoned call
+   * from re-enabling it later, or from clearing a spinner it no longer owns.
+   */
+  const resetShorter = () => {
+    setShowShorter(false)
+    setShorterError('')
+    setShorterLoading(false)
+    shorterRunRef.current = null
+  }
+
+  /**
+   * Which version is on screen. One call, one answer: the rendered body, the copy
+   * button and the claim badge all read `shown`, so the app cannot disagree with
+   * itself about which of the two messages the user is looking at. The decision
+   * itself lives in src/replyView.ts, where it can be asked what it would do.
+   */
+  const shown = shownVersion(reply, { showShorter })
 
   // --- history: local-first, encrypted-sync second (see src/history.ts) ---
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([])
@@ -383,17 +531,230 @@ export default function App() {
     setTavilyDraft(loadTavilyKey())
     setShowApiKeyInput(getProvider(providerId).requiresKey && !loadStoredKey(providerId))
     setVaultState('unlocked')
-    void pullAndMergeHistory().then((merged) => {
-      if (isStale() || !merged) return
-      setHistoryEntries(merged)
-      // Sign-in uploads the device backlog: entries generated while signed
-      // out are already in the merge, so pushing it completes the sync.
-      void pushHistory(merged)
-    })
+    void mergeAndSyncHistory(isStale)
   }
 
   /** The password account's vault key: this session's, or the device cache. */
   const localVaultKey = async (): Promise<CryptoKey | null> => localKeyRef.current ?? (await cachedKey())
+
+  /**
+   * The two eras this session can open, each in its OWN slot. Until this task
+   * the master key sat in both, which was inert while nothing wrote v2 and
+   * actively wrong the moment something did: a genuine v2 blob would have been
+   * handed the master key and failed as a raw AES error instead of the
+   * MissingKeyError the routing exists to produce.
+   *
+   * Either slot may be empty and that is a real state, not a defect: a password
+   * account before recovery is provisioned has only a master key, and one
+   * signed in on a device whose DEK could not be unwrapped has only that too.
+   * openBlob raises rather than reaching for the other one.
+   *
+   * Not identical to the cachedKey() lookup history.ts used to do: with
+   * IndexedDB blocked, a password account has its key in the ref but not in the
+   * cache, so history syncs where it used to stay silently local.
+   */
+  const blobKeys = async (): Promise<BlobKeys> => {
+    const masterKey = await localVaultKey()
+    return { masterKey: masterKey ?? undefined, dekKey: dekKeyRef.current ?? undefined }
+  }
+
+  /**
+   * Pull remote history, show the merge, push it back. Shared because the guard
+   * that matters is easy to drop: `pullAndMergeHistory` returns null for a blob
+   * it could not open but that another key can, and pushing then overwrites it.
+   *
+   * ON MissingKeyError, WHICH IS NOW REACHABLE. pullAndMergeHistory still folds
+   * it into that same null, and that is deliberate: null is the only signal
+   * that stops the push, and a history blob whose era we lack a key for is
+   * precisely the blob that must not be overwritten. Surfacing it here as an
+   * error would also put a migration bug in front of a user who can do nothing
+   * about it, in a panel that must keep working.
+   *
+   * It is not swallowed silently, though. "I hold the wrong key for a stored
+   * blob" is exactly the condition isFullyMigrated() reports, and adoptRecovery
+   * turns that into recoveryStatus === 'incomplete' on every sign-in — where it
+   * will drive the UI and refuse a reset, the one operation the mislabel would
+   * turn into data loss. The visibility lives on the status, not on the read
+   * path. ("will", not "does": recoveryStatus is computed here but nothing
+   * consumes it until the dialogs land in Tasks 6 and 7.)
+   */
+  const mergeAndSyncHistory = async (isStale: () => boolean = () => false) => {
+    const merged = await pullAndMergeHistory(await blobKeys())
+    if (isStale() || !merged) return
+    setHistoryEntries(merged)
+    // Sign-in uploads the device backlog: entries generated while signed out
+    // are already in the merge, so pushing it completes the sync.
+    await syncHistory(merged)
+  }
+
+  /**
+   * Push under the key this device holds — with none, history stays local, silently.
+   *
+   * The key and the era tag come from sealEra() as one value, never chosen
+   * separately here. A blob sealed under the master key but tagged v2 passes
+   * reset's "refuse while any blob is v1" gate — the check that exists to stop
+   * exactly it — and the reset then rewraps the DEK and strands this history.
+   */
+  const syncHistory = async (entries: HistoryEntry[]) => {
+    const era = sealEra(dekKeyRef.current, await localVaultKey())
+    if (era) await pushHistory(entries, era.key, era.version)
+  }
+
+  /**
+   * Adopt this account's DEK for the session, then finish any migration that
+   * was interrupted. Runs wherever the master key first becomes available — the
+   * vault effect on load and handleAuthSubmit on a fresh sign-in — because a
+   * signed-in client holding BOTH keys is the only moment migration can happen,
+   * and that is what makes it safe to leave half-done.
+   *
+   * Never throws. Every failure here means "recovery is not usable this
+   * session", and none of them should stop the vault from opening.
+   *
+   * `isStale` is checked after every await that precedes a write to component
+   * state or to dekKeyRef, because sign-out can land in any of those gaps and
+   * this would otherwise write the departed session's answer over the 'none'
+   * handleSignOut just set — or restore a dekKeyRef it just cleared.
+   */
+  const adoptRecovery = async (isStale: () => boolean = () => false) => {
+    const masterKey = await localVaultKey()
+    if (!masterKey) return
+    try {
+      const record = await fetchDek()
+      if (isStale()) return
+      // Only the server answering "no record" is `none`. Every failure below is
+      // `unknown`: a UI that treats "we could not tell" as "never provisioned"
+      // offers first-time setup to someone who already has a recovery code.
+      if (!record) {
+        setRecoveryStatus('none')
+        return
+      }
+      // Both generations of the password copy, never just the current one. A
+      // reset interrupted between complete's writes 1 and 3 leaves this
+      // password still authenticating while the CURRENT byPassword has already
+      // moved to the new password's key — reading only that field reports the
+      // session as unable to open its own DEK and leaves a v2 vault locked,
+      // which is precisely the state `previous` was added to cover.
+      const { dek, fromPrevious } = await unwrapDekWithPrevious(
+        masterKey,
+        record.byPassword,
+        record.previous?.byPassword
+      )
+      const dekKey = await importWrappingKey(dek)
+      if (isStale()) return
+      dekKeyRef.current = dekKey
+      await ensureMigrated({ masterKey, dekKey })
+      // Hoisted out of the setState argument: it is two round trips long, and
+      // evaluating isStale() before them checked a session that was still live.
+      const migrated = await isFullyMigrated()
+      // `fromPrevious` outranks the migration answer, and this is the ONLY
+      // place that flag is read. It means this session's password opened the
+      // previous generation of the DEK — which can only happen if a reset
+      // stopped between complete's writes 1 and 3, which means `recovery:` now
+      // holds either the old code's verifier or the verifier for a code that
+      // was minted and never shown to anybody. Data is fine; the escape hatch
+      // may be gone. Without this the account computes `ready`, the prompt
+      // stays suppressed by this device's acknowledgement, and the user is
+      // never told their recovery code might open nothing — until the day they
+      // need it, which is the one day it cannot be fixed.
+      if (!isStale()) setRecoveryStatus(fromPrevious ? 'stale' : recoveryStatusFor(true, migrated))
+    } catch {
+      // A record this password cannot open means the account was reset from
+      // another device, so this session's master key is stale; a failed fetch
+      // means we simply do not know. Either way, leave the DEK unadopted rather
+      // than guessing. The next successful sign-in resolves it.
+      if (!isStale()) setRecoveryStatus('unknown')
+    }
+  }
+
+  /**
+   * Provision recovery, or re-provision it. One function for both, because
+   * setupRecovery makes no distinction: it reuses the stored DEK when there is
+   * one and mints a fresh code either way, so "set up" and "generate a new
+   * code" are literally the same call. That is what lets the account bar offer
+   * it in every status, including `ready` — see the comment on the button in
+   * AccountBar.tsx for why a `ready` account still needs the offer.
+   *
+   * `username` is passed explicitly on the sign-up path: `auth` is refetched
+   * after this runs, so auth.user is still the pre-registration value (null)
+   * at the moment we need the name to salt the code's derivation with.
+   *
+   * Staleness is measured against localKeyRef, exactly as adoptRecovery does:
+   * if a sign-out or account switch replaced the key mid-flight, every write
+   * below belongs to a session that is gone.
+   */
+  const runRecoverySetup = async (options: { username?: string; firstTime?: boolean } = {}) => {
+    const name = options.username ?? (auth.user?.provider === 'local' ? auth.user.name : null)
+    const masterKey = localKeyRef.current
+    if (!name || !masterKey) {
+      // Reachable: a password account whose key was lost to a blocked
+      // IndexedDB plus a reload is signed in with no master key in hand. Say
+      // so — the alternative is a button that does nothing when clicked, which
+      // reads as a broken app rather than as an instruction.
+      setRecoveryError(t('recovery.setupFailed'))
+      return
+    }
+    // One at a time. Two overlapping runs mint two codes and the second
+    // overwrites the first server-side, so whichever card the user is reading
+    // may be the dead one — and a code that looks fine but opens nothing is the
+    // exact failure this feature exists to prevent. The same guard covers a
+    // click arriving while a code is still on screen unacknowledged.
+    if (recoveryRunRef.current || recoveryCode) return
+    recoveryRunRef.current = true
+
+    /**
+     * Is this creating a first code, or destroying an existing one?
+     *
+     * `firstTime` is passed by the sign-up path rather than read from
+     * recoveryStatus, because adoptRecovery's setState has not reached this
+     * closure yet — the status here is still the pre-registration value, and
+     * trusting it would put a "this replaces your existing code" confirmation
+     * in front of someone who has never had one.
+     */
+    const replacesOld = !options.firstTime && recoveryStatus !== 'none'
+
+    // Rotation is destructive and irreversible: saveDek overwrites byRecovery,
+    // so the code on the user's paper stops working the instant this lands,
+    // BEFORE they have seen its replacement. That must not be one stray click
+    // on a 13px link two elements from Sign out. First-time setup destroys
+    // nothing and stays a single click.
+    if (replacesOld && !window.confirm(t('recovery.rotateConfirm'))) {
+      recoveryRunRef.current = false
+      return
+    }
+
+    const isStale = () => localKeyRef.current !== masterKey
+    setRecoveryBusy(true)
+    setRecoveryError('')
+    try {
+      const { code, dekKey } = await setupRecovery(name, masterKey)
+      if (isStale()) return
+      dekKeyRef.current = dekKey
+      const migrated = await isFullyMigrated()
+      if (isStale()) return
+      setRecoveryStatus(recoveryStatusFor(true, migrated))
+      // Shown only now, after setupRecovery has resolved. It returns the code
+      // only once BOTH the wrapped-DEK record and the code's verifier have
+      // landed; a code displayed before that would verify against nothing, and
+      // the user would file it away believing it works.
+      setRecoveryCode({ code, replacesOld })
+    } catch {
+      // One message for every failure. The distinctions setupRecovery draws
+      // (stale master key, unreadable record, a DEK era already begun) are all
+      // "not right now" from here: none of them is something the user can act
+      // on differently, and the safe next step is the same in each — try again,
+      // or sign in again and try. Nothing has been shown, so nothing false is
+      // believed.
+      if (!isStale()) setRecoveryError(t('recovery.setupFailed'))
+    } finally {
+      // Unconditional, unlike the writes above. `busy` describes this control,
+      // not the account: leaving it stuck true because the session changed
+      // mid-flight would lock the next signed-in user out of setup entirely,
+      // and no run can be in flight to be misrepresented (the guard above
+      // permits only one).
+      setRecoveryBusy(false)
+      recoveryRunRef.current = false
+    }
+  }
 
   /**
    * First seal for a password account — no passphrase dialog, the
@@ -406,15 +767,17 @@ export default function App() {
    * for the departed session nor writes state over the new one's.
    */
   const setupLocalVault = async (isStale: () => boolean = () => false) => {
-    const key = await localVaultKey()
+    // The DEK when there is one, the login-derived key otherwise — paired with
+    // its tag by sealEra so the two cannot drift apart.
+    const era = sealEra(dekKeyRef.current, await localVaultKey())
     const bundle = collectKeyBundle()
     if (isStale()) return
-    if (!key || !Object.keys(bundle).length) {
+    if (!era || !Object.keys(bundle).length) {
       setVaultState('none')
       return
     }
     try {
-      const sealed = await sealJson(key, bundle)
+      const sealed = await sealJson(era.key, bundle, era.version)
       if (isStale()) return
       await saveVault(sealed)
       if (isStale()) return
@@ -425,6 +788,35 @@ export default function App() {
     }
   }
 
+  /**
+   * Read this device's acknowledgement for whoever is signed in.
+   *
+   * Keyed on the account id, so switching accounts re-reads rather than
+   * carrying the previous user's answer over — one browser, two accounts, and
+   * only one of them may have seen a code.
+   */
+  useEffect(() => {
+    const id = auth.user?.id
+    setRecoveryAcknowledged(id ? hasAcknowledgedRecovery(id) : false)
+  }, [auth.user?.id])
+
+  /**
+   * While a code is on screen it has been shown once and will not be shown
+   * again, so a reload, a back gesture or a closed tab loses it for good.
+   * Browsers ignore custom text here and show their own wording — the point is
+   * the interstitial, not the sentence. Registered only while a code is up, so
+   * it never interferes with an ordinary reload.
+   */
+  useEffect(() => {
+    if (!recoveryCode) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [recoveryCode])
+
   // Pull the encrypted vault once signed in, and open it silently if this device
   // already holds the derived key — the whole point is not asking again.
   useEffect(() => {
@@ -434,33 +826,49 @@ export default function App() {
       return
     }
     let cancelled = false
-    fetchVault()
-      .then(async (blob) => {
+    const isStale = () => cancelled
+    void (async () => {
+      try {
+        // BEFORE the vault is read, not after. Adopting the DEK decides which
+        // key opens the blob we are about to fetch, and ensureMigrated may
+        // rewrite that blob on the way. Reading first would hand a v2 vault an
+        // empty dekKey slot and tell the user their passphrase was wrong.
+        if (auth.user?.provider === 'local') await adoptRecovery(isStale)
+        const blob = await fetchVault()
         if (cancelled) return
         setVaultBlob(blob)
         if (!blob) {
           // A password account seals silently: login already produced the key,
           // so the passphrase-setup dialog would be a second secret for nothing.
-          if (auth.user?.provider === 'local') void setupLocalVault(() => cancelled)
+          if (auth.user?.provider === 'local') void setupLocalVault(isStale)
           else setVaultState('none')
           return
         }
         let bundle: KeyBundle | null = null
-        if (auth.user?.provider === 'local' && localKeyRef.current) {
+        if (auth.user?.provider === 'local') {
           try {
-            bundle = await unlockWithKey(blob, localKeyRef.current)
+            // Routed by the blob's own tag rather than by which key we happen
+            // to hold: a v2 vault opens under the DEK, a v1 under the master
+            // key, and one tagged with neither raises instead of quietly trying
+            // the other.
+            bundle = await openBlob<KeyBundle>(await blobKeys(), blob)
           } catch {
             bundle = null
           }
         }
-        if (!bundle) bundle = await unlockWithDeviceKey(blob)
+        // The device cache only ever holds a master-era key — adoptKey() and
+        // seal() are the only writers — so it cannot open a v2 blob, and
+        // unlockWithDeviceKey DELETES the cached key when it fails. Trying it
+        // here would throw away a working master key over a blob it was never
+        // meant to open.
+        if (!bundle && blob.version !== BLOB_VERSION_DEK) bundle = await unlockWithDeviceKey(blob)
         if (cancelled) return
-        if (bundle) onVaultOpened(bundle, () => cancelled)
+        if (bundle) onVaultOpened(bundle, isStale)
         else setVaultState('locked')
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setVaultState('none')
-      })
+      }
+    })()
     return () => {
       cancelled = true
     }
@@ -618,6 +1026,12 @@ export default function App() {
         // In URL mode the "argument" is the whole extracted article; publish the
         // reference instead of dumping the publisher's full text into our store
         argument: article ? `${article.title} — ${article.url}` : transcript.trim(),
+        // Deliberately the FULL message and its full citation set, whatever the
+        // toggle is showing — unlike Copy, which sends whatever is on screen. A
+        // share link is a permanent public artifact of this reply, read by people
+        // with no way to ask for the other version, and the long one is the one
+        // that carries its own evidence. The short version exists for a private
+        // message to one person, which is the case Copy serves.
         message: reply.message,
         strategy: reply.strategy,
         citations: reply.citations,
@@ -681,6 +1095,8 @@ export default function App() {
     finalTranscriptRef.current = ''
     setTranscript('')
     setReply(null)
+    resetShorter()
+    resetBriefing()
     setError('')
     setLastRun(null)
     setArticle(null)
@@ -694,10 +1110,12 @@ export default function App() {
     setError('')
     setShareUrl('')
     setShowClaims(false)
-    setIsBriefingOpen(false)
+    resetBriefing()
+    resetShorter()
     setLastRun(null)
     setInstantDone(null)
     setReply({
+      id: nextReplyId(),
       message: entry.message,
       strategy: entry.strategy || '',
       context: null,
@@ -719,6 +1137,8 @@ export default function App() {
     setError('')
     setArticle(null)
     setReply(null)
+    resetShorter()
+    resetBriefing()
     setLastRun(null)
     try {
       const result = await fetchArticle(articleUrl, setArticleStatus)
@@ -781,7 +1201,7 @@ export default function App() {
     saveEntry(entry).then(async () => {
       const all = await listEntries()
       setHistoryEntries(all)
-      if (vaultState === 'unlocked') void pushHistory(all) // one KV write per save, ciphertext only
+      if (vaultState === 'unlocked') void syncHistory(all) // one KV write per save, ciphertext only
     })
   }
 
@@ -803,9 +1223,9 @@ export default function App() {
     setReply(null)
     setLastRun(null)
     setShareUrl('')
-    setIsBriefingOpen(false)
-    setBriefingError('')
+    resetBriefing()
     setShowClaims(false)
+    resetShorter()
     setInstantDone(null)
     // A BYOK run makes any earlier Instant quota/exhaustion state stale — a
     // key on file means neither applies anymore.
@@ -880,6 +1300,7 @@ export default function App() {
         const parsed = parseMessage(instantReply.text)
         const verified = stripUnverifiedUrls(parsed.message, citations)
         setReply({
+          id: nextReplyId(),
           message: verified.text,
           strategy: parsed.strategy,
           context: parsed.context,
@@ -931,6 +1352,7 @@ export default function App() {
       const usedKeys = new Set(verified.used.map((c) => c.url))
 
       setReply({
+        id: nextReplyId(),
         message: verified.text,
         strategy: parsed.strategy,
         context: parsed.context,
@@ -984,6 +1406,12 @@ export default function App() {
     const context = lastRequestRef.current
     if (!opening || !context || !model || !reply || reply.theirCase || briefingLoading) return
 
+    // Same identity guard as the shortening call. The user can press Generate while
+    // this is in flight, and a briefing that lands on the wrong reply is read,
+    // believed and acted on even though it can never be sent: it is what tells them
+    // which of their opponent's points went unanswered.
+    const forId = reply.id
+    briefingRunRef.current = forId
     setBriefingLoading(true)
     setBriefingError('')
     try {
@@ -997,13 +1425,105 @@ export default function App() {
         onStatus: setProviderStatus,
       })
       const parsed = parseTheirCase(result.text)
-      setReply((prev) => (prev ? { ...prev, theirCase: parsed.theirCase, answered: parsed.answered } : prev))
+      setReply((prev) =>
+        applyBriefingResult(prev, forId, { theirCase: parsed.theirCase, answered: parsed.answered })
+      )
       addUsage(result.usage)
     } catch (err) {
+      // An error about a reply the user has already replaced is not one they can
+      // act on, and it would sit under a panel belonging to a different argument.
+      if (briefingRunRef.current !== forId) return
       setBriefingError(err instanceof Error ? err.message : t('error.briefing'))
     } finally {
-      setBriefingLoading(false)
-      setProviderStatus('')
+      // And an abandoned call must not clear a spinner that now belongs to the new
+      // reply's own briefing call.
+      if (briefingRunRef.current === forId) {
+        briefingRunRef.current = null
+        setBriefingLoading(false)
+        setProviderStatus('')
+      }
+    }
+  }
+
+  /**
+   * The "Shorter version" toggle. See CONSTITUTION.md rules 1, 4, 6 and 9, and the
+   * addendum in docs/superpowers/specs/2026-08-13-password-recovery-design.md — the
+   * length was chosen deliberately, and `shorterPrompt` carries the reasons.
+   *
+   * Lazy like the briefing: one call on the first open, cached on the reply
+   * afterwards, so a toggle nobody uses costs nothing. Toggling back shows the full
+   * message again; the short version is never the only thing the user can see.
+   */
+  const toggleShorter = async () => {
+    // Instant replies bought one server-paid call and have no key to spend on a
+    // second, exactly as with the briefing — the control stays hidden for them,
+    // and this guard covers any other route in.
+    if (reply?.instant) return
+    const showing = !showShorter
+    setShowShorter(showing)
+    // Before any early return: an error about the shortened version has nothing to
+    // say beside the full text the user just switched back to.
+    setShorterError('')
+    const context = lastRequestRef.current
+    if (!showing || !context || !model || !reply || reply.shorter || shorterLoading) return
+
+    // Everything this call writes later is gated on the reply it was started for.
+    // The user can press Generate while it is in flight, and a result that lands
+    // on the wrong reply is the worst thing this feature could produce: a
+    // condensed argument about a different subject, one click from the clipboard.
+    const forId = reply.id
+    shorterRunRef.current = forId
+    setShorterLoading(true)
+    try {
+      const result = await generateText({
+        provider,
+        model,
+        apiKey,
+        // Condense the message we already produced, never the original argument: that
+        // is what keeps the citation set fixed and lets the check below be meaningful.
+        system: shorterPrompt(context.promptContext, reply.message),
+        // The message, NOT the original argument. Passing `context.userContent`
+        // here — as the briefing does, because it needs it — put the untrusted
+        // original in the most salient position in the conversation while the
+        // system prompt said not to use anything but the message. stripUnverifiedUrls
+        // catches a URL lifted from it; nothing catches a FACT. Sending only the
+        // message makes condense-don't-rewrite structural instead of a promise.
+        userContent: reply.message,
+        length: 'detailed',
+        onStatus: setProviderStatus,
+      })
+      const parsed = parseMessage(result.text)
+      // The same gate the full message went through, against the sources that
+      // message actually cites — a shortening call is still a model call, and a URL
+      // it invents must not reach the clipboard. `verified.used` is narrower again:
+      // shortening drops links along with the claims they supported, and the badge
+      // must count the ones that survived, not the ones that started.
+      const verified = stripUnverifiedUrls(parsed.message, reply.citations)
+      if (!verified.text.trim()) throw new Error(t('error.shorter'))
+      setReply((prev) =>
+        applyShorterResult(prev, forId, {
+          text: verified.text,
+          citations: verified.used,
+          strippedUrls: verified.strippedUrls,
+        })
+      )
+      addUsage(result.usage)
+    } catch (err) {
+      // Fall back to the full message rather than showing an empty send zone: the
+      // long version is the one that is always safe to be looking at. Only for the
+      // reply this call belongs to — an error about a reply the user has already
+      // replaced is not an error they can act on.
+      if (shorterRunRef.current !== forId) return
+      setShowShorter(false)
+      setShorterError(err instanceof Error ? err.message : t('error.shorter'))
+    } finally {
+      // Same gate: an abandoned call must not clear a spinner that now belongs to
+      // the new reply's own shortening call.
+      if (shorterRunRef.current === forId) {
+        shorterRunRef.current = null
+        setShorterLoading(false)
+        setProviderStatus('')
+      }
     }
   }
 
@@ -1019,8 +1539,10 @@ export default function App() {
   const copyMessage = async () => {
     if (!reply) return
     try {
-      // Only the message — never the strategy line, weak-link note, or briefing
-      await navigator.clipboard.writeText(reply.message)
+      // Only the message — never the strategy line, weak-link note, or briefing —
+      // and specifically the version currently on screen. `shown` is the one place
+      // that choice is made, so what is copied cannot drift from what is read.
+      await navigator.clipboard.writeText(shown.text)
       setMessageCopied(true)
       setTimeout(() => setMessageCopied(false), 2500)
     } catch {
@@ -1069,11 +1591,14 @@ export default function App() {
    * path. Google accounts do not reach here at all.
    */
   const handleAuthSubmit = async (username: string, password: string, email: string) => {
+    // Captured before anything can close the dialog: the sign-up path owes the
+    // user a recovery code, and `authDialog` is null by the time we get there.
+    const isSignup = authDialog === 'signup'
     setAuthBusy(true)
     setAuthError('')
     try {
       const result =
-        authDialog === 'signup'
+        isSignup
           ? await registerAccount(username, password, email)
           : await loginLocal(username, password)
       // REFUSE a different account while one is signed in. By this point the
@@ -1098,12 +1623,54 @@ export default function App() {
       }
       // Login IS unlock: the derived master key becomes this device's vault key
       localKeyRef.current = await adoptKey(result.masterKeyBytes)
+      // A password account may or may not have recovery provisioned. If it
+      // does, adopt the DEK for this session and finish any migration that was
+      // interrupted last time — the self-heal, run on every sign-in because
+      // this is where the master key is in hand.
+      //
+      // Staleness here is "the key this call was for is no longer the adopted
+      // one", which covers both sign-out (handleSignOut nulls the ref) and an
+      // account switch (it replaces it). The window spans ensureMigrated, so
+      // without this a sign-out mid-call would reassign dekKeyRef after
+      // handleSignOut had cleared it — handing the next person on this device
+      // the previous account's data key. The SERVER writes ensureMigrated makes
+      // are deliberately left unguarded: they are correct for the account that
+      // was signed in when they started, and the session cookie is what stops
+      // them if it is not.
+      const adopted = localKeyRef.current
+      await adoptRecovery(() => localKeyRef.current !== adopted)
+      // A brand-new account is provisioned on the spot rather than prompted
+      // later: the master key is in hand, there is no data yet to migrate, and
+      // an account that has never had a code is the one that loses everything
+      // to a forgotten password. Awaited, so dekKeyRef is populated before the
+      // vault effect seals this account's first blob — sealing under the master
+      // key first and migrating a moment later would be two writes and a window
+      // where the vault is v1, for no gain.
+      //
+      // A failure here is not a failed sign-up. runRecoverySetup swallows it
+      // into recoveryError, the account bar keeps offering setup, and the user
+      // is signed in either way.
+      if (isSignup && result.user.provider === 'local') {
+        await runRecoverySetup({ username: result.user.name || username, firstTime: true })
+      }
+      // The vault effect runs adoptRecovery again when auth.user.id changes.
+      // The duplicate fetch is tolerated rather than overlooked: it is one GET,
+      // it is idempotent, and the alternative — a flag saying "already done for
+      // this user" — is more state to get wrong than the request costs.
       // Signed-in-but-locked (key lost to a blocked IndexedDB + reload): the
       // effect keys on auth.user.id and will not refire for the same user, so
       // open the vault directly here.
       if (vaultBlob && vaultState === 'locked') {
         try {
-          onVaultOpened(await unlockWithKey(vaultBlob, localKeyRef.current))
+          // By tag, not by the master key alone: this blob is v2 whenever the
+          // account has already migrated, and only the DEK opens those.
+          //
+          // `vaultBlob` is this component's copy and may be the PRE-migration
+          // object that adoptRecovery just replaced on the server. That is
+          // harmless and self-correcting: the stale copy is v1, the master key
+          // in the other slot opens it, and the next syncVault writes the v2
+          // blob back into state.
+          onVaultOpened(await openBlob<KeyBundle>(await blobKeys(), vaultBlob))
         } catch {
           // A blob this account's key cannot open — leave it locked
         }
@@ -1125,12 +1692,63 @@ export default function App() {
     }
   }
 
+  /**
+   * The reset landed. Show the rotated code, then sign the user in with the
+   * password they just chose.
+   *
+   * ORDER MATTERS IN BOTH DIRECTIONS HERE. The code is committed to state
+   * BEFORE the sign-in is attempted, because by this point the reset is done —
+   * the code is live, and it is the only copy of it that will ever exist. A
+   * dropped connection on the login that follows must not be what loses it.
+   *
+   * And the sign-in goes through handleAuthSubmit rather than a bare
+   * loginLocal, because everything that makes the vault and the history
+   * reappear happens in there: adopting the derived key, adopting the DEK,
+   * finishing any migration, opening a locked blob, refetching auth. That is
+   * the acceptance criterion "the vault and history both survive" — surviving
+   * on the server is not the same as being back on screen.
+   *
+   * The dialog is opened first so a failed sign-in has somewhere to say so:
+   * handleAuthSubmit closes it on success and leaves it up with authError set
+   * otherwise, where the user can simply try the new password again.
+   */
+  const handleResetComplete = async (username: string, password: string, code: string) => {
+    setResetOpen(false)
+    setRecoveryCode({ code, replacesOld: true })
+    setAuthError('')
+    // Prefilled before the dialog opens, so if the sign-in below fails the form
+    // left behind already names the account instead of asking someone who has
+    // just proved they forget things about it to type it again.
+    setResetUsername(username)
+    setAuthDialog('signin')
+    await handleAuthSubmit(username, password, '')
+  }
+
   const handleSignOut = async () => {
     await signOut()
     // Drop the derived key too. Without this, "sign out" on a shared machine would
     // leave the next person able to decrypt the vault by simply signing back in.
     await forgetDeviceKey()
     localKeyRef.current = null
+    // The DEK leaves with it. Left behind, the next person to sign in on this
+    // device would carry the previous account's data key into their session.
+    dekKeyRef.current = null
+    // Back to "not checked", not to "has none": the next sign-in on this device
+    // re-runs adoptRecovery, and until it answers we know nothing about that
+    // account either.
+    setRecoveryStatus(INITIAL_RECOVERY_STATUS)
+    setRecoveryAcknowledged(false)
+    // Drop an undismissed code with the session. It belongs to the account that
+    // just left, and the next person on this device must not read it off the
+    // screen. The prompt's dismissal resets too, so the next sign-in is judged
+    // on its own account's status.
+    setRecoveryCode(null)
+    setRecoveryError('')
+    setRecoveryPromptDismissed(false)
+    // Nothing half-typed in a reset survives a sign-out either: the card names
+    // an account by username, and the next person here is not that account.
+    setResetOpen(false)
+    setResetUsername('')
     setAuthDialog(null)
     setAuthError('')
     // Wipe the device's history copy as well — entries AND key both leave this
@@ -1154,11 +1772,17 @@ export default function App() {
     if (!Object.keys(bundle).length) return
     setVaultState('saving')
     try {
-      // A password account reseals under the login-derived key it already
-      // holds, which survives a blocked IndexedDB; a Google account keeps
-      // using the device key exactly as before.
-      const localKey = auth.user.provider === 'local' ? await localVaultKey() : null
-      const sealed = localKey ? await sealJson(localKey, bundle) : await resealWithDeviceKey(bundle, vaultBlob)
+      // sealEra prefers the DEK. After migration it is the only key that MUST
+      // be able to open this blob, because a reset replaces the master key and
+      // keeps the DEK — reseal under the master key here and the next API-key
+      // change silently drags the vault back to v1, where a later reset strands
+      // it. This step is easy to miss precisely because nothing looks wrong
+      // until the reset. With neither key: a Google account, which keeps using
+      // the device key exactly as before.
+      const era = sealEra(dekKeyRef.current, auth.user.provider === 'local' ? await localVaultKey() : null)
+      const sealed = era
+        ? await sealJson(era.key, bundle, era.version)
+        : await resealWithDeviceKey(bundle, vaultBlob)
       if (sealed) {
         await saveVault(sealed)
         setVaultBlob(sealed)
@@ -1180,13 +1804,7 @@ export default function App() {
         await saveVault(sealed)
         setVaultBlob(sealed)
         setVaultState('unlocked')
-        void pullAndMergeHistory().then((merged) => {
-          if (!merged) return
-          setHistoryEntries(merged)
-          // Sign-in uploads the device backlog: entries generated while signed
-          // out are already in the merge, so pushing it completes the sync.
-          void pushHistory(merged)
-        })
+        void mergeAndSyncHistory()
       } else if (vaultBlob) {
         onVaultOpened(await unlock(vaultBlob, passphrase))
       }
@@ -1297,6 +1915,17 @@ export default function App() {
     }
   }
 
+  // Computed here rather than inline in the JSX below so the whole decision is
+  // one testable call. The inputs are exactly the five facts that matter; if a
+  // sixth ever appears it belongs in the function, not in a longer `&&`.
+  const setupPrompt = shouldOfferSetupPrompt({
+    provider: auth.user?.provider,
+    status: recoveryStatus,
+    dismissed: recoveryPromptDismissed,
+    codeShown: !!recoveryCode,
+    acknowledged: recoveryAcknowledged,
+  })
+
   return (
     <div className="container">
       <AccountBar
@@ -1309,13 +1938,92 @@ export default function App() {
           setAuthError('')
           setAuthDialog('signin')
         }}
-        onSignOut={handleSignOut}
+        // Sign out sits in the same bar as the button that opened the card, and
+        // it wipes this device — including the code still on screen. That is
+        // the likeliest way a first code is lost, so it asks first while one is
+        // displayed. Unguarded otherwise.
+        onSignOut={async () => {
+          if (recoveryCode && !window.confirm(t('recovery.leaveConfirm'))) return
+          await handleSignOut()
+        }}
         // A password user's "unlock" is re-entering their password — the same
         // secret — never a vault passphrase they were never given.
         onUnlockClick={() =>
           auth.user?.provider === 'local' ? setAuthDialog('signin') : setVaultPrompt('unlock')
         }
+        recoveryStatus={recoveryStatus}
+        recoveryBusy={recoveryBusy}
+        onSetupRecovery={() => void runRecoverySetup()}
       />
+
+      {/* Kept next to the bar the action was taken from. The page-wide `error`
+          banner sits far below the fold, which is no use for a control up
+          here. */}
+      {recoveryError && (
+        <div className="error" role="alert">
+          ⚠️ {recoveryError}
+        </div>
+      )}
+
+      {recoveryCode && (
+        <RecoveryDialog
+          mode="show"
+          t={t}
+          code={recoveryCode.code}
+          replacesOld={recoveryCode.replacesOld}
+          onDone={() => {
+            // The acknowledgement is recorded HERE, at the checkbox, and
+            // nowhere else — it means "a human confirmed they saved this",
+            // which is the one fact no server record can carry. Without it a
+            // display lost to a reload leaves an account reporting `ready` and
+            // a user holding nothing, and nothing asks again. Ever.
+            if (auth.user?.id) markRecoveryAcknowledged(auth.user.id)
+            setRecoveryAcknowledged(true)
+            setRecoveryCode(null)
+            // A message from an earlier failed attempt has been overtaken by
+            // this success; leaving it up contradicts the code just shown.
+            setRecoveryError('')
+          }}
+        />
+      )}
+
+      {/* Two different prompts, and which one (if either) is a decision made in
+          shouldOfferSetupPrompt where it can be tested — see recoveryUi.ts.
+          `setup` offers a first code; `replace` says there is one out there
+          that nobody here has seen. Saying the wrong one is not cosmetic:
+          "you have no recovery code" is false and alarming for the second
+          user, and the button under it destroys a code that may be on their
+          desk. */}
+      {setupPrompt && (
+        <div className="recovery-prompt" role="status">
+          <p>{setupPrompt === 'setup' ? t('recovery.promptBody') : t('recovery.promptLostBody')}</p>
+          <p className="key-help">{t('recovery.regenerateHint')}</p>
+          <div className="controls">
+            <button
+              className="button button-primary"
+              onClick={() => void runRecoverySetup()}
+              disabled={recoveryBusy}
+            >
+              {recoveryBusy
+                ? t('recovery.working')
+                : setupPrompt === 'setup'
+                  ? t('recovery.promptAction')
+                  : t('recovery.promptLostAction')}
+            </button>
+            {/* Dismissible, and it costs nothing to dismiss: the account bar
+                keeps the same offer for as long as it is unanswered. */}
+            <button
+              className="link-button"
+              onClick={() => {
+                setRecoveryPromptDismissed(true)
+                setRecoveryError('')
+              }}
+            >
+              {t('recovery.promptDismiss')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {updateAvailable && (
         <div className="success update-banner" role="status">
@@ -1345,16 +2053,54 @@ export default function App() {
           // require auth.user to be null), so a signed-in local user here
           // means "re-enter your password": fix the username to the account's.
           fixedUsername={auth.user?.provider === 'local' ? auth.user.name : undefined}
+          prefillUsername={resetUsername}
           onModeChange={(m) => {
             setAuthError('')
             setAuthDialog(m)
           }}
           onGoogle={() => signIn('google')}
           onSubmit={handleAuthSubmit}
+          // Only on the signed-out sign-in card. AuthDialog hides it whenever
+          // the username is fixed, which is the "re-enter your password" render
+          // for an account already signed in — a reset from there would rewrite
+          // the credentials of whoever is holding this device's data.
+          // WITHHELD WHILE A CODE IS ON SCREEN, and that is not cosmetic. The
+          // dialog is visible in exactly that state — a reset landed and its
+          // auto-sign-in did not — and the handler closes the sign-in form
+          // while the reset card stays gated on `!recoveryCode`. One click and
+          // both are gone: no sign-in form, no reset card, and a recovery code
+          // the user still has to save. Fixed here at the source rather than by
+          // loosening that gate, because the gate is what stops a reset being
+          // re-entered underneath the code it just produced.
+          onForgotPassword={
+            recoveryCode
+              ? undefined
+              : () => {
+                  setAuthDialog(null)
+                  setAuthError('')
+                  setResetOpen(true)
+                }
+          }
           onDismiss={() => {
             setAuthDialog(null)
             setAuthError('')
           }}
+        />
+      )}
+
+      {/* Never while a code is on screen: the reset ends by showing one, and
+          re-entering the flow underneath it would offer to rotate the code the
+          user is still copying down. And never while anyone is signed in — the
+          card names its account by username, so from a signed-in page it would
+          be a door onto a DIFFERENT account's credentials with this device's
+          data still loaded. AuthDialog already withholds the entry point in
+          every such render; this is the second lock on the same door. */}
+      {resetOpen && !recoveryCode && !auth.user && (
+        <RecoveryDialog
+          mode="reset"
+          t={t}
+          onReset={(username, password, code) => void handleResetComplete(username, password, code)}
+          onCancel={() => setResetOpen(false)}
         />
       )}
 
@@ -1642,7 +2388,7 @@ export default function App() {
               // Push immediately, not debounced: a per-entry delete on this device
               // could otherwise be resurrected by a stale local list pushed from
               // another device before this delete's push lands (see history.ts).
-              if (vaultState === 'unlocked') void pushHistory(all)
+              if (vaultState === 'unlocked') void syncHistory(all)
             })
           }}
           onClear={() => {
@@ -1650,7 +2396,7 @@ export default function App() {
             clearAllEntries().then(() => {
               setHistoryEntries([])
               // Push immediately — same delete-resurrection risk as per-entry delete.
-              if (vaultState === 'unlocked') void pushHistory([])
+              if (vaultState === 'unlocked') void syncHistory([])
             })
           }}
         />
@@ -1936,35 +2682,71 @@ export default function App() {
               </button>
             </div>
             <div className="message-body">
-              <RichText text={reply.message} />
+              <RichText text={shown.text} />
             </div>
+
+            {/* Instant replies have no key paying for a second call, so this control is
+                hidden for them exactly as the briefing expander is. */}
+            {!reply.instant && (
+              <div className="shorter-row">
+                <button
+                  type="button"
+                  className="shorter-toggle"
+                  onClick={toggleShorter}
+                  aria-pressed={shown.isShorter}
+                  disabled={shorterLoading}
+                >
+                  {shown.isShorter ? t('reply.showFull') : t('reply.shorter')}
+                  {shorterLoading && <span className="spinner shorter-spinner"></span>}
+                </button>
+                {shorterLoading && <span className="shorter-note">{t('reply.shorterBuilding')}</span>}
+                {/* Says which version is on screen, because the copy button copies THAT
+                    one and the two are very different messages to send. */}
+                {!shorterLoading && shown.isShorter && (
+                  <span className="shorter-note">{t('reply.shorterShowing')}</span>
+                )}
+                {/* The message body swaps under the reader without moving focus, so
+                    say which version is now there. Empty until one has been
+                    generated, so nothing is announced on first render. */}
+                <span className="visually-hidden" role="status">
+                  {shown.hasShorter ? (shown.isShorter ? t('reply.shorterShowing') : t('reply.showingFull')) : ''}
+                </span>
+                {shorterError && (
+                  <span className="shorter-note shorter-error" role="alert">
+                    ⚠️ {shorterError}
+                  </span>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
-              className={`claim-badge ${reply.strippedUrls.length ? 'claim-badge-warn' : ''}`}
+              className={`claim-badge ${shown.strippedUrls.length ? 'claim-badge-warn' : ''}`}
               onClick={() => setShowClaims(!showClaims)}
               aria-expanded={showClaims}
               aria-controls="claim-panel"
             >
-              {reply.citations.length === 0
+              {shown.citations.length === 0
                 ? t('reply.noSources')
-                : reply.citations.length === 1
+                : shown.citations.length === 1
                   ? t('reply.sourcesCitedOne')
-                  : t('reply.sourcesCited', { count: reply.citations.length })}
-              {reply.strippedUrls.length === 1 && t('reply.linksRemovedOne')}
-              {reply.strippedUrls.length > 1 && t('reply.linksRemoved', { count: reply.strippedUrls.length })}
+                  : t('reply.sourcesCited', { count: shown.citations.length })}
+              {shown.strippedUrls.length === 1 && t('reply.linksRemovedOne')}
+              {shown.strippedUrls.length > 1 && t('reply.linksRemoved', { count: shown.strippedUrls.length })}
               {reply.toVerify?.length ? t('reply.toCheck', { count: reply.toVerify.length }) : ''}
             </button>
 
             <div id="claim-panel" className={`collapsible ${showClaims ? '' : 'collapsed'}`} aria-hidden={!showClaims}>
               <div className="collapsible-clip">
                 <div className="claim-panel-body">
-                  {reply.citations.length > 0 && <SourceList citations={reply.citations} title={t('reply.sourcesTitle')} />}
-                  {reply.strippedUrls.length > 0 && (
+                  {shown.citations.length > 0 && (
+                    <SourceList citations={[...shown.citations]} title={t('reply.sourcesTitle')} />
+                  )}
+                  {shown.strippedUrls.length > 0 && (
                     <p className="claim-warn">
-                      {reply.strippedUrls.length === 1
+                      {shown.strippedUrls.length === 1
                         ? t('reply.claimWarnOne')
-                        : t('reply.claimWarn', { count: reply.strippedUrls.length })}
+                        : t('reply.claimWarn', { count: shown.strippedUrls.length })}
                     </p>
                   )}
                   {reply.toVerify?.length ? (
@@ -1977,7 +2759,7 @@ export default function App() {
                       </ul>
                     </>
                   ) : null}
-                  {!reply.citations.length && !reply.toVerify?.length && (
+                  {!shown.citations.length && !reply.toVerify?.length && (
                     <p className="token-detail">{t('reply.noSourcesRetrieved')}</p>
                   )}
                 </div>

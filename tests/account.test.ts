@@ -13,7 +13,7 @@ import {
   UsernameInvalidError,
   AuthServerError,
 } from '../src/account'
-import { adoptKey, unlockWithKey, sealJson } from '../src/vault'
+import { adoptKey, unlockWithKey, sealJson, BLOB_VERSION_MASTER } from '../src/vault'
 
 // Node ships WebCrypto on globalThis.crypto (Node 20+), so the exact browser
 // derivation runs here unmodified. Each deriveCredentials call really performs
@@ -60,7 +60,7 @@ test('authHash is not the master key', async () => {
 test('vault sealed under the master key opens after a fresh login, not with the wrong password', async () => {
   const first = await deriveCredentials('basil', 'correct horse battery')
   const key = await adoptKey(first.masterKeyBytes)
-  const blob = await sealJson(key, { openrouter: 'sk-or-test' })
+  const blob = await sealJson(key, { openrouter: 'sk-or-test' }, BLOB_VERSION_MASTER)
 
   // Same username+password on a "new device" derives the same key
   const again = await deriveCredentials('basil', 'correct horse battery')

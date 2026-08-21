@@ -79,6 +79,48 @@ const ja = {
     'それは別のアカウントです。アカウントを分けておくため、この端末をログアウトし、この端末に残っていた履歴も消去しました。続けるには、もう一度ログインしてください。',
   'account.authError': 'ログインが完了しませんでした。もう一度お試しください。',
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': '復旧コード',
+  'recovery.blurb':
+    'このコードは、パスワードを忘れたときに、保存した API キーと履歴に戻るための手段です。表示されるのはこの一度きりなので、あとで確実に見つけられる場所——パスワード管理アプリや紙——に控えておいてください。',
+  'recovery.regenerateHint': 'サインインしている間はいつでも新しいコードを作り直せます。コードをなくしても、面倒なだけで取り返しがつかなくなるわけではありません。',
+  'recovery.copy': 'コードをコピー',
+  'recovery.copied': 'コピーしました',
+  'recovery.warning': 'パスワードとこのコードの両方をなくすと、保存した API キーと履歴は誰にも復元できません。私たちにもできません。',
+  'recovery.confirm': 'このコードを安全な場所に保存しました',
+  'recovery.done': '完了',
+  'recovery.working': '設定中…',
+  'recovery.setupFailed': 'いま復旧コードを設定できませんでした。もう一度お試しください。続くようなら、サインインし直してください。',
+  'recovery.promptBody': 'まだ復旧コードがありません。これがないと、パスワードを忘れた時点で保存した API キーと履歴は永久に失われます。',
+  'recovery.promptAction': '復旧を設定する',
+  'recovery.promptDismiss': '今はしない',
+  'recovery.statusNone': '復旧を設定する',
+  'recovery.statusFinishing': '復旧の設定が未完了 · 完了する',
+  'recovery.statusReady': '復旧の準備完了 · 新しいコード',
+  'recovery.statusUnknown': '復旧の状態は未確認 · 新しいコード',
+  'recovery.statusStale': '復旧コードが使えない可能性 · 新しいコード',
+  'recovery.resetTitle': 'パスワードを再設定',
+  'recovery.resetIntro': 'ユーザー名と、控えておいた復旧コードを入力してください。',
+  'recovery.codeLabel': '復旧コード',
+  'recovery.newPassword': '新しいパスワード',
+  'recovery.resetAction': 'パスワードを再設定',
+  'recovery.resetContinue': '次へ',
+  'recovery.resetBack': '戻る',
+  'recovery.resetWorking': '再設定しています…',
+  'recovery.resetFailed': 'そのユーザー名と復旧コードは一致しません。',
+  'recovery.resetCorrupt':
+    '保存された復旧レコードが壊れていて開けません。コードを入力し直しても解決しません。',
+  'recovery.resetInterrupted':
+    '再設定が途中で中断されました。いま決めた新しいパスワードでサインインしてみてください。入れれば再設定は完了しています。入れなければ、以前のパスワードがそのまま有効です。どちらの場合も、そのあとで新しい復旧コードを発行してください。',
+  'recovery.resetBlocked': 'このアカウントは復旧の設定がまだ終わっていません。パスワードで一度サインインして完了させてください。',
+  'recovery.forgot': 'パスワードをお忘れですか？',
+  'recovery.leaveConfirm': '復旧コードはまだ画面に表示されていて、二度と表示されません。保存せずに移動しますか？',
+  'recovery.replacesOld': 'これは以前のコードを置き換えます。前のコードはこの時点で使えなくなります。',
+  'recovery.rotateConfirm': '新しい復旧コードを作成しますか？いまのコードはすぐに使えなくなり、新しいコードを保存し直す必要があります。',
+  'recovery.promptLostBody':
+    '復旧コードはありますが、この端末では保存が確認されたことがありません。書き留める前に画面を閉じてしまった場合、そのコードでアカウントを取り戻すことはできません。いま新しいコードに置き換えられます。',
+  'recovery.promptLostAction': '新しいコードを作成',
+
   // --- language --------------------------------------------------------------
   'language.label': '言語',
   'language.switchToEnglish': 'English',
@@ -185,6 +227,13 @@ const ja = {
   'reply.noSourcesRetrieved':
     'この返信では出典を 1 件も取得できませんでした。事実にあたる部分はどれも未確認です。よりどころにするつもりのところは、自分で確かめてください。',
   'reply.sourcesTitle': '出典',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': '短い版',
+  'reply.showFull': '全文',
+  'reply.shorterBuilding': '短くしています…',
+  'reply.shorterShowing': 'コピーするとこの短い版になります',
+  'reply.showingFull': '全文を表示しています',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ 送る前に — あなたの主張の弱いところ',
@@ -226,6 +275,7 @@ const ja = {
   'error.generic': '返信を作成できませんでした',
   'error.refreshModels': 'モデル一覧を更新できませんでした',
   'error.briefing': '相手の言い分を組み立てられませんでした。',
+  'error.shorter': 'メッセージを短くできませんでした。',
   'error.publish': 'この反論を公開できませんでした。',
   'error.loadShared': '共有された反論を読み込めませんでした。',
   'error.article': 'その記事を読み込めませんでした。本文を貼り付けてみてください。',

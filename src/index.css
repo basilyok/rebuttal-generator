@@ -653,6 +653,59 @@ h1 {
   color: #4c5fd7;
 }
 
+/* The "Shorter version" toggle. Deliberately quiet — a secondary text button under
+   the message, not a second call to action competing with Copy. The short version is
+   an option, and the full message is what the app is for. */
+.shorter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.shorter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4c5fd7;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin-inline-start: -6px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.shorter-toggle:hover:not(:disabled) {
+  color: #3446b8;
+}
+
+.shorter-toggle:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.shorter-spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+}
+
+.shorter-note {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.shorter-error {
+  color: #92400e;
+}
+
 .claim-badge {
   margin-top: 16px;
   width: 100%;
@@ -999,6 +1052,84 @@ h1 {
 .vault-actions {
   margin-top: 14px;
   align-items: center;
+}
+
+/* Recovery: the code card, and the nudge for accounts that predate it.
+   Both borrow the vault dialog's clothes — same card, same warning block —
+   because they are the same subject and should not read as a different app. */
+.recovery-dialog {
+  max-width: 34rem;
+}
+
+.recovery-code {
+  display: block;
+  margin: 14px 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px dashed #a5b4fc;
+  background: #eef2ff;
+  color: #1e1b4b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  /* One tap or click selects the whole code, for anyone whose clipboard
+     permission is denied or who is copying it by hand. */
+  user-select: all;
+  /* The code must never be truncated to fit: a partially visible secret is a
+     secret the user writes down wrong. */
+  overflow-wrap: anywhere;
+}
+
+.recovery-warning {
+  margin-top: 14px;
+}
+
+/* Rotation killed a code that may be on someone's desk. This line is the only
+   notice that happens, so it is styled to be read, not skimmed past. */
+.recovery-replaces {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-inline-start: 4px solid #b45309;
+  background: #fffbeb;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #713f12;
+}
+
+.recovery-confirm {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 14px 0 0;
+  font-size: 13px;
+  /* start, not left: this line sits under an RTL layout in Arabic. */
+  text-align: start;
+  cursor: pointer;
+}
+
+.recovery-copied {
+  margin-inline-start: 10px;
+  font-size: 13px;
+  color: #15803d;
+}
+
+.recovery-status {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.recovery-prompt {
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  color: #713f12;
+}
+
+.recovery-prompt p {
+  margin: 0 0 8px;
 }
 
 /* Sign-in cluster: the button, its ⓘ toggle, and the benefits popover. */

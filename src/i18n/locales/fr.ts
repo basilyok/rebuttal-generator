@@ -76,6 +76,55 @@ const fr = {
     "Il s'agit d'un autre compte. Pour garder les comptes séparés, cet appareil a été déconnecté et l'historique présent sur cet appareil effacé — reconnectez-vous pour continuer.",
   'account.authError': "La connexion n'a pas abouti. Réessayez.",
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': 'Votre code de récupération',
+  'recovery.blurb':
+    "Ce code est ce qui vous rend l'accès à vos clés et à votre historique enregistrés si vous oubliez votre mot de passe. Vous ne le verrez que cette fois : conservez-le à un endroit où vous le retrouverez plus tard — un gestionnaire de mots de passe, ou sur papier.",
+  'recovery.regenerateHint':
+    'Vous pouvez générer un nouveau code à tout moment tant que vous êtes connecté : en perdre un est donc une corvée, pas une catastrophe.',
+  'recovery.copy': 'Copier le code',
+  'recovery.copied': 'Copié',
+  'recovery.warning':
+    "Si vous perdez à la fois votre mot de passe et ce code, vos clés d'API et votre historique enregistrés seront irrécupérables — ni par nous, ni par personne.",
+  'recovery.confirm': "J'ai enregistré ce code en lieu sûr",
+  'recovery.done': 'Terminé',
+  'recovery.working': 'Configuration…',
+  'recovery.setupFailed':
+    'Impossible de configurer votre code de récupération pour le moment. Réessayez, ou reconnectez-vous si cela persiste.',
+  'recovery.promptBody':
+    "Vous n'avez pas encore de code de récupération. Sans lui, oublier votre mot de passe signifie perdre définitivement vos clés et votre historique enregistrés.",
+  'recovery.promptAction': 'Configurer la récupération',
+  'recovery.promptDismiss': 'Pas maintenant',
+  'recovery.statusNone': 'Configurer la récupération',
+  'recovery.statusFinishing': 'Récupération inachevée · la terminer',
+  'recovery.statusReady': 'Récupération prête · nouveau code',
+  'recovery.statusUnknown': 'Récupération non vérifiée · nouveau code',
+  'recovery.statusStale': 'Le code de récupération peut être invalide · nouveau code',
+  'recovery.resetTitle': 'Réinitialiser votre mot de passe',
+  'recovery.resetIntro': "Saisissez votre nom d'utilisateur et le code de récupération que vous avez conservé.",
+  'recovery.codeLabel': 'Code de récupération',
+  'recovery.newPassword': 'Nouveau mot de passe',
+  'recovery.resetAction': 'Réinitialiser le mot de passe',
+  'recovery.resetContinue': 'Continuer',
+  'recovery.resetBack': 'Retour',
+  'recovery.resetWorking': 'Réinitialisation…',
+  'recovery.resetFailed': "Ce nom d'utilisateur et ce code de récupération ne correspondent pas.",
+  'recovery.resetCorrupt':
+    'L’enregistrement de récupération stocké est endommagé et ne peut pas être ouvert. Ressaisir le code n’y changera rien.',
+  'recovery.resetInterrupted':
+    'La réinitialisation a été interrompue. Essayez de vous connecter avec le nouveau mot de passe que vous venez de choisir : si cela fonctionne, la réinitialisation a abouti. Sinon, votre ancien mot de passe reste valable. Dans les deux cas, générez ensuite un nouveau code de récupération.',
+  'recovery.resetBlocked':
+    "La configuration de la récupération n'est pas encore terminée sur ce compte. Connectez-vous une fois avec votre mot de passe pour la terminer.",
+  'recovery.forgot': 'Mot de passe oublié ?',
+  'recovery.leaveConfirm':
+    "Votre code de récupération est encore à l'écran et ne sera plus affiché. Partir sans l'enregistrer ?",
+  'recovery.replacesOld': "Ceci remplace tout code précédent : l'ancien cesse de fonctionner dès maintenant.",
+  'recovery.rotateConfirm':
+    'Générer un nouveau code de récupération ? Votre code actuel cessera immédiatement de fonctionner et vous devrez enregistrer le nouveau.',
+  'recovery.promptLostBody':
+    "Vous avez un code de récupération, mais cet appareil n'a jamais vu confirmer que vous l'aviez enregistré : s'il a été perdu avant que vous ne le notiez, il ne vous rendra pas votre compte. Vous pouvez le remplacer maintenant.",
+  'recovery.promptLostAction': 'Générer un nouveau code',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Langue',
   'language.switchToEnglish': 'English',
@@ -182,6 +231,13 @@ const fr = {
   'reply.noSourcesRetrieved':
     "Aucune source n'a été récupérée pour cette réponse. Chaque affirmation factuelle qu'elle contient est donc non vérifiée — contrôlez tout ce sur quoi vous comptez vous appuyer.",
   'reply.sourcesTitle': 'Sources',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Version plus courte',
+  'reply.showFull': 'Message complet',
+  'reply.shorterBuilding': 'Raccourcissement…',
+  'reply.shorterShowing': 'Copier reprendra cette version plus courte',
+  'reply.showingFull': 'Message complet affiché',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': "⚠️ Avant d'envoyer — le point faible de votre position",
@@ -223,6 +279,7 @@ const fr = {
   'error.generic': "Impossible d'écrire la réponse",
   'error.refreshModels': "Impossible d'actualiser la liste des modèles",
   'error.briefing': 'Impossible de reconstituer son argumentaire.',
+  'error.shorter': 'Impossible de raccourcir le message.',
   'error.publish': 'Impossible de publier cette réponse.',
   'error.loadShared': "Cette réponse partagée n'a pas pu être chargée.",
   'error.article': 'Impossible de charger cet article. Essayez plutôt de coller le texte.',

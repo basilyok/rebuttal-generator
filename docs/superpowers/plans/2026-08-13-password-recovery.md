@@ -1,10 +1,26 @@
 # Password Recovery Implementation Plan
 
+> **Assert on what a caller can obtain, not on the artifact you just wrote.**
+> Task 3 shipped the same class of error twice before it was caught. First a
+> comment claimed a partial reset was safe because the old password still
+> worked — true, but authenticating is not decrypting, and the ciphertext had
+> already moved to the new key era. Then its replacement claimed every state
+> left a copy sealed under a credential the caller holds — true of what was
+> *stored*, false of what `begin` actually *served*.
+>
+> Both times the comment was literally true and operationally false, and both
+> times the test agreed with it, because the test measured the same wrong thing:
+> it read the KV store directly instead of calling the endpoint. A test that
+> inspects the artifact you just wrote can only confirm you wrote it.
+>
+> Every remaining task here crosses the same boundary. When you assert, ask what
+> a real caller holds and what a real call returns.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:subagent-driven-development (recommended) or superpowers-extended-cc:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship the approved recovery-code design (spec: `docs/superpowers/specs/2026-08-13-password-recovery-design.md`) so a password account can be reset without destroying its vault and history.
 
-**Architecture:** A random per-account `DEK` becomes the only key that encrypts data. It is wrapped twice — under `masterKey` (from the password) and under `recoveryKey` (from a 128-bit recovery code) — and both wrapped copies live in one KV record the server cannot open. Reset rewrites that record instead of re-encrypting anything. Blobs carry a version tag so existing accounts migrate incrementally and a half-migrated account stays fully readable.
+**Architecture:** A random per-account `DEK` becomes the only key that encrypts data. It is wrapped twice — under `masterKey` (from the password) and under `recoveryKey` (from a 120-bit recovery code) — and both wrapped copies live in one KV record the server cannot open. Reset rewrites that record instead of re-encrypting anything. Blobs carry a version tag so existing accounts migrate incrementally and a half-migrated account stays fully readable.
 
 **Tech Stack:** WebCrypto (PBKDF2-SHA256, AES-GCM), Cloudflare Pages Functions, Workers KV, the existing `LIMITER` Durable Object brakes, React 18 + TypeScript, `node --test` + `tsx`.
 
@@ -52,7 +68,7 @@
 **Context you need:** `src/vault.ts` defines `toBase64`/`fromBase64` as module-private consts (around lines 56-62) and `cachedKey()` around line 100. `sealJson(key, value)` and `openJson(key, blob)` are already exported and return/consume `VaultBlob` (`{salt, iv, ciphertext, version?, updatedAt?}`). `src/account.ts` exports `normalizeUsername` and uses `SALT_PREFIX = "rebuttal|v1|"`; the recovery path uses a *different* prefix so the two derivations can never collide.
 
 **Acceptance Criteria:**
-- [ ] `generateRecoveryCode()` returns 26 Crockford base32 characters in six dash-separated groups, drawn from `crypto.getRandomValues`
+- [ ] `generateRecoveryCode()` returns 24 Crockford base32 characters — six dash-separated groups of four, 120 bits — drawn from `crypto.getRandomValues`
 - [ ] The alphabet excludes I, L, O and U
 - [ ] `deriveRecoveryCredentials(username, code)` returns `{ recoveryKeyBytes, recoveryAuth }`, using 600,000 PBKDF2 rounds and salt `"rebuttal|recovery|v1|" + normalizeUsername(username)`
 - [ ] The derivation is case- and dash-insensitive on the code, so a user typing it back in any reasonable form succeeds
@@ -195,7 +211,7 @@ export const RECOVERY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
 const GROUPS = 6
 const GROUP_SIZE = 4
-/** 24 characters × 5 bits = 120 bits, rounded up to 128 bits of draw below. */
+/** 24 characters × 5 bits = 120 bits of entropy. */
 const CODE_CHARS = GROUPS * GROUP_SIZE
 
 const SALT_PREFIX = 'rebuttal|recovery|v1|'
@@ -616,8 +632,15 @@ git commit -m "Add the wrapped-DEK record endpoint and credentialVersion session
 
 **Context you need:** `functions/api/auth/login.js` is the template for everything about the shape here — the `MAX_BODY_BYTES` guard, `fromBase64(body?.authHash)` with a 32-byte length check, the `AUTH_TEST_BYPASS_RATE_LIMIT` seam that gates *both* brake layers, and above all the `dummyRecord()` discipline: `verifyAuth()` must run on every request, real user or not, and the code must not hoist an early `if (!recordRaw) return failure()` above it. Copy that structure rather than inventing a new one. `hashAuth(bytes)` → `{salt, hash, iterations, version}`; `verifyAuth(record, bytes)` → boolean; both from `functions/_lib/password.js`.
 
+**Where the `credentialVersion` bump goes — decided during Task 2's review.** The plan says `complete` "bumps `credentialVersion`" without pinning the position, and the position matters. It must land **after** the `password:` write: a failure between the bump and the password write would sign every session out for a reset that never actually took effect, which is strictly worse than not bumping at all.
+
+Accept one consequence rather than being surprised by it: a login landing between the `password:` write and the bump mints a session at the old version, which the bump then kills — bouncing that user to sign-in exactly once. Self-healing and millisecond-wide, but it should be a known cost.
+
+Also note the documented bound recorded in `session.js` during Task 2: invalidation is eventual, within KV's consistency window, and a concurrent user-record write can revert it. Do not build anything here that assumes the bump is immediately and permanently visible.
+
 **Acceptance Criteria:**
 - [ ] Both endpoints: same-origin gate (403), body cap and JSON validation (400), layered brakes honouring `AUTH_TEST_BYPASS_RATE_LIMIT`
+- [ ] The `credentialVersion` bump is the LAST write in `complete`, after `password:`
 - [ ] `begin` returns `{ byRecovery }` on a correct code, and an identical `bad-credentials` 401 for a wrong code *and* an unknown username
 - [ ] `begin` runs `verifyAuth` against `dummyRecord()` on a miss, so both paths cost one PBKDF2
 - [ ] `complete` re-verifies `recoveryAuth` before writing anything
@@ -1215,8 +1238,16 @@ git commit -m "Tag blobs with the key that opens them"
 
 **Context you need:** `src/App.tsx:280` holds `localKeyRef` (the adopted `masterKey`); `onVaultOpened` (line ~380) applies a decrypted bundle; `collectKeyBundle()` (line 139) gathers the localStorage API keys; `syncVault` (line ~1151) reseals and PUTs. The vault effect around line 449 already branches on `auth.user?.provider === 'local' && localKeyRef.current`. `handleAuthSubmit` adopts the key at line 1100.
 
+**Flip the era tag in the same edit that changes the key — carried from Task 4.** `pushHistory` takes its version as a required parameter with no default, and `App.tsx`'s `syncHistory` currently passes `BLOB_VERSION_MASTER`, which is the truthful value while no DEK exists. When this task introduces the real DEK, the key and the tag must move together in a single edit. They are separate arguments precisely so a reviewer can see them disagree: a blob tagged v2 but sealed under the masterKey would pass the "refuse reset while any blob is v1" gate that exists to stop exactly it, and the reset would then rewrap the DEK and strand the data.
+
+**Replace `blobKeys()` in that same edit — the mirror of the tag bug.** `App.tsx`'s `blobKeys()` currently puts the **master key in the `dekKey` slot**. That is inert today because nothing writes a v2 blob, but it is the exact mirror of the mislabel that `f97d95d` fixed: if a genuine v2 blob ever reaches that helper before this task replaces it, `openBlob` hands it the master key and the failure surfaces as a raw AES decryption error rather than the `MissingKeyError` the routing is supposed to produce. The key, the tag, and this helper are three faces of one change and must land together.
+
+**Decide what `pullAndMergeHistory` does with `MissingKeyError` — also from Task 4.** It currently swallows that in the same `catch` as a wrong key and a corrupt blob, returning local history. Right for a reader, since the panel must not break — but it means a half-migrated account silently drops its remote history rather than reporting that it lacks a key it ought to hold. "I hold the wrong key" is a migration bug and should be visible somewhere; "the blob is corrupt" is not. Distinguish them, or record here why not.
+
 **Acceptance Criteria:**
 - [ ] `fetchDek()` / `saveDek(byPassword, byRecovery)` wrap the endpoint with the same `credentials: 'same-origin'` and null-on-401 conventions as `fetchVault`/`saveVault`
+- [ ] The DEK key and the `BLOB_VERSION_DEK` tag are introduced in the same edit, at every `syncHistory`/`pushHistory` call site
+- [ ] `MissingKeyError` from `pullAndMergeHistory` is either surfaced or explicitly documented as swallowed
 - [ ] `setupRecovery(username, masterKey)` generates DEK + code, **writes the DEK record before re-encrypting anything**, then migrates blobs, and returns the code
 - [ ] `ensureMigrated(...)` re-encrypts any still-v1 blob to v2 and is a no-op when everything is already v2
 - [ ] Running setup twice does not orphan data — the second run reuses the stored DEK rather than minting a new one
@@ -1707,6 +1738,12 @@ git commit -m "Add recovery setup UI, prompt and strings"
 - Modify: `src/AccountBar.tsx` (the "Forgot your password?" link)
 - Modify: `src/App.tsx`
 
+**Use what Task 1 already exports.** Its code-review pass added three things this task must not reinvent:
+
+- `isValidRecoveryCode(code)` — validate the field on input. Without it the only feedback available costs 600k PBKDF2 rounds, roughly a second, to report something a regex knew at the first keystroke. Disable the submit button until it passes.
+- `WrongRecoveryCodeError` vs `CorruptDekRecordError` — these are the reason the reset UI can tell "you typed it wrong, try again" from "this record will not decode, and retrying cannot help." Map them to different messages; collapsing both into one error invites a user with a corrupt record to keep retrying a code that was correct.
+- `normalizeRecoveryCode` already folds I/L→1, O→0, and every Unicode dash, so the input field must **not** do its own cleanup — doing it twice risks the two disagreeing.
+
 **Acceptance Criteria:**
 - [ ] "Forgot your password?" on the sign-in dialog opens the reset flow
 - [ ] Step 1 (username + code) surfaces one message for wrong code and unknown username
@@ -1714,6 +1751,18 @@ git commit -m "Add recovery setup UI, prompt and strings"
 - [ ] On success the user is signed in, the vault and history still open, and the new code is displayed once
 - [ ] If `begin` succeeds but the account is not fully migrated, the flow stops with `recovery.resetBlocked` and changes nothing
 - [ ] A failed reset leaves the old password working
+
+**The client MUST consume `previous` — added after Task 3's review.** `complete` stores the outgoing wrapped pair under `previous`, and `begin` serves `previousByRecovery` alongside `byRecovery`. That exists because a reset interrupted between its first and second writes leaves the current `byRecovery` sealed under a code whose verifier never landed — so the code that *did* verify can only open the previous copy. The server guarantee is inert until this task uses it.
+
+`runReset` must therefore try `byRecovery` first and fall back to `previousByRecovery` when unwrapping throws `WrongRecoveryCodeError`, treating a successful fallback exactly like a successful primary unwrap. Do not surface the difference to the user: from their side this is a reset that worked, and explaining which generation of ciphertext opened is noise about our own interrupted write. If both fail, the code is genuinely wrong — that is the real `WrongRecoveryCodeError`.
+
+The same applies wherever the DEK is opened with the password: `GET /api/dek` returns the whole record, so try `byPassword`, then `previous.byPassword`.
+
+**Named precisely, after Task 5's review found this note too vague to act on:** the two functions are `setupRecovery` and `adoptRecovery`, and `DekRecord` needs a `previous` field before either can use it. The scenario is not hypothetical — a reset interrupted between `complete.js`'s first and third writes leaves the old password still authenticating while the *current* `byPassword` is sealed under the new password key. That session cannot open its DEK and a v2 vault stays locked, which is the precise case `previous` was added to cover. It fails safe today (`setupRecovery` throws `dek-not-openable` rather than overwriting), so this is a recoverability gap, not a data-loss one — but leaving it means the server-side fallback stays half-consumed.
+
+**The not-fully-migrated guard is client-side only — noted during Task 3's review.** `recovery.resetBlocked` lives in the browser, so the server will happily reset an account whose blobs are still `version: 1`, and anyone posting directly to `/api/auth/recover/complete` bypasses it. That is this plan's allocation rather than an oversight, and it is defensible: bypassing it costs you your *own* v1 blobs, nobody else's, and the endpoint is already possession-gated by the recovery code.
+
+Record the asymmetry honestly, though — every other invariant in this feature is server-enforced. If it ever matters, `complete` can read `vault:` and `history:` and refuse on a v1 tag, at the price of two extra KV reads on an operation that happens roughly once per account per lifetime. Do not add that speculatively; it was considered and priced here.
 
 **Verify:** browser walkthrough in Step 4.
 
@@ -1920,3 +1969,21 @@ Tasks 1, 2 and 4 are independent of each other. Task 5 needs 1, 2 and 4; Task 7 
 
 
 
+
+---
+
+## Carried into Task 8's walkthrough — from Task 6
+
+**The `replace` prompt is per-device, so it nags across devices.** Acknowledgement is stored in localStorage keyed by account id, so a user who set up recovery on their laptop is prompted once on their phone. It is dismissible and its copy offers a *replacement* rather than claiming they have nothing — but it is a real nag traded against a real silence (Task 6's C3: without any acknowledgement record, a first code lost to a reload is never re-prompted, ever).
+
+The alternative is a server-side flag, which costs a KV write against the shared 1000/day budget and an endpoint change. Not obviously wrong, just a different trade. Sanity-check the phone case during the walkthrough and decide then, with the real thing in front of you, rather than in the abstract now.
+
+---
+
+## The two pre-ship drills — added after Task 7's review
+
+Everything in this feature is unit-tested and **none of it has run in a browser**. The tests cover the parts most likely to be subtly wrong — the crypto, the write ordering, the `previous` fallback, the server gate, the error mapping. What they structurally cannot see: that the two Pages Functions are actually routed and reachable, that the real `/api/vault` 401 path behaves as assumed, whether focus actually moves in `ResetFlow`, whether `beforeunload` fires for real on a displayed code, and whether a password manager grabs the code field despite `autoComplete="off"`.
+
+**Drill 1 — the loop, once, against `wrangler pages dev` with a real KV binding.** Register → save an API key → sign out → reset with the code → confirm the key and one history entry are back on screen, and that the rotated code works on a second reset. One session, and it exercises routing, the 401 fast path, focus, and styling at the same time.
+
+**Drill 2 — one interruption.** In the same session: DevTools → Network → Offline, submit the reset, then go back online and retry with the **old** code. That is the `previous` fallback executing against real KV rather than a fake, and it is the only assertion in this feature whose failure is unrecoverable in production. It is also the fastest way to find out whether the interrupted-reset message reads as well to a real person as it does on paper.

@@ -20,6 +20,10 @@ export const vaultKey = (id) => `vault:${id}`
 export const historyKey = (id) => `history:${id}`
 export const passwordKey = (id) => `password:${id}`
 export const oauthKey = (state) => `oauth:${state}`
+/** The DEK wrapped twice — under the password key and under the recovery key. */
+export const dekKey = (id) => `dek:${id}`
+/** The verifier for the recovery code, shaped exactly like the password record. */
+export const recoveryKey = (id) => `recovery:${id}`
 
 /** URL-safe random token. 32 bytes is well past guessing range. */
 export function randomToken(bytes = 32) {
@@ -88,11 +92,43 @@ export function readCookie(request, name) {
   return null
 }
 
-export async function createSession(env, userId) {
+/** The version a session must carry to be current. One reader, one writer, one rule. */
+export const credentialVersionOf = (record) =>
+  Number.isInteger(record?.credentialVersion) ? record.credentialVersion : 0
+
+/**
+ * Mint a session for an already-authenticated user.
+ *
+ * Takes the user RECORD, not the id: the stamped version and the id must come
+ * from the same record, and a signature letting a caller supply one without the
+ * other invites a session stamped 0 against a non-zero account — which
+ * getSession rejects on the next request, producing a sign-in loop with no
+ * error anywhere to find it by (successful sign-in, immediate sign-out, no
+ * non-200, no log line). Deriving both here makes that unrepresentable rather
+ * than merely discouraged.
+ *
+ * LIMITATION — the invalidation this enables is eventual, not immediate. The
+ * bound is "within the KV consistency window", and a concurrent user-record
+ * write can revert it: upsertUser reads-modifies-writes the user record, so a
+ * read that predates a reset's bump will write the old integer back and revive
+ * the sessions the reset had evicted. Reaching it needs a >24h-idle local login
+ * (the only path whose refreshAfterMs guard lets the write fire) landing inside
+ * the ~60s window right after a reset. Closing it properly means a dedicated
+ * credver:<id> key no rebuild touches, at the cost of one extra KV read on
+ * every authenticated request, permanently — judged the wrong trade at this
+ * scale. Accepted knowingly; revisit if resets ever become routine.
+ */
+export async function createSession(env, user) {
   const id = randomToken()
-  await env.ACCOUNTS.put(sessionKey(id), JSON.stringify({ userId, createdAt: Date.now() }), {
-    expirationTtl: SESSION_TTL_SECONDS,
-  })
+  // The version is stamped INTO the session, not looked up per request: that
+  // is what lets a password reset invalidate every existing session by
+  // bumping one integer on the user record, without an index of a user's
+  // sessions (there is none, and KV cannot enumerate cheaply).
+  await env.ACCOUNTS.put(
+    sessionKey(id),
+    JSON.stringify({ userId: user.id, createdAt: Date.now(), credentialVersion: credentialVersionOf(user) }),
+    { expirationTtl: SESSION_TTL_SECONDS }
+  )
   return id
 }
 
@@ -120,7 +156,26 @@ export async function getSession(request, env) {
   if (!userRaw) return null
 
   try {
-    return { sessionId, userId: session.userId, user: JSON.parse(userRaw) }
+    const user = JSON.parse(userRaw)
+    // Absent on both sides means "never reset" — existing records need no
+    // backfill, and a session minted before this field existed still works.
+    const stamped = credentialVersionOf(session)
+    // The two sides are treated ASYMMETRICALLY on purpose. A junk value on the
+    // session collapses to 0, which is the strictest reading and rejects it.
+    // The same collapse on the USER record would read as "never reset" and
+    // admit every session — switching the mechanism off silently on exactly
+    // the one account whose record went bad, which is the invisible-failure
+    // shape this whole field exists to avoid. So the user side fails closed:
+    // present-but-not-an-integer is unreadable, not zero.
+    const raw = user.credentialVersion
+    if (raw !== undefined && !Number.isInteger(raw)) return null
+    const current = Number.isInteger(raw) ? raw : 0
+    // `stamped > current` is accepted deliberately: that direction means the
+    // user record went BACKWARDS (a stale read, or a restore), and refusing a
+    // session that proved a newer credential would lock out the person the
+    // reset was for.
+    if (stamped < current) return null // credentials changed since this session was minted
+    return { sessionId, userId: session.userId, user }
   } catch {
     return null
   }
@@ -177,10 +232,11 @@ export async function upsertUser(env, { provider, subject, email, name, picture,
     Date.now() - existing.lastSeenAt < refreshAfterMs
   ) {
     // `id` must always be userId (provider:subject) — never trusted from
-    // storage. createSession(env, user.id) below is a privilege-binding
-    // call: it mints a session for whatever id it's handed. The write path
-    // (below) always derives id fresh; this skip path must match, not
-    // return whatever happens to already be sitting in the stored record.
+    // storage. createSession(env, user) takes the record this function
+    // returns and is a privilege-binding call: it mints a session for
+    // whatever `id` that record carries. The write path (below) always
+    // derives id fresh; this skip path must match, not return whatever
+    // happens to already be sitting in the stored record.
     return { ...existing, id: userId }
   }
 
@@ -193,6 +249,12 @@ export async function upsertUser(env, { provider, subject, email, name, picture,
     // Preferences survive re-authentication — this is what makes a language choice
     // stick across logins rather than resetting on every sign-in.
     language: existing?.language || '',
+    // Survives re-authentication for a sharper reason than `language` above:
+    // this integer is what invalidates sessions after a password reset, and a
+    // rebuild that dropped it would silently reset it to 0 and make every
+    // session the reset had killed resolve again. The failure is invisible —
+    // no error, no log, just an account that quietly stops being protected.
+    credentialVersion: credentialVersionOf(existing),
     createdAt: existing?.createdAt || Date.now(),
     lastSeenAt: Date.now(),
   }

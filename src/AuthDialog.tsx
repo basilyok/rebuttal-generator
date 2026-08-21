@@ -40,9 +40,31 @@ interface AuthDialogProps {
    * still-unwiped data.
    */
   fixedUsername?: string
+  /**
+   * A username to start the field with, which the user may still change.
+   *
+   * Strictly weaker than `fixedUsername` and never a substitute for it: this
+   * one is a convenience, that one is the account-switch lock that also hides
+   * Google and the reset link. Kept as two props precisely so a future caller
+   * cannot reach for the convenient one and silently lose the lock.
+   *
+   * Set after a reset whose auto-sign-in did not land. That user has just
+   * demonstrated they do not remember things about this account, and we know
+   * the name — asking them to retype it is asking for a second failure.
+   */
+  prefillUsername?: string
   onModeChange: (mode: AuthMode) => void
   onGoogle: () => void
   onSubmit: (username: string, password: string, email: string) => void
+  /**
+   * Opens the recovery-code reset flow. Rendered only in `signin` mode with no
+   * `fixedUsername`, for the same reason Google is hidden there: the fixed
+   * render exists to re-enter ONE signed-in account's password, and a reset
+   * started from it would rewrite the credentials of the account whose data
+   * this device is currently holding, identified by a code rather than by the
+   * session. Optional so the unlock path can simply not pass one.
+   */
+  onForgotPassword?: () => void
   onDismiss: () => void
 }
 
@@ -53,12 +75,14 @@ export function AuthDialog({
   busy,
   error,
   fixedUsername,
+  prefillUsername,
   onModeChange,
   onGoogle,
   onSubmit,
+  onForgotPassword,
   onDismiss,
 }: AuthDialogProps) {
-  const [username, setUsername] = useState(fixedUsername ?? '')
+  const [username, setUsername] = useState(fixedUsername ?? prefillUsername ?? '')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [email, setEmail] = useState('')
@@ -207,6 +231,16 @@ export function AuthDialog({
             disabled={busy}
           >
             {isSignup ? t('account.switchToSignIn') : t('account.switchToSignUp')}
+          </button>
+        )}
+        {/* Last, and a link rather than a button: it sits with the mode switch
+            because it is the same kind of control — "this is not the form you
+            need" — and a reset entry within a thumb's width of Sign in is a
+            misfire that ends in a rotated recovery code. Sign-in only, and
+            never on the fixed-username render; see onForgotPassword. */}
+        {mode === 'signin' && !fixedUsername && onForgotPassword && (
+          <button type="button" className="link-button subtle" onClick={onForgotPassword} disabled={busy}>
+            {t('recovery.forgot')}
           </button>
         )}
       </div>

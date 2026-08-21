@@ -79,6 +79,46 @@ const zh_Hans = {
     '这是另一个账户。为了不让两个账户混在一起，这台设备已经退出登录，本机上的历史记录也已清空——重新登录就可以继续。',
   'account.authError': '登录没有完成，请再试一次。',
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': '你的恢复码',
+  'recovery.blurb': '如果你忘记了密码，这串恢复码就是找回已保存的 API 密钥和历史记录的途径。它只显示这一次，请把它存到以后还能找到的地方——密码管理器，或者纸上。',
+  'recovery.regenerateHint': '只要处于登录状态，你随时可以生成新的恢复码，所以弄丢一串只是麻烦，不是灾难。',
+  'recovery.copy': '复制恢复码',
+  'recovery.copied': '已复制',
+  'recovery.warning': '如果密码和这串恢复码都丢了，已保存的 API 密钥和历史记录就再也无法恢复——我们也做不到。',
+  'recovery.confirm': '我已经把这串恢复码存到安全的地方了',
+  'recovery.done': '完成',
+  'recovery.working': '正在设置…',
+  'recovery.setupFailed': '现在没能设置恢复码，请再试一次；如果一直这样，请重新登录。',
+  'recovery.promptBody': '你还没有恢复码。没有它，一旦忘记密码，已保存的密钥和历史记录就会永久丢失。',
+  'recovery.promptAction': '设置恢复码',
+  'recovery.promptDismiss': '暂时不用',
+  'recovery.statusNone': '设置恢复码',
+  'recovery.statusFinishing': '恢复设置未完成 · 去完成',
+  'recovery.statusReady': '恢复已就绪 · 换一串新码',
+  'recovery.statusUnknown': '恢复状态未知 · 换一串新码',
+  'recovery.statusStale': '恢复代码可能已失效 · 新代码',
+  'recovery.resetTitle': '重置密码',
+  'recovery.resetIntro': '输入你的用户名和保存好的恢复码。',
+  'recovery.codeLabel': '恢复码',
+  'recovery.newPassword': '新密码',
+  'recovery.resetAction': '重置密码',
+  'recovery.resetContinue': '继续',
+  'recovery.resetBack': '返回',
+  'recovery.resetWorking': '正在重置…',
+  'recovery.resetFailed': '用户名和恢复码对不上。',
+  'recovery.resetCorrupt':
+    '存储的恢复记录已损坏，无法打开。重新输入代码也无济于事。',
+  'recovery.resetInterrupted':
+    '重置被中断了。请试着用你刚设置的新密码登录：能登录说明重置已经完成；不能登录，则原来的密码仍然有效。无论哪种情况，之后都请生成一个新的恢复代码。',
+  'recovery.resetBlocked': '这个账户的恢复设置还没完成。先用密码登录一次，把它设置好。',
+  'recovery.forgot': '忘记密码了？',
+  'recovery.leaveConfirm': '恢复码还在屏幕上，而且不会再显示。要不保存就离开吗？',
+  'recovery.replacesOld': '这会替换掉之前的恢复码——旧的那串从现在起失效。',
+  'recovery.rotateConfirm': '要生成新的恢复码吗？现在这串会立即失效，你需要重新保存新的。',
+  'recovery.promptLostBody': '你有恢复码，但这台设备从未确认过你把它存好。如果它在你记下来之前就丢了，就没法用它找回账户。你可以现在换一串新的。',
+  'recovery.promptLostAction': '生成新的恢复码',
+
   // --- language --------------------------------------------------------------
   'language.label': '语言',
   'language.switchToEnglish': 'English',
@@ -185,6 +225,13 @@ const zh_Hans = {
   'reply.noSourcesRetrieved':
     '这封回复没有检索到任何来源。里面的每一句事实性说法都未经核实——凡是你打算靠它站住脚的，先自己查一下。',
   'reply.sourcesTitle': '来源',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': '更短的版本',
+  'reply.showFull': '完整消息',
+  'reply.shorterBuilding': '正在缩短…',
+  'reply.shorterShowing': '复制的就是这个更短的版本',
+  'reply.showingFull': '正在显示完整消息',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ 发出去之前——你这一方最弱的地方',
@@ -226,6 +273,7 @@ const zh_Hans = {
   'error.generic': '没能写出这封回复',
   'error.refreshModels': '没能刷新模型列表',
   'error.briefing': '没能整理出对方的说法。',
+  'error.shorter': '没能缩短这条消息。',
   'error.publish': '没能发布这封回复。',
   'error.loadShared': '这个分享出来的回复打不开。',
   'error.article': '这篇文章加载不了。把正文直接粘贴进来试试。',

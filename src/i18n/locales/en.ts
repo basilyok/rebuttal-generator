@@ -79,6 +79,59 @@ const en: Record<string, string> = {
     'That is a different account. To keep accounts separate, this device has been signed out and its history on this device cleared — sign in again to continue.',
   'account.authError': 'Sign-in did not complete. Please try again.',
 
+  // --- recovery --------------------------------------------------------------
+  // Order matters in the dialog: the "you can always make a new one" line comes
+  // before the warning, because that is what makes a one-time display bearable.
+  // The warning itself must stay blunt in every language — a softened
+  // translation would mislead someone about a permanent, unfixable outcome.
+  'recovery.title': 'Your recovery code',
+  'recovery.blurb':
+    'This code is what gets you back into your saved keys and history if you ever forget your password. You will only see it this once, so save it somewhere you will still have it later — a password manager, or on paper.',
+  'recovery.regenerateHint':
+    'You can generate a new code any time while you are signed in, so losing one is a chore rather than a disaster.',
+  'recovery.copy': 'Copy code',
+  'recovery.copied': 'Copied',
+  'recovery.warning':
+    'If you lose both your password and this code, your saved API keys and history cannot be recovered — not by us, not by anyone.',
+  'recovery.confirm': 'I have saved this code somewhere safe',
+  'recovery.done': 'Done',
+  'recovery.working': 'Setting up…',
+  'recovery.setupFailed':
+    'Could not set up your recovery code just now. Please try again, or sign in again if this keeps happening.',
+  'recovery.promptBody':
+    'You do not have a recovery code yet. Without one, forgetting your password means permanently losing your saved keys and history.',
+  'recovery.promptAction': 'Set up recovery',
+  'recovery.promptDismiss': 'Not now',
+  'recovery.statusNone': 'Set up recovery',
+  'recovery.statusFinishing': 'Recovery setup unfinished · finish it',
+  'recovery.statusReady': 'Recovery ready · new code',
+  'recovery.statusUnknown': 'Recovery unchecked · new code',
+  'recovery.statusStale': 'Recovery code may not work · new code',
+  'recovery.resetTitle': 'Reset your password',
+  'recovery.resetIntro': 'Enter your username and the recovery code you saved.',
+  'recovery.codeLabel': 'Recovery code',
+  'recovery.newPassword': 'New password',
+  'recovery.resetAction': 'Reset password',
+  'recovery.resetContinue': 'Continue',
+  'recovery.resetBack': 'Back',
+  'recovery.resetWorking': 'Resetting…',
+  'recovery.resetFailed': 'That username and recovery code did not match.',
+  'recovery.resetCorrupt':
+    'That stored recovery record is damaged and cannot be opened. Trying the code again will not help.',
+  'recovery.resetInterrupted':
+    'Something interrupted the reset. Try signing in with the new password you just chose — if it works, the reset went through. If not, your old password still works. Either way, generate a fresh recovery code afterwards.',
+  'recovery.resetBlocked':
+    'Recovery setup has not finished on this account yet. Sign in with your password once to finish it.',
+  'recovery.forgot': 'Forgot your password?',
+  'recovery.leaveConfirm':
+    'Your recovery code is still on screen and will not be shown again. Leave without saving it?',
+  'recovery.replacesOld': 'This replaces any earlier code — the previous one stops working now.',
+  'recovery.rotateConfirm':
+    'Generate a new recovery code? Your current code stops working immediately, and you will need to save the new one.',
+  'recovery.promptLostBody':
+    'You have a recovery code, but this device has never seen it saved — if it was lost before you wrote it down, it will not get your account back. You can replace it with a new one now.',
+  'recovery.promptLostAction': 'Generate a new code',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Language',
   'language.switchToEnglish': 'English',
@@ -185,6 +238,13 @@ const en: Record<string, string> = {
   'reply.noSourcesRetrieved':
     'No sources were retrieved for this reply. Every factual claim in it is unverified — check anything you plan to lean on.',
   'reply.sourcesTitle': 'Sources',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Shorter version',
+  'reply.showFull': 'Full message',
+  'reply.shorterBuilding': 'Shortening…',
+  'reply.shorterShowing': 'Copy will send this shorter version',
+  'reply.showingFull': 'Showing the full message',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Before you send — the weak point in your position',
@@ -226,6 +286,7 @@ const en: Record<string, string> = {
   'error.generic': 'Could not write the reply',
   'error.refreshModels': 'Could not refresh the model list',
   'error.briefing': 'Could not build their case.',
+  'error.shorter': 'Could not shorten the message.',
   'error.publish': 'Could not publish this rebuttal.',
   'error.loadShared': 'That shared rebuttal could not be loaded.',
   'error.article': 'Could not load that article. Try pasting the text instead.',

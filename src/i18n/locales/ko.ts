@@ -78,6 +78,48 @@ const ko = {
     '다른 계정이에요. 계정이 서로 섞이지 않도록 이 기기를 로그아웃하고 이 기기에 있던 기록을 지웠어요 — 계속하려면 다시 로그인해 주세요.',
   'account.authError': '로그인을 마치지 못했어요. 다시 시도해 주세요.',
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': '복구 코드',
+  'recovery.blurb':
+    '이 코드는 비밀번호를 잊었을 때 저장해 둔 API 키와 기록으로 돌아가는 길이에요. 이번 한 번만 보여 주니, 나중에도 찾을 수 있는 곳 — 비밀번호 관리 앱이나 종이 — 에 적어 두세요.',
+  'recovery.regenerateHint': '로그인해 있는 동안에는 언제든 새 코드를 만들 수 있어요. 코드를 잃어버려도 번거로울 뿐, 돌이킬 수 없는 일은 아니에요.',
+  'recovery.copy': '코드 복사',
+  'recovery.copied': '복사했어요',
+  'recovery.warning': '비밀번호와 이 코드를 모두 잃어버리면 저장된 API 키와 기록은 누구도 복구할 수 없어요. 저희도 마찬가지예요.',
+  'recovery.confirm': '이 코드를 안전한 곳에 저장했어요',
+  'recovery.done': '완료',
+  'recovery.working': '설정하는 중…',
+  'recovery.setupFailed': '지금은 복구 코드를 설정하지 못했어요. 다시 시도하고, 계속 이러면 다시 로그인해 주세요.',
+  'recovery.promptBody': '아직 복구 코드가 없어요. 코드가 없으면 비밀번호를 잊는 순간 저장한 키와 기록이 영영 사라져요.',
+  'recovery.promptAction': '복구 설정하기',
+  'recovery.promptDismiss': '나중에',
+  'recovery.statusNone': '복구 설정하기',
+  'recovery.statusFinishing': '복구 설정 미완료 · 마무리하기',
+  'recovery.statusReady': '복구 준비됨 · 새 코드',
+  'recovery.statusUnknown': '복구 상태 확인 안 됨 · 새 코드',
+  'recovery.statusStale': '복구 코드가 작동하지 않을 수 있음 · 새 코드',
+  'recovery.resetTitle': '비밀번호 재설정',
+  'recovery.resetIntro': '사용자 이름과 저장해 둔 복구 코드를 입력하세요.',
+  'recovery.codeLabel': '복구 코드',
+  'recovery.newPassword': '새 비밀번호',
+  'recovery.resetAction': '비밀번호 재설정',
+  'recovery.resetContinue': '계속',
+  'recovery.resetBack': '뒤로',
+  'recovery.resetWorking': '재설정 중…',
+  'recovery.resetFailed': '사용자 이름과 복구 코드가 맞지 않아요.',
+  'recovery.resetCorrupt':
+    '저장된 복구 레코드가 손상되어 열 수 없습니다. 코드를 다시 입력해도 해결되지 않습니다.',
+  'recovery.resetInterrupted':
+    '재설정이 도중에 중단되었습니다. 방금 정한 새 비밀번호로 로그인해 보세요. 로그인되면 재설정이 완료된 것입니다. 안 되면 이전 비밀번호가 그대로 유효합니다. 어느 쪽이든 그 뒤에 새 복구 코드를 발급하세요.',
+  'recovery.resetBlocked': '이 계정은 복구 설정이 아직 끝나지 않았어요. 비밀번호로 한 번 로그인해서 마무리해 주세요.',
+  'recovery.forgot': '비밀번호를 잊으셨나요?',
+  'recovery.leaveConfirm': '복구 코드가 아직 화면에 있고 다시 표시되지 않아요. 저장하지 않고 나갈까요?',
+  'recovery.replacesOld': '이 코드가 이전 코드를 대체해요. 예전 코드는 지금부터 쓸 수 없어요.',
+  'recovery.rotateConfirm': '새 복구 코드를 만들까요? 지금 쓰던 코드는 즉시 무효가 되고, 새 코드를 다시 저장해야 해요.',
+  'recovery.promptLostBody':
+    '복구 코드는 있지만, 이 기기에서 저장을 확인한 적이 없어요. 적어 두기 전에 화면을 놓쳤다면 그 코드로는 계정을 되찾을 수 없어요. 지금 새 코드로 바꿀 수 있어요.',
+  'recovery.promptLostAction': '새 코드 만들기',
+
   // --- language --------------------------------------------------------------
   'language.label': '언어',
   'language.switchToEnglish': 'English',
@@ -184,6 +226,13 @@ const ko = {
   'reply.noSourcesRetrieved':
     '이 답장에는 가져온 자료가 하나도 없어요. 여기 담긴 사실 주장은 전부 확인되지 않은 것이니, 기대어 말할 부분은 직접 확인해 보세요.',
   'reply.sourcesTitle': '출처',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': '짧은 버전',
+  'reply.showFull': '전체 메시지',
+  'reply.shorterBuilding': '줄이는 중…',
+  'reply.shorterShowing': '복사하면 이 짧은 버전이 복사돼요',
+  'reply.showingFull': '전체 메시지를 보여주고 있어요',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ 보내기 전에 — 내 주장에서 가장 약한 곳',
@@ -225,6 +274,7 @@ const ko = {
   'error.generic': '답장을 쓰지 못했어요',
   'error.refreshModels': '모델 목록을 새로 가져오지 못했어요',
   'error.briefing': '상대의 논리를 정리하지 못했어요.',
+  'error.shorter': '메시지를 줄이지 못했어요.',
   'error.publish': '이 반론을 올리지 못했어요.',
   'error.loadShared': '공유된 반론을 불러오지 못했어요.',
   'error.article': '그 기사를 불러오지 못했어요. 대신 본문을 붙여넣어 보세요.',

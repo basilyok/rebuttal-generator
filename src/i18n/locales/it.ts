@@ -79,6 +79,56 @@ const it = {
     'Questo è un altro account. Per tenere gli account separati, questo dispositivo è stato disconnesso e la cronologia su questo dispositivo è stata cancellata — accedi di nuovo per continuare.',
   'account.authError': "L'accesso non è stato completato. Riprova.",
 
+  // --- recovery --------------------------------------------------------------
+  'recovery.title': 'Il tuo codice di recupero',
+  'recovery.blurb':
+    'Questo codice è ciò che ti riporta alle tue chiavi e alla tua cronologia salvate se dimentichi la password. Lo vedrai solo questa volta, quindi conservalo dove lo ritroverai: in un gestore di password, oppure su carta.',
+  'recovery.regenerateHint':
+    "Puoi generare un codice nuovo quando vuoi, finché hai effettuato l'accesso: perderne uno è una seccatura, non un disastro.",
+  'recovery.copy': 'Copia il codice',
+  'recovery.copied': 'Copiato',
+  'recovery.warning':
+    'Se perdi sia la password sia questo codice, le tue chiavi API e la tua cronologia salvate non sono recuperabili — né da noi, né da nessun altro.',
+  'recovery.confirm': 'Ho salvato questo codice in un posto sicuro',
+  'recovery.done': 'Fatto',
+  'recovery.working': 'Configurazione…',
+  'recovery.setupFailed':
+    'Non è stato possibile configurare il codice di recupero in questo momento. Riprova, oppure accedi di nuovo se continua a succedere.',
+  'recovery.promptBody':
+    'Non hai ancora un codice di recupero. Senza, dimenticare la password significa perdere per sempre le chiavi e la cronologia salvate.',
+  'recovery.promptAction': 'Configura il recupero',
+  'recovery.promptDismiss': 'Non ora',
+  'recovery.statusNone': 'Configura il recupero',
+  'recovery.statusFinishing': 'Recupero incompleto · completalo',
+  'recovery.statusReady': 'Recupero pronto · nuovo codice',
+  'recovery.statusUnknown': 'Recupero non verificato · nuovo codice',
+  'recovery.statusStale': 'Il codice di ripristino potrebbe non funzionare · nuovo codice',
+  'recovery.resetTitle': 'Reimposta la password',
+  'recovery.resetIntro': 'Inserisci il tuo nome utente e il codice di recupero che hai conservato.',
+  'recovery.codeLabel': 'Codice di recupero',
+  'recovery.newPassword': 'Nuova password',
+  'recovery.resetAction': 'Reimposta la password',
+  'recovery.resetContinue': 'Continua',
+  'recovery.resetBack': 'Indietro',
+  'recovery.resetWorking': 'Reimpostazione…',
+  'recovery.resetFailed': 'Questo nome utente e questo codice di recupero non corrispondono.',
+  'recovery.resetCorrupt':
+    'Il record di ripristino salvato è danneggiato e non può essere aperto. Reinserire il codice non servirà a nulla.',
+  'recovery.resetInterrupted':
+    'Qualcosa ha interrotto la reimpostazione. Prova ad accedere con la nuova password appena scelta: se funziona, la reimpostazione è andata a buon fine. Altrimenti la vecchia password è ancora valida. In ogni caso, genera poi un nuovo codice di ripristino.',
+  'recovery.resetBlocked':
+    'La configurazione del recupero non è ancora conclusa su questo account. Accedi una volta con la password per completarla.',
+  'recovery.forgot': 'Password dimenticata?',
+  'recovery.leaveConfirm':
+    'Il tuo codice di recupero è ancora sullo schermo e non verrà mostrato di nuovo. Uscire senza salvarlo?',
+  'recovery.replacesOld':
+    'Questo sostituisce qualsiasi codice precedente: quello di prima smette di funzionare da adesso.',
+  'recovery.rotateConfirm':
+    'Generare un nuovo codice di recupero? Il codice attuale smette subito di funzionare e dovrai conservare quello nuovo.',
+  'recovery.promptLostBody':
+    "Hai un codice di recupero, ma su questo dispositivo non è mai stato confermato che tu lo abbia salvato: se è andato perso prima che tu lo annotassi, non ti restituirà l'account. Puoi sostituirlo ora con uno nuovo.",
+  'recovery.promptLostAction': 'Genera un nuovo codice',
+
   // --- language --------------------------------------------------------------
   'language.label': 'Lingua',
   'language.switchToEnglish': 'English',
@@ -187,6 +237,13 @@ const it = {
   'reply.noSourcesRetrieved':
     'Per questa risposta non è stata recuperata nessuna fonte. Nessuna affermazione di fatto qui dentro è verificata: controlla tutto ciò su cui pensi di appoggiarti.',
   'reply.sourcesTitle': 'Fonti',
+  // The "Shorter version" toggle. The label promises brevity and nothing else —
+  // not wit — because wit is this feature's failure mode. See CONSTITUTION.md 6 and 9.
+  'reply.shorter': 'Versione più breve',
+  'reply.showFull': 'Messaggio completo',
+  'reply.shorterBuilding': 'Sto accorciando…',
+  'reply.shorterShowing': 'Copia userà questa versione più breve',
+  'reply.showingFull': 'Mostro il messaggio completo',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Prima di inviare — il punto debole della tua posizione',
@@ -228,6 +285,7 @@ const it = {
   'error.generic': 'Non è stato possibile scrivere la risposta',
   'error.refreshModels': "Non è stato possibile aggiornare l'elenco dei modelli",
   'error.briefing': "Non è stato possibile costruire la tesi dell'altra persona.",
+  'error.shorter': 'Non è stato possibile accorciare il messaggio.',
   'error.publish': 'Non è stato possibile pubblicare questa risposta.',
   'error.loadShared': 'Non è stato possibile caricare la risposta condivisa.',
   'error.article': "Non è stato possibile caricare l'articolo. Prova a incollare il testo.",
