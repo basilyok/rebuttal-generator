@@ -105,7 +105,12 @@ const ar = {
   'recovery.codeLabel': 'رمز الاسترداد',
   'recovery.newPassword': 'كلمة مرور جديدة',
   'recovery.resetAction': 'إعادة تعيين كلمة المرور',
+  'recovery.resetContinue': 'متابعة',
+  'recovery.resetBack': 'رجوع',
+  'recovery.resetWorking': 'جارٍ إعادة التعيين…',
   'recovery.resetFailed': 'اسم المستخدم ورمز الاسترداد غير متطابقين.',
+  'recovery.resetCorrupt':
+    'سجل الاسترداد المخزَّن تالف ولا يمكن فتحه. إعادة إدخال الرمز لن تفيد.',
   'recovery.resetBlocked':
     'لم يكتمل إعداد الاسترداد على هذا الحساب بعد. سجّل الدخول مرة واحدة بكلمة المرور لإكماله.',
   'recovery.forgot': 'هل نسيت كلمة المرور؟',

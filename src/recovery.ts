@@ -11,7 +11,14 @@
 //
 // What this module never does: send the code anywhere, store it, or derive
 // anything the server could use to reconstruct it.
-import { normalizeUsername, pbkdf2 } from './account'
+import {
+  RecoveryBlockedError,
+  deriveCredentials,
+  normalizeUsername,
+  pbkdf2,
+  recoverBegin,
+  recoverComplete,
+} from './account'
 import {
   toBase64,
   fromBase64,
@@ -260,6 +267,58 @@ export async function unwrapDek(key: CryptoKey, blob: VaultBlob): Promise<Uint8A
   return new Uint8Array(plaintext)
 }
 
+/**
+ * Open a wrapped DEK, falling back to the previous generation of the SAME copy.
+ *
+ * Both sides of the record need this and for one reason. auth/recover/complete
+ * OVERWRITES the pair before it moves either verifier, so between its writes
+ * the credential a caller actually holds is one era behind the ciphertext that
+ * credential is supposed to open:
+ *
+ *   - between writes 1 and 2, the code that verifies opens only
+ *     previous.byRecovery (begin serves it as previousByRecovery);
+ *   - between writes 1 and 3, the password that authenticates opens only
+ *     previous.byPassword (GET /api/dek serves the whole record).
+ *
+ * Neither window is hypothetical — both are one dropped connection wide — and
+ * in both of them the primary copy fails with exactly the error a wrong
+ * credential produces. Without this the user is told their correct code or
+ * password is wrong, about the one account that cannot be told anything else.
+ *
+ * A successful fallback is reported as a plain success. Which generation opened
+ * is a fact about our own interrupted write, not about anything the caller did
+ * or can act on, so it is not surfaced and callers must not infer it.
+ *
+ * The fallback is tried for a damaged primary too, not only a mismatched key.
+ * The plan names WrongRecoveryCodeError specifically, and that is the common
+ * case, but a truncated primary — a partial KV write, the same interruption one
+ * step earlier — is the other shape the same accident takes, and refusing to
+ * look at a perfectly good previous copy there would strand the identical user.
+ * The reset that follows rewrites the damaged copy, so this repairs rather than
+ * papers over.
+ */
+export async function unwrapDekWithPrevious(
+  key: CryptoKey,
+  current: VaultBlob,
+  previous: VaultBlob | null | undefined
+): Promise<Uint8Array> {
+  try {
+    return await unwrapDek(key, current)
+  } catch (primary) {
+    if (!previous) throw primary
+    try {
+      return await unwrapDek(key, previous)
+    } catch (fallback) {
+      // The RETRYABLE verdict wins when the two disagree. "This record is
+      // damaged and retrying cannot help" is the only answer here that ends the
+      // conversation, and saying it to someone whose next attempt would have
+      // worked is the more expensive of the two mistakes.
+      if (fallback instanceof WrongRecoveryCodeError) throw fallback
+      throw primary
+    }
+  }
+}
+
 /** A fresh 256-bit data key. The only key that ever encrypts vault or history content. */
 export const generateDek = (): Uint8Array => crypto.getRandomValues(new Uint8Array(32))
 
@@ -271,6 +330,25 @@ export const generateDek = (): Uint8Array => crypto.getRandomValues(new Uint8Arr
 export interface DekRecord {
   byPassword: VaultBlob
   byRecovery: VaultBlob
+  /**
+   * The pair the PREVIOUS era's credentials open, written by
+   * auth/recover/complete.js's first write and served back verbatim by GET
+   * /api/dek (it validates only the two fields above and passes the record
+   * through).
+   *
+   * Optional because PUT /api/dek does not write one — saveDek sends two fields
+   * and the handler stores exactly those — so a record last written by setup
+   * has no previous generation. Absent is a real answer, not a defect.
+   *
+   * It exists for the reset that died between complete's writes 1 and 3: the
+   * old password still authenticates, but the CURRENT byPassword is already
+   * sealed under the new password key. That session can only open the previous
+   * copy, and a caller that reads only `byPassword` reports the account as
+   * unopenable while the bytes that open it sit one field away. One generation
+   * deep, never a chain — complete.js drops the incoming record's own
+   * `previous` when it writes.
+   */
+  previous?: { byPassword: VaultBlob; byRecovery: VaultBlob } | null
 }
 
 export async function fetchDek(): Promise<DekRecord | null> {
@@ -530,7 +608,13 @@ export async function setupRecovery(username: string, masterKey: CryptoKey): Pro
   let dek: Uint8Array
   if (existing) {
     try {
-      dek = await unwrapDek(masterKey, existing.byPassword)
+      // Both generations of the password copy. A reset that died between
+      // complete's writes 1 and 3 left the old password authenticating while
+      // the current byPassword moved to the new password's key — this session
+      // holds the credential for `previous` and nothing else, and re-running
+      // setup is how it escapes. Reading only byPassword there throws
+      // dek-not-openable at the exact account this field was added for.
+      dek = await unwrapDekWithPrevious(masterKey, existing.byPassword, existing.previous?.byPassword)
     } catch (err) {
       // The split RecoveryError's docblock calls load-bearing, preserved here.
       // A record that will not DECODE is unrecoverable and must say so; there
@@ -576,4 +660,85 @@ export async function setupRecovery(username: string, masterKey: CryptoKey): Pro
   const dekKey = await importWrappingKey(dek)
   await ensureMigrated({ masterKey, dekKey })
   return { code, dekKey }
+}
+
+// --- reset ------------------------------------------------------------------
+
+/**
+ * Run a full password reset from a recovery code.
+ *
+ * Everything up to recoverComplete() is either local computation or a read, so
+ * a failure anywhere before that call leaves the account untouched: the old
+ * password still signs in, the old code still verifies, and no ciphertext has
+ * moved. That is what makes "a failed reset leaves the old password working"
+ * true by construction rather than by cleanup.
+ *
+ * The rotated code is RETURNED, never displayed by this function, and the
+ * caller must show it only after this resolves. Between complete's writes 1 and
+ * 2 the new byRecovery is stored against the OLD verifier, so a code shown any
+ * earlier is a code that opens nothing — and its holder has no way to discover
+ * that until the day they need it.
+ *
+ * Nothing here logs, stores or URL-encodes the code or the password. The two
+ * arguments exist only as arguments; what leaves this function is a one-way
+ * hash of each and ciphertext the server cannot open.
+ */
+export async function runReset(username: string, code: string, newPassword: string): Promise<string> {
+  /**
+   * The client half of "refuse a reset while any blob is still v1". A reset
+   * replaces the master key and keeps the DEK, so a blob still sealed under the
+   * OLD master key would be left with no key at all.
+   *
+   * BE PRECISE ABOUT WHAT THIS CAN SEE, because the honest reading is weaker
+   * than it looks and a comment claiming otherwise is the failure this plan
+   * keeps producing. isFullyMigrated() reads /api/vault and /api/history, both
+   * of which answer 401 to a signed-out caller, and both transports turn 401
+   * into `null` — indistinguishable from "no blob stored". A signed-out reset,
+   * which is every reset this UI offers, therefore sees two nulls and gets
+   * `true` for free. This refuses when a session happens to exist and cannot
+   * refuse otherwise; there is no authenticated read available before the
+   * reset, so a signed-out client genuinely cannot observe blob versions at
+   * all. Reported alongside the plan's own note that the guard is client-side.
+   *
+   * It is kept, and kept FIRST, because the alternatives are worse: dropping it
+   * removes the refusal on the one path that can still make it, and it must
+   * precede the 600k-round derivation so a refusal is not paid for with a
+   * second of PBKDF2.
+   */
+  if (!(await isFullyMigrated())) throw new RecoveryBlockedError()
+
+  // Throws WrongRecoveryCodeError on a malformed code before any request goes
+  // out, which is what keeps a half-typed code off the endpoint's rate limiter.
+  const { recoveryKeyBytes, recoveryAuth } = await deriveRecoveryCredentials(username, code)
+  const recoveryWrapKey = await importWrappingKey(recoveryKeyBytes)
+
+  const { byRecovery, previousByRecovery } = await recoverBegin(username, recoveryAuth)
+  // Both generations, one verdict. Only if NEITHER opens is the code wrong —
+  // see unwrapDekWithPrevious for why the previous copy is the only one a
+  // correct code can open after an interrupted reset.
+  const dek = await unwrapDekWithPrevious(recoveryWrapKey, byRecovery, previousByRecovery)
+
+  const { masterKeyBytes, authHash } = await deriveCredentials(username, newPassword)
+  const newMasterKey = await importWrappingKey(masterKeyBytes)
+
+  // Rotation is not optional: the endpoint requires the next verifier, and a
+  // reset that left the old code live would leave a captured body replayable.
+  const nextCode = generateRecoveryCode()
+  const next = await deriveRecoveryCredentials(username, nextCode)
+  const nextWrapKey = await importWrappingKey(next.recoveryKeyBytes)
+
+  await recoverComplete({
+    username,
+    recoveryAuth,
+    authHash,
+    recoveryAuthNext: next.recoveryAuth,
+    // The same DEK, re-wrapped under two new keys. Nothing in the vault or the
+    // history is re-encrypted or even read — that is the whole point of the
+    // indirection, and it is why a reset keeps the data instead of costing it.
+    dek: {
+      byPassword: await wrapDek(newMasterKey, dek),
+      byRecovery: await wrapDek(nextWrapKey, dek),
+    },
+  })
+  return nextCode
 }

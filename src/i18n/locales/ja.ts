@@ -103,7 +103,12 @@ const ja = {
   'recovery.codeLabel': '復旧コード',
   'recovery.newPassword': '新しいパスワード',
   'recovery.resetAction': 'パスワードを再設定',
+  'recovery.resetContinue': '次へ',
+  'recovery.resetBack': '戻る',
+  'recovery.resetWorking': '再設定しています…',
   'recovery.resetFailed': 'そのユーザー名と復旧コードは一致しません。',
+  'recovery.resetCorrupt':
+    '保存された復旧レコードが壊れていて開けません。コードを入力し直しても解決しません。',
   'recovery.resetBlocked': 'このアカウントは復旧の設定がまだ終わっていません。パスワードで一度サインインして完了させてください。',
   'recovery.forgot': 'パスワードをお忘れですか？',
   'recovery.leaveConfirm': '復旧コードはまだ画面に表示されていて、二度と表示されません。保存せずに移動しますか？',

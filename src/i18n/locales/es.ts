@@ -108,7 +108,12 @@ const es = {
   'recovery.codeLabel': 'Código de recuperación',
   'recovery.newPassword': 'Contraseña nueva',
   'recovery.resetAction': 'Restablecer contraseña',
+  'recovery.resetContinue': 'Continuar',
+  'recovery.resetBack': 'Atrás',
+  'recovery.resetWorking': 'Restableciendo…',
   'recovery.resetFailed': 'Ese nombre de usuario y ese código de recuperación no coinciden.',
+  'recovery.resetCorrupt':
+    'El registro de recuperación guardado está dañado y no se puede abrir. Volver a introducir el código no servirá de nada.',
   'recovery.resetBlocked':
     'La configuración de la recuperación aún no ha terminado en esta cuenta. Inicia sesión una vez con tu contraseña para terminarla.',
   'recovery.forgot': '¿Olvidaste tu contraseña?',

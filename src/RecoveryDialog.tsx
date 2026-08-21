@@ -20,10 +20,17 @@
 //    when the obvious way to pass it is pasting from the clipboard they were
 //    just handed.
 
+// The file also holds the RESET flow — the three-step card a signed-out user
+// with a code walks through — because its last step IS this card. One `mode`
+// prop, two components, and the code display is written once.
+
 import { useEffect, useRef, useState } from 'react'
 import type { TFunction } from './i18n'
+import { PASSWORD_MIN_LENGTH, USERNAME_PATTERN } from './account'
+import { isValidRecoveryCode, runReset } from './recovery'
+import { failureCode, resetFailure } from './recoveryUi'
 
-interface Props {
+interface ShowProps {
   t: TFunction
   /**
    * The freshly-minted code. It reaches this component and the DOM and goes no
@@ -48,7 +55,29 @@ interface Props {
   onDone: () => void
 }
 
-export default function RecoveryDialog({ t, code, replacesOld, onDone }: Props) {
+interface ResetProps {
+  t: TFunction
+  /**
+   * Called once the reset has LANDED — never before. It receives the rotated
+   * code so the caller can show it through the card below, plus the credentials
+   * needed to sign the user in on the spot.
+   *
+   * The new password travels up rather than being spent here so that the app's
+   * one sign-in path stays the only one: it is what adopts the vault key, the
+   * DEK and the history. Like `code` above, it goes nowhere else — no storage,
+   * no URL, no log.
+   */
+  onReset: (username: string, password: string, code: string) => void
+  onCancel: () => void
+}
+
+type Props = ({ mode: 'show' } & ShowProps) | ({ mode: 'reset' } & ResetProps)
+
+export default function RecoveryDialog(props: Props) {
+  return props.mode === 'reset' ? <ResetFlow {...props} /> : <CodeCard {...props} />
+}
+
+function CodeCard({ t, code, replacesOld, onDone }: ShowProps) {
   const [confirmed, setConfirmed] = useState(false)
   const [copied, setCopied] = useState(false)
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -156,5 +185,223 @@ export default function RecoveryDialog({ t, code, replacesOld, onDone }: Props) 
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Reset a forgotten password with a recovery code. Three steps, and the third
+ * one is not here: this component ends by handing the rotated code to its
+ * caller, which renders it through CodeCard above.
+ *
+ * WHY THE CODE LEAVES RATHER THAN BEING SHOWN IN PLACE. The card that displays
+ * a code is guarded — a beforeunload prompt, a confirmation before sign-out —
+ * and every one of those guards lives in App, keyed on App's state. A code
+ * displayed from inside this component would be a code with none of them, on
+ * the one path where the user has just proved that keeping this string is hard.
+ * So the code goes up, App shows it, and the guards apply unchanged.
+ *
+ * The two steps are one server round trip, not two. Verifying the code at step
+ * one would need its own recoverBegin — a second slot against the shared
+ * recover brake and a second 600k-round derivation, about a second of it — to
+ * learn what the single submit learns anyway. Instead a rejected code returns
+ * the user to step one carrying the same message it would have shown there (see
+ * resetFailure's `retryCode`). Nothing is written until the last submit, so a
+ * user who abandons the flow at step two has changed nothing.
+ */
+function ResetFlow({ t, onReset, onCancel }: ResetProps) {
+  const [step, setStep] = useState<'identify' | 'password'>('identify')
+  const [username, setUsername] = useState('')
+  /**
+   * The code EXACTLY as typed. Deliberately not cleaned here — no uppercasing,
+   * no dash stripping, no trimming. normalizeRecoveryCode already folds case,
+   * I/L to 1, O to 0, every Unicode dash and every invisible, and it is what
+   * both isValidRecoveryCode and the derivation run on. A second cleanup here
+   * could only ever disagree with that one, and the symptom of a disagreement
+   * is a correct code that does not work.
+   */
+  const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const cardRef = useRef<HTMLFormElement | null>(null)
+
+  // Same reasoning as CodeCard's: this card appears mid-page, and moving focus
+  // is what redirects a screen reader to it. Re-run on the step change too, so
+  // the second step is announced rather than silently replacing the first.
+  useEffect(() => {
+    cardRef.current?.scrollIntoView({ block: 'center' })
+    cardRef.current?.focus()
+  }, [step])
+
+  const name = username.trim()
+  // Both checked locally, before anything costs a round trip or a second of
+  // PBKDF2. isValidRecoveryCode is why a half-typed code is refused at the
+  // keystroke instead of at the endpoint.
+  const identified = USERNAME_PATTERN.test(name) && isValidRecoveryCode(code)
+  const passwordReady = password.length >= PASSWORD_MIN_LENGTH && password === confirmation
+
+  const submit = async () => {
+    setError('')
+    if (step === 'identify') {
+      if (!identified) return
+      setStep('password')
+      return
+    }
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      setError(t('account.passwordShort'))
+      return
+    }
+    if (password !== confirmation) {
+      setError(t('account.passwordMismatch'))
+      return
+    }
+    setBusy(true)
+    try {
+      // Nothing about the account has changed until this resolves. That is the
+      // property that makes "a failed reset leaves the old password working"
+      // true, and it belongs to runReset — see its docblock.
+      const nextCode = await runReset(name, code, password)
+      // Only now. Between the endpoint's first and second writes the new code
+      // is stored against the OLD verifier, so a code shown any earlier is one
+      // that opens nothing.
+      onReset(name, password, nextCode)
+      // `busy` is deliberately NOT cleared: the caller unmounts this card, and
+      // until it does, a second submit would replay a code that has just been
+      // rotated out of existence and fail in a way that contradicts the success
+      // already handed up.
+    } catch (err) {
+      const failure = resetFailure(failureCode(err))
+      setError(t(failure.key))
+      // Back to the field that is actually in question — and only for the two
+      // failures where it is. A damaged record or a rate limit is not the
+      // code's fault, and returning the user there would say it was.
+      if (failure.retryCode) setStep('identify')
+      setBusy(false)
+    }
+  }
+
+  const onIdentify = step === 'identify'
+
+  return (
+    <form
+      ref={cardRef}
+      tabIndex={-1}
+      className="vault-dialog auth-dialog recovery-reset"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="recovery-reset-title"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void submit()
+      }}
+    >
+      <h3 id="recovery-reset-title" className="vault-title">
+        {t('recovery.resetTitle')}
+      </h3>
+
+      {onIdentify ? (
+        <>
+          <p className="key-help">{t('recovery.resetIntro')}</p>
+
+          <label className="label" htmlFor="reset-username">
+            {t('account.username')}
+          </label>
+          <input
+            id="reset-username"
+            className="text-input"
+            type="text"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder={t('account.usernamePlaceholder')}
+            disabled={busy}
+          />
+
+          <label className="label" htmlFor="reset-code">
+            {t('recovery.codeLabel')}
+          </label>
+          <input
+            id="reset-code"
+            className="text-input"
+            type="text"
+            // Never a password manager's field and never a browser suggestion
+            // list: this string is typed once off paper and must not be offered
+            // back to whoever uses the machine next.
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            disabled={busy}
+          />
+        </>
+      ) : (
+        <>
+          <label className="label" htmlFor="reset-password">
+            {t('recovery.newPassword')}
+          </label>
+          <input
+            id="reset-password"
+            className="text-input"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={busy}
+          />
+
+          {/* Confirmed, like sign-up. A typo here is survivable — the rotated
+              code is shown a moment later and opens the account again — but
+              only after a second reset, and this costs one field. */}
+          <label className="label" htmlFor="reset-confirm">
+            {t('account.confirmPassword')}
+          </label>
+          <input
+            id="reset-confirm"
+            className="text-input"
+            type="password"
+            autoComplete="new-password"
+            value={confirmation}
+            onChange={(e) => setConfirmation(e.target.value)}
+            disabled={busy}
+          />
+        </>
+      )}
+
+      {error && (
+        <div className="error" role="alert">
+          ⚠️ {error}
+        </div>
+      )}
+
+      <div className="controls vault-actions">
+        <button
+          type="submit"
+          className="button button-primary"
+          disabled={busy || (onIdentify ? !identified : !passwordReady)}
+        >
+          {busy ? t('recovery.resetWorking') : onIdentify ? t('recovery.resetContinue') : t('recovery.resetAction')}
+        </button>
+        {!onIdentify && (
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => {
+              setError('')
+              setStep('identify')
+            }}
+            disabled={busy}
+          >
+            {t('recovery.resetBack')}
+          </button>
+        )}
+        <button type="button" className="link-button subtle" onClick={onCancel} disabled={busy}>
+          {t('account.notNow')}
+        </button>
+      </div>
+    </form>
   )
 }

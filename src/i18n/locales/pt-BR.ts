@@ -104,7 +104,12 @@ const pt_BR = {
   'recovery.codeLabel': 'Código de recuperação',
   'recovery.newPassword': 'Nova senha',
   'recovery.resetAction': 'Redefinir senha',
+  'recovery.resetContinue': 'Continuar',
+  'recovery.resetBack': 'Voltar',
+  'recovery.resetWorking': 'Redefinindo…',
   'recovery.resetFailed': 'Esse nome de usuário e esse código de recuperação não combinam.',
+  'recovery.resetCorrupt':
+    'O registro de recuperação salvo está danificado e não pode ser aberto. Digitar o código de novo não vai adiantar.',
   'recovery.resetBlocked':
     'A configuração da recuperação ainda não terminou nesta conta. Entre uma vez com sua senha para concluir.',
   'recovery.forgot': 'Esqueceu sua senha?',

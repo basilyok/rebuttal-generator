@@ -131,3 +131,64 @@ export function markRecoveryAcknowledged(userId: string): void {
     // Storage blocked. The prompt returns on the next load; nothing breaks.
   }
 }
+
+// --- the reset flow ---------------------------------------------------------
+
+/**
+ * What to say when a reset fails, and whether the user has anything to try
+ * again with.
+ *
+ * Keyed on the machine code every error in both families carries as its
+ * `message` (see the docblocks on AccountError and RecoveryError), not on
+ * `instanceof`. That keeps this module free of the crypto and transport imports
+ * a type switch would need, and the codes are the documented contract for
+ * exactly this: "callers switch on the type (or the code)".
+ *
+ * Two mappings are load-bearing:
+ *
+ * - `wrong-recovery-code` and `bad-credentials` MUST return the same key. The
+ *   endpoint answers a wrong code and an unknown username identically on
+ *   purpose, so a UI that told them apart would rebuild the username oracle the
+ *   server went to some trouble to avoid — from the client, where anyone can
+ *   read the mapping.
+ * - `corrupt-dek-record` must NOT. That is the record refusing to decode, and a
+ *   correct code will not fix it. Folding it into "that did not match" invites a
+ *   fourth, fifth and sixth attempt at a code that was right all along, which is
+ *   the whole reason src/recovery.ts keeps the two errors apart.
+ *
+ * `retryCode` says whether the code itself is still in question. Only the two
+ * indistinguishable-credential cases send the user back to it; a damaged
+ * record, a rate limit and an unknown failure are all about something else, and
+ * returning them to the code field would blame the one thing that is not at
+ * fault.
+ */
+export interface ResetFailure {
+  /** i18n key. Not a message — nothing here is ever rendered verbatim. */
+  key: string
+  /** Send the user back to the username-and-code step. */
+  retryCode: boolean
+}
+
+export function resetFailure(code: string): ResetFailure {
+  switch (code) {
+    case 'wrong-recovery-code':
+    case 'bad-credentials':
+      return { key: 'recovery.resetFailed', retryCode: true }
+    case 'corrupt-dek-record':
+      return { key: 'recovery.resetCorrupt', retryCode: false }
+    case 'recovery-blocked':
+      return { key: 'recovery.resetBlocked', retryCode: false }
+    case 'rate-limited':
+      return { key: 'account.rateLimited', retryCode: false }
+    default:
+      // Includes a dropped connection, which throws a TypeError with whatever
+      // message the runtime chose. Nothing has changed on the server in that
+      // case — recoverComplete is the only writer and it either returned ok or
+      // did not run — so "try again in a moment" is both true and the right
+      // instruction.
+      return { key: 'account.serverError', retryCode: false }
+  }
+}
+
+/** The machine code out of an unknown throw, for resetFailure(). */
+export const failureCode = (err: unknown): string => (err instanceof Error ? err.message : '')

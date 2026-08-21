@@ -43,6 +43,15 @@ interface AuthDialogProps {
   onModeChange: (mode: AuthMode) => void
   onGoogle: () => void
   onSubmit: (username: string, password: string, email: string) => void
+  /**
+   * Opens the recovery-code reset flow. Rendered only in `signin` mode with no
+   * `fixedUsername`, for the same reason Google is hidden there: the fixed
+   * render exists to re-enter ONE signed-in account's password, and a reset
+   * started from it would rewrite the credentials of the account whose data
+   * this device is currently holding, identified by a code rather than by the
+   * session. Optional so the unlock path can simply not pass one.
+   */
+  onForgotPassword?: () => void
   onDismiss: () => void
 }
 
@@ -56,6 +65,7 @@ export function AuthDialog({
   onModeChange,
   onGoogle,
   onSubmit,
+  onForgotPassword,
   onDismiss,
 }: AuthDialogProps) {
   const [username, setUsername] = useState(fixedUsername ?? '')
@@ -207,6 +217,16 @@ export function AuthDialog({
             disabled={busy}
           >
             {isSignup ? t('account.switchToSignIn') : t('account.switchToSignUp')}
+          </button>
+        )}
+        {/* Last, and a link rather than a button: it sits with the mode switch
+            because it is the same kind of control — "this is not the form you
+            need" — and a reset entry within a thumb's width of Sign in is a
+            misfire that ends in a rotated recovery code. Sign-in only, and
+            never on the fixed-username render; see onForgotPassword. */}
+        {mode === 'signin' && !fixedUsername && onForgotPassword && (
+          <button type="button" className="link-button subtle" onClick={onForgotPassword} disabled={busy}>
+            {t('recovery.forgot')}
           </button>
         )}
       </div>

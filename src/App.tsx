@@ -84,7 +84,7 @@ import {
 } from './vault'
 import {
   fetchDek,
-  unwrapDek,
+  unwrapDekWithPrevious,
   importWrappingKey,
   ensureMigrated,
   isFullyMigrated,
@@ -325,6 +325,14 @@ export default function App() {
   // it costs them nothing, because the account bar keeps the same offer.
   const [recoveryPromptDismissed, setRecoveryPromptDismissed] = useState(false)
   /**
+   * The reset card is open. Separate from `authDialog` rather than a third mode
+   * of it: this flow signs nobody in until it has finished, it owns two steps of
+   * its own state, and the one thing it must never become is a place where an
+   * ordinary sign-in can be attempted — the account it is about to rewrite is
+   * identified by a recovery code, not by a session.
+   */
+  const [resetOpen, setResetOpen] = useState(false)
+  /**
    * Whether anyone on this device has confirmed saving a code for this account.
    * The server cannot answer this: it knows a record exists, not that the
    * one-time display survived long enough to be read. Without it, a first
@@ -543,7 +551,15 @@ export default function App() {
         setRecoveryStatus('none')
         return
       }
-      const dekKey = await importWrappingKey(await unwrapDek(masterKey, record.byPassword))
+      // Both generations of the password copy, never just the current one. A
+      // reset interrupted between complete's writes 1 and 3 leaves this
+      // password still authenticating while the CURRENT byPassword has already
+      // moved to the new password's key — reading only that field reports the
+      // session as unable to open its own DEK and leaves a v2 vault locked,
+      // which is precisely the state `previous` was added to cover.
+      const dekKey = await importWrappingKey(
+        await unwrapDekWithPrevious(masterKey, record.byPassword, record.previous?.byPassword)
+      )
       if (isStale()) return
       dekKeyRef.current = dekKey
       await ensureMigrated({ masterKey, dekKey })
@@ -1472,6 +1488,34 @@ export default function App() {
     }
   }
 
+  /**
+   * The reset landed. Show the rotated code, then sign the user in with the
+   * password they just chose.
+   *
+   * ORDER MATTERS IN BOTH DIRECTIONS HERE. The code is committed to state
+   * BEFORE the sign-in is attempted, because by this point the reset is done —
+   * the code is live, and it is the only copy of it that will ever exist. A
+   * dropped connection on the login that follows must not be what loses it.
+   *
+   * And the sign-in goes through handleAuthSubmit rather than a bare
+   * loginLocal, because everything that makes the vault and the history
+   * reappear happens in there: adopting the derived key, adopting the DEK,
+   * finishing any migration, opening a locked blob, refetching auth. That is
+   * the acceptance criterion "the vault and history both survive" — surviving
+   * on the server is not the same as being back on screen.
+   *
+   * The dialog is opened first so a failed sign-in has somewhere to say so:
+   * handleAuthSubmit closes it on success and leaves it up with authError set
+   * otherwise, where the user can simply try the new password again.
+   */
+  const handleResetComplete = async (username: string, password: string, code: string) => {
+    setResetOpen(false)
+    setRecoveryCode({ code, replacesOld: true })
+    setAuthError('')
+    setAuthDialog('signin')
+    await handleAuthSubmit(username, password, '')
+  }
+
   const handleSignOut = async () => {
     await signOut()
     // Drop the derived key too. Without this, "sign out" on a shared machine would
@@ -1493,6 +1537,9 @@ export default function App() {
     setRecoveryCode(null)
     setRecoveryError('')
     setRecoveryPromptDismissed(false)
+    // Nothing half-typed in a reset survives a sign-out either: the card names
+    // an account by username, and the next person here is not that account.
+    setResetOpen(false)
     setAuthDialog(null)
     setAuthError('')
     // Wipe the device's history copy as well — entries AND key both leave this
@@ -1711,6 +1758,7 @@ export default function App() {
 
       {recoveryCode && (
         <RecoveryDialog
+          mode="show"
           t={t}
           code={recoveryCode.code}
           replacesOld={recoveryCode.replacesOld}
@@ -1802,10 +1850,35 @@ export default function App() {
           }}
           onGoogle={() => signIn('google')}
           onSubmit={handleAuthSubmit}
+          // Only on the signed-out sign-in card. AuthDialog hides it whenever
+          // the username is fixed, which is the "re-enter your password" render
+          // for an account already signed in — a reset from there would rewrite
+          // the credentials of whoever is holding this device's data.
+          onForgotPassword={() => {
+            setAuthDialog(null)
+            setAuthError('')
+            setResetOpen(true)
+          }}
           onDismiss={() => {
             setAuthDialog(null)
             setAuthError('')
           }}
+        />
+      )}
+
+      {/* Never while a code is on screen: the reset ends by showing one, and
+          re-entering the flow underneath it would offer to rotate the code the
+          user is still copying down. And never while anyone is signed in — the
+          card names its account by username, so from a signed-in page it would
+          be a door onto a DIFFERENT account's credentials with this device's
+          data still loaded. AuthDialog already withholds the entry point in
+          every such render; this is the second lock on the same door. */}
+      {resetOpen && !recoveryCode && !auth.user && (
+        <RecoveryDialog
+          mode="reset"
+          t={t}
+          onReset={(username, password, code) => void handleResetComplete(username, password, code)}
+          onCancel={() => setResetOpen(false)}
         />
       )}
 

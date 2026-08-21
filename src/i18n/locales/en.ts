@@ -111,7 +111,12 @@ const en: Record<string, string> = {
   'recovery.codeLabel': 'Recovery code',
   'recovery.newPassword': 'New password',
   'recovery.resetAction': 'Reset password',
+  'recovery.resetContinue': 'Continue',
+  'recovery.resetBack': 'Back',
+  'recovery.resetWorking': 'Resetting…',
   'recovery.resetFailed': 'That username and recovery code did not match.',
+  'recovery.resetCorrupt':
+    'That stored recovery record is damaged and cannot be opened. Trying the code again will not help.',
   'recovery.resetBlocked':
     'Recovery setup has not finished on this account yet. Sign in with your password once to finish it.',
   'recovery.forgot': 'Forgot your password?',

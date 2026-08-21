@@ -109,7 +109,12 @@ const de = {
   'recovery.codeLabel': 'Wiederherstellungscode',
   'recovery.newPassword': 'Neues Passwort',
   'recovery.resetAction': 'Passwort zurücksetzen',
+  'recovery.resetContinue': 'Weiter',
+  'recovery.resetBack': 'Zurück',
+  'recovery.resetWorking': 'Wird zurückgesetzt…',
   'recovery.resetFailed': 'Benutzername und Wiederherstellungscode passen nicht zusammen.',
+  'recovery.resetCorrupt':
+    'Der gespeicherte Wiederherstellungsdatensatz ist beschädigt und lässt sich nicht öffnen. Den Code erneut einzugeben hilft nicht.',
   'recovery.resetBlocked':
     'Die Einrichtung der Wiederherstellung ist bei diesem Konto noch nicht fertig. Melde dich einmal mit deinem Passwort an, um sie abzuschließen.',
   'recovery.forgot': 'Passwort vergessen?',

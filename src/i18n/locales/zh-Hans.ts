@@ -102,7 +102,12 @@ const zh_Hans = {
   'recovery.codeLabel': '恢复码',
   'recovery.newPassword': '新密码',
   'recovery.resetAction': '重置密码',
+  'recovery.resetContinue': '继续',
+  'recovery.resetBack': '返回',
+  'recovery.resetWorking': '正在重置…',
   'recovery.resetFailed': '用户名和恢复码对不上。',
+  'recovery.resetCorrupt':
+    '存储的恢复记录已损坏，无法打开。重新输入代码也无济于事。',
   'recovery.resetBlocked': '这个账户的恢复设置还没完成。先用密码登录一次，把它设置好。',
   'recovery.forgot': '忘记密码了？',
   'recovery.leaveConfirm': '恢复码还在屏幕上，而且不会再显示。要不保存就离开吗？',

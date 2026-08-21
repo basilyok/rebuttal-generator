@@ -18,6 +18,7 @@
 // am I" (here) and "what can decrypt" (vault.ts) separable concerns.
 
 import type { AccountUser } from './auth'
+import type { VaultBlob } from './vault'
 
 /**
  * Frozen, not tunable. This value is baked into every stored authHash and every
@@ -220,4 +221,97 @@ export async function loginLocal(username: string, password: string): Promise<Au
   // than re-deriving "trim + lowercase" ad hoc at each call site.
   const user = await postAuth('/api/auth/login', { username: normalizeUsername(username), authHash })
   return { user, masterKeyBytes }
+}
+
+// --- password reset by recovery code ----------------------------------------
+//
+// Two calls, and the split is the safety property. `begin` writes nothing: it
+// only proves possession of the code and hands back the DEK copy that code
+// opens, so every failure up to and including it leaves the account exactly as
+// it was — the old password still signs in, the old code still verifies.
+// `complete` is where anything changes, and it changes everything at once.
+//
+// Neither the code nor the new password appears here. What crosses the wire is
+// `recoveryAuth` (a one-way function of the code), `authHash` (a one-way
+// function of the new password) and ciphertext this server cannot open.
+
+/**
+ * The account is not in a state a reset can safely rewrite — some blob is still
+ * sealed under the master key this reset is about to replace.
+ *
+ * Client-side only, and deliberately so: see the "not-fully-migrated guard"
+ * note in the plan. Nothing on the server refuses a v1 account, so posting to
+ * /api/auth/recover/complete directly bypasses this. The cost of bypassing it
+ * is your own v1 blobs and nobody else's, and the endpoint is already
+ * possession-gated by the recovery code.
+ */
+export class RecoveryBlockedError extends AccountError {
+  constructor() {
+    super('recovery-blocked')
+  }
+}
+
+/**
+ * Both generations of the recovery-wrapped DEK copy, exactly as begin serves
+ * them.
+ *
+ * `previousByRecovery` is not an optimisation and callers may not drop it. A
+ * reset interrupted between complete's first and second writes leaves the
+ * CURRENT byRecovery sealed under a code whose verifier never landed — so the
+ * code the caller just proved possession of can only open the previous copy.
+ * A caller that reads only `byRecovery` hands that user ciphertext they cannot
+ * open and calls their correct code wrong. See unwrapDekWithPrevious().
+ */
+export interface RecoveredDek {
+  byRecovery: VaultBlob
+  previousByRecovery: VaultBlob | null
+}
+
+/** Step one: prove the code and receive the DEK copies it may open. */
+export async function recoverBegin(username: string, recoveryAuth: string): Promise<RecoveredDek> {
+  const response = await fetch('/api/auth/recover/begin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ username: normalizeUsername(username), recoveryAuth }),
+  })
+  const data = await response.json().catch(() => null)
+  if (response.ok && data?.byRecovery) {
+    return {
+      byRecovery: data.byRecovery as VaultBlob,
+      // `?? null` rather than a presence check: an older deployment that does
+      // not serve the field at all and one with no previous generation are the
+      // same thing to the caller — no fallback available.
+      previousByRecovery: (data.previousByRecovery ?? null) as VaultBlob | null,
+    }
+  }
+  if (response.status === 429) throw new RateLimitedError()
+  // One error for a wrong code, an unknown username, and an account with no DEK
+  // record — matching the endpoint, which answers all three identically on
+  // purpose. Mapping them apart here would invent a distinction the response
+  // does not carry.
+  throw new BadCredentialsError()
+}
+
+/** Step two: install the new password, the re-wrapped DEK, and the rotated code. */
+export async function recoverComplete(args: {
+  username: string
+  recoveryAuth: string
+  authHash: string
+  recoveryAuthNext: string
+  dek: { byPassword: VaultBlob; byRecovery: VaultBlob }
+}): Promise<void> {
+  const response = await fetch('/api/auth/recover/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ ...args, username: normalizeUsername(args.username) }),
+  })
+  if (response.ok) return
+  if (response.status === 429) throw new RateLimitedError()
+  // Anything else — including the 500 for a verified code against an account
+  // with no user record — is "the reset did not happen". That is the only fact
+  // the caller needs, and it is true of every non-2xx: the endpoint's writes
+  // begin only after both credential checks have passed.
+  throw new BadCredentialsError()
 }

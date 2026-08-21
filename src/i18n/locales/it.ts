@@ -107,7 +107,12 @@ const it = {
   'recovery.codeLabel': 'Codice di recupero',
   'recovery.newPassword': 'Nuova password',
   'recovery.resetAction': 'Reimposta la password',
+  'recovery.resetContinue': 'Continua',
+  'recovery.resetBack': 'Indietro',
+  'recovery.resetWorking': 'Reimpostazione…',
   'recovery.resetFailed': 'Questo nome utente e questo codice di recupero non corrispondono.',
+  'recovery.resetCorrupt':
+    'Il record di ripristino salvato è danneggiato e non può essere aperto. Reinserire il codice non servirà a nulla.',
   'recovery.resetBlocked':
     'La configurazione del recupero non è ancora conclusa su questo account. Accedi una volta con la password per completarla.',
   'recovery.forgot': 'Password dimenticata?',

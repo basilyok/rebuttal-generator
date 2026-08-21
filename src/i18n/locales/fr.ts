@@ -104,7 +104,12 @@ const fr = {
   'recovery.codeLabel': 'Code de récupération',
   'recovery.newPassword': 'Nouveau mot de passe',
   'recovery.resetAction': 'Réinitialiser le mot de passe',
+  'recovery.resetContinue': 'Continuer',
+  'recovery.resetBack': 'Retour',
+  'recovery.resetWorking': 'Réinitialisation…',
   'recovery.resetFailed': "Ce nom d'utilisateur et ce code de récupération ne correspondent pas.",
+  'recovery.resetCorrupt':
+    'L’enregistrement de récupération stocké est endommagé et ne peut pas être ouvert. Ressaisir le code n’y changera rien.',
   'recovery.resetBlocked':
     "La configuration de la récupération n'est pas encore terminée sur ce compte. Connectez-vous une fois avec votre mot de passe pour la terminer.",
   'recovery.forgot': 'Mot de passe oublié ?',

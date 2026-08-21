@@ -73,8 +73,12 @@ for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
 //   2. the keys recoveryLabelKey actually returns, obtained by calling it for
 //      all four statuses rather than by grepping for them. Those four reach `t`
 //      indirectly (`t(recoveryLabelKey(status))`) and no scan of call sites
-//      would ever see them.
-import { recoveryLabelKey } from '../src/recoveryUi.ts'
+//      would ever see them;
+//   3. the keys resetFailure returns, for the same reason and obtained the same
+//      way — the reset card renders `t(resetFailure(code).key)`, so every one of
+//      these is a string a user sees at the worst possible moment and none of
+//      them appears literally anywhere in src/.
+import { recoveryLabelKey, resetFailure } from '../src/recoveryUi.ts'
 
 const SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
 
@@ -91,6 +95,18 @@ for (const file of sourceFiles(SRC_DIR)) {
   for (const [, key] of text.matchAll(/t\(\s*'(recovery\.[A-Za-z0-9_.]+)'/g)) calledKeys.add(key)
 }
 for (const status of ['none', 'unknown', 'incomplete', 'ready']) calledKeys.add(recoveryLabelKey(status))
+// Every branch resetFailure has, including the default one — '' stands in for
+// the throw that carries no machine code at all (a dropped connection).
+for (const code of [
+  'wrong-recovery-code',
+  'bad-credentials',
+  'corrupt-dek-record',
+  'recovery-blocked',
+  'rate-limited',
+  '',
+]) {
+  calledKeys.add(resetFailure(code).key)
+}
 
 const REQUIRED_RECOVERY = [...calledKeys].sort()
 
@@ -121,6 +137,10 @@ const ENGLISH_RECOVERY_KEYS = Object.keys(english).filter((k) => k.startsWith('r
 const MUST_DIFFER = [
   ['recovery.blurb', 'recovery.warning', 'recovery.regenerateHint'],
   ['recovery.promptBody', 'recovery.promptLostBody'],
+  // "Try again" versus "trying again cannot help". A locale that renders one
+  // over the other sends a user with a damaged record back to a code that was
+  // always correct, which is the exact harm the two error types exist to avoid.
+  ['recovery.resetFailed', 'recovery.resetCorrupt'],
 ]
 
 for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {

@@ -103,7 +103,12 @@ const hi = {
   'recovery.codeLabel': 'रिकवरी कोड',
   'recovery.newPassword': 'नया पासवर्ड',
   'recovery.resetAction': 'पासवर्ड रीसेट करें',
+  'recovery.resetContinue': 'आगे बढ़ें',
+  'recovery.resetBack': 'वापस',
+  'recovery.resetWorking': 'रीसेट हो रहा है…',
   'recovery.resetFailed': 'यह उपयोगकर्ता नाम और रिकवरी कोड मेल नहीं खाते।',
+  'recovery.resetCorrupt':
+    'सहेजा गया रिकवरी रिकॉर्ड क्षतिग्रस्त है और खोला नहीं जा सकता। कोड दोबारा डालने से मदद नहीं मिलेगी।',
   'recovery.resetBlocked':
     'इस खाते पर रिकवरी सेटअप अभी पूरा नहीं हुआ है। इसे पूरा करने के लिए एक बार पासवर्ड से साइन इन करें।',
   'recovery.forgot': 'पासवर्ड भूल गए?',
