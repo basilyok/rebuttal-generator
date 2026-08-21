@@ -60,7 +60,7 @@ import {
 } from './i18n'
 import { detectLanguage, isRtl, displayLanguageName } from './lang'
 import { fetchAuthState, signIn, signOut, saveLanguagePreference, authErrorMessage, SIGNED_OUT, type AuthState } from './auth'
-import { shownVersion } from './replyView'
+import { shownVersion, applyShorterResult } from './replyView'
 import { generateInstant, InstantQuotaError, InstantTurnstileError } from './instant'
 import { getTurnstileToken } from './turnstile'
 import {
@@ -130,6 +130,11 @@ import {
  * everything else is private briefing for the sender. See CONSTITUTION.md.
  */
 interface Reply {
+  /**
+   * Identifies this generation, so an async call that started against an earlier
+   * reply cannot write its result onto a later one. See `applyShorterResult`.
+   */
+  id: number
   message: string
   strategy: string
   context: { goal: string; audience: string; length: string } | null
@@ -153,6 +158,15 @@ interface Reply {
   /** True when this reply came from Instant mode (no key, our server paid) */
   instant?: boolean
 }
+
+/**
+ * Monotonic, module-scoped: every reply the app ever shows gets a distinct id.
+ * Not a hash of the message — regenerating the same argument can legitimately
+ * produce identical text, and two replies that read alike must still be told
+ * apart by anything holding a reference to one of them.
+ */
+let replyIdCounter = 0
+const nextReplyId = () => ++replyIdCounter
 
 const keyStorageId = (providerId: string) => `api_key_${providerId}`
 
@@ -381,16 +395,28 @@ export default function App() {
   const [showShorter, setShowShorter] = useState(false)
   const [shorterLoading, setShorterLoading] = useState(false)
   const [shorterError, setShorterError] = useState('')
+  // The reply id the in-flight shortening call belongs to, or null. Read by that
+  // call before it touches any state that is not the reply itself.
+  const shorterRunRef = useRef<number | null>(null)
   const [inputMode, setInputMode] = useState<'text' | 'url'>('text')
   const [articleUrl, setArticleUrl] = useState('')
   const [article, setArticle] = useState<Article | null>(null)
   const [isFetchingArticle, setIsFetchingArticle] = useState(false)
   const [articleStatus, setArticleStatus] = useState('')
 
-  /** Every path that replaces the reply must also drop the shortened view. */
+  /**
+   * Drop the shortened view. Called wherever the reply is replaced or cleared.
+   *
+   * Clearing `shorterLoading` matters as much as the rest: a call belonging to a
+   * reply the user can no longer see must not leave the NEW reply's toggle
+   * disabled under a spinner. `shorterRunRef` is what stops that abandoned call
+   * from re-enabling it later, or from clearing a spinner it no longer owns.
+   */
   const resetShorter = () => {
     setShowShorter(false)
     setShorterError('')
+    setShorterLoading(false)
+    shorterRunRef.current = null
   }
 
   /**
@@ -1065,6 +1091,7 @@ export default function App() {
     setLastRun(null)
     setInstantDone(null)
     setReply({
+      id: nextReplyId(),
       message: entry.message,
       strategy: entry.strategy || '',
       context: null,
@@ -1248,6 +1275,7 @@ export default function App() {
         const parsed = parseMessage(instantReply.text)
         const verified = stripUnverifiedUrls(parsed.message, citations)
         setReply({
+          id: nextReplyId(),
           message: verified.text,
           strategy: parsed.strategy,
           context: parsed.context,
@@ -1299,6 +1327,7 @@ export default function App() {
       const usedKeys = new Set(verified.used.map((c) => c.url))
 
       setReply({
+        id: nextReplyId(),
         message: verified.text,
         strategy: parsed.strategy,
         context: parsed.context,
@@ -1394,6 +1423,12 @@ export default function App() {
     const context = lastRequestRef.current
     if (!showing || !context || !model || !reply || reply.shorter || shorterLoading) return
 
+    // Everything this call writes later is gated on the reply it was started for.
+    // The user can press Generate while it is in flight, and a result that lands
+    // on the wrong reply is the worst thing this feature could produce: a
+    // condensed argument about a different subject, one click from the clipboard.
+    const forId = reply.id
+    shorterRunRef.current = forId
     setShorterLoading(true)
     setShorterError('')
     try {
@@ -1414,17 +1449,25 @@ export default function App() {
       const verified = stripUnverifiedUrls(parsed.message, reply.citations)
       if (!verified.text.trim()) throw new Error(t('error.shorter'))
       setReply((prev) =>
-        prev ? { ...prev, shorter: verified.text, shorterStrippedUrls: verified.strippedUrls } : prev
+        applyShorterResult(prev, forId, { text: verified.text, strippedUrls: verified.strippedUrls })
       )
       addUsage(result.usage)
     } catch (err) {
       // Fall back to the full message rather than showing an empty send zone: the
-      // long version is the one that is always safe to be looking at.
+      // long version is the one that is always safe to be looking at. Only for the
+      // reply this call belongs to — an error about a reply the user has already
+      // replaced is not an error they can act on.
+      if (shorterRunRef.current !== forId) return
       setShowShorter(false)
       setShorterError(err instanceof Error ? err.message : t('error.shorter'))
     } finally {
-      setShorterLoading(false)
-      setProviderStatus('')
+      // Same gate: an abandoned call must not clear a spinner that now belongs to
+      // the new reply's own shortening call.
+      if (shorterRunRef.current === forId) {
+        shorterRunRef.current = null
+        setShorterLoading(false)
+        setProviderStatus('')
+      }
     }
   }
 

@@ -17,6 +17,12 @@
  * is what lets a test construct the cases without a whole generation.
  */
 export interface VersionedReply {
+  /**
+   * Identifies THIS generation. Every `setReply` mints a fresh one, so an async
+   * call that started against an earlier reply can tell that it came back to a
+   * different one — see `applyShorterResult`.
+   */
+  id: number
   message: string
   /** URLs the model invented in the full message, stripped before display */
   strippedUrls: string[]
@@ -60,4 +66,31 @@ export function shownVersion(reply: VersionedReply | null, showShorter: boolean)
     }
   }
   return { text: reply?.message ?? '', strippedUrls: reply?.strippedUrls ?? [], isShorter: false }
+}
+
+/**
+ * Cache a shortening result onto the reply it was generated for — and onto no
+ * other one.
+ *
+ * The reason this is a function rather than a spread inside `setReply`: the
+ * shortening call is async and the user can press Generate while it is in flight.
+ * The old reply is gone by the time the call returns, and an unguarded updater
+ * writes reply A's condensed text onto reply B. Nothing appears immediately,
+ * because starting a generation also clears the toggle — but the cache is now
+ * poisoned, so the next click short-circuits the "already have it" guard and
+ * renders A's message under B with no call and no error, over a note saying Copy
+ * will send this shorter version. The user sends a condensed argument about a
+ * different subject to a person who never saw it.
+ *
+ * Returning `prev` untouched is therefore the important branch, not the edge case.
+ */
+export function applyShorterResult<T extends VersionedReply>(
+  prev: T | null,
+  forId: number,
+  result: { text: string; strippedUrls: string[] }
+): T | null {
+  // Not the reply this call was made for. Drop the result on the floor: it
+  // describes a message that is no longer on screen.
+  if (!prev || prev.id !== forId) return prev
+  return { ...prev, shorter: result.text, shorterStrippedUrls: result.strippedUrls }
 }

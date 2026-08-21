@@ -13,12 +13,13 @@
 // one fails, and in both windows there is nothing short to show.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { shownVersion, type VersionedReply } from '../src/replyView'
+import { shownVersion, applyShorterResult, type VersionedReply } from '../src/replyView'
 
 const FULL = 'You said the scheme costs more than it saves. Road deaths fell 41% after 2019.'
 const SHORT = 'Road deaths fell 41% in the two years after the 2019 change.\nhttps://example.org/review-2021'
 
 const reply = (over: Partial<VersionedReply> = {}): VersionedReply => ({
+  id: 1,
   message: FULL,
   strippedUrls: [],
   ...over,
@@ -94,4 +95,46 @@ test('every state pairs the text with its own stripped set — no crossed wires'
     const shown = shownVersion(input, showShorter)
     assert.deepEqual({ text: shown.text, strippedUrls: shown.strippedUrls }, { text, strippedUrls })
   }
+})
+
+// --- a shortening call that comes back to a different reply ------------------
+//
+// The user clicks "Shorter version", then presses Generate before it returns.
+// Reply B is on screen when reply A's call resolves. If that result is written
+// anyway, nothing is visible at first — starting a generation clears the toggle —
+// but the cache is poisoned, so the NEXT click renders A's condensed message
+// under B with no call and no error, beneath a note promising Copy will send it.
+//
+// This is the whole reason `applyShorterResult` exists, so it is asserted through
+// the same function App's `setReply` updater calls.
+
+const SHORT_A = 'Road deaths fell 41% in the two years after the 2019 change.'
+const replyA = reply({ id: 7, message: 'A: the road scheme.' })
+const replyB = reply({ id: 8, message: 'B: an unrelated argument about school funding.' })
+
+test('a shortening result lands on the reply it was generated for', () => {
+  const next = applyShorterResult(replyA, 7, { text: SHORT_A, strippedUrls: [] })
+  assert.equal(next?.shorter, SHORT_A)
+  // and is then visible through the same accessor the render uses
+  assert.equal(shownVersion(next, { showShorter: true }).text, SHORT_A)
+})
+
+test('a shortening result for an older reply is DROPPED, not written onto the new one', () => {
+  // Reply A's call resolving while reply B is on screen.
+  const next = applyShorterResult(replyB, 7, { text: SHORT_A, strippedUrls: [] })
+  assert.equal(next, replyB, 'the current reply was replaced by a stale result')
+  assert.equal(next?.shorter, undefined, "reply B now caches reply A's condensed message")
+  // The user-visible consequence: clicking the toggle on B must still show B.
+  assert.equal(shownVersion(next, { showShorter: true }).text, replyB.message)
+})
+
+test('two replies that read identically are still told apart', () => {
+  // Regenerating the same argument can produce the same text, which is why the
+  // guard is an id and not message equality.
+  const twin = reply({ id: 9, message: replyA.message })
+  assert.equal(applyShorterResult(twin, 7, { text: SHORT_A, strippedUrls: [] }), twin)
+})
+
+test('a result arriving after the reply is cleared writes nothing', () => {
+  assert.equal(applyShorterResult(null, 7, { text: SHORT_A, strippedUrls: [] }), null)
 })
