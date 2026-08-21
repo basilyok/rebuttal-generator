@@ -96,7 +96,7 @@ const fr = {
   'recovery.promptAction': 'Configurer la récupération',
   'recovery.promptDismiss': 'Pas maintenant',
   'recovery.statusNone': 'Configurer la récupération',
-  'recovery.statusFinishing': 'Fin de la configuration…',
+  'recovery.statusFinishing': 'Récupération inachevée · la terminer',
   'recovery.statusReady': 'Récupération prête · nouveau code',
   'recovery.statusUnknown': 'Récupération non vérifiée · nouveau code',
   'recovery.resetTitle': 'Réinitialiser votre mot de passe',
@@ -108,6 +108,8 @@ const fr = {
   'recovery.resetBlocked':
     "La configuration de la récupération n'est pas encore terminée sur ce compte. Connectez-vous une fois avec votre mot de passe pour la terminer.",
   'recovery.forgot': 'Mot de passe oublié ?',
+  'recovery.leaveConfirm':
+    "Votre code de récupération est encore à l'écran et ne sera plus affiché. Partir sans l'enregistrer ?",
   'recovery.replacesOld': "Ceci remplace tout code précédent : l'ancien cesse de fonctionner dès maintenant.",
   'recovery.rotateConfirm':
     'Générer un nouveau code de récupération ? Votre code actuel cessera immédiatement de fonctionner et vous devrez enregistrer le nouveau.',

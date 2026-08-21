@@ -95,7 +95,7 @@ const hi = {
   'recovery.promptAction': 'रिकवरी सेट करें',
   'recovery.promptDismiss': 'अभी नहीं',
   'recovery.statusNone': 'रिकवरी सेट करें',
-  'recovery.statusFinishing': 'रिकवरी सेटअप पूरा हो रहा है…',
+  'recovery.statusFinishing': 'रिकवरी सेटअप अधूरा · पूरा करें',
   'recovery.statusReady': 'रिकवरी तैयार · नया कोड',
   'recovery.statusUnknown': 'रिकवरी जाँची नहीं गई · नया कोड',
   'recovery.resetTitle': 'अपना पासवर्ड रीसेट करें',
@@ -107,6 +107,7 @@ const hi = {
   'recovery.resetBlocked':
     'इस खाते पर रिकवरी सेटअप अभी पूरा नहीं हुआ है। इसे पूरा करने के लिए एक बार पासवर्ड से साइन इन करें।',
   'recovery.forgot': 'पासवर्ड भूल गए?',
+  'recovery.leaveConfirm': 'आपका रिकवरी कोड अभी स्क्रीन पर है और दोबारा नहीं दिखेगा। बिना सहेजे चले जाएँ?',
   'recovery.replacesOld': 'यह पहले के किसी भी कोड की जगह ले लेता है — पुराना कोड अब से काम नहीं करेगा।',
   'recovery.rotateConfirm':
     'नया रिकवरी कोड बनाएँ? आपका मौजूदा कोड तुरंत काम करना बंद कर देगा, और नया कोड आपको सहेजना होगा।',

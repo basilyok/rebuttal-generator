@@ -100,7 +100,7 @@ const es = {
   'recovery.promptAction': 'Configurar la recuperación',
   'recovery.promptDismiss': 'Ahora no',
   'recovery.statusNone': 'Configurar la recuperación',
-  'recovery.statusFinishing': 'Terminando la configuración…',
+  'recovery.statusFinishing': 'Recuperación sin terminar · terminarla',
   'recovery.statusReady': 'Recuperación lista · código nuevo',
   'recovery.statusUnknown': 'Recuperación sin comprobar · código nuevo',
   'recovery.resetTitle': 'Restablece tu contraseña',
@@ -112,6 +112,8 @@ const es = {
   'recovery.resetBlocked':
     'La configuración de la recuperación aún no ha terminado en esta cuenta. Inicia sesión una vez con tu contraseña para terminarla.',
   'recovery.forgot': '¿Olvidaste tu contraseña?',
+  'recovery.leaveConfirm':
+    'Tu código de recuperación sigue en pantalla y no volverá a mostrarse. ¿Salir sin guardarlo?',
   'recovery.replacesOld': 'Esto sustituye a cualquier código anterior: el que tenías deja de funcionar ahora mismo.',
   'recovery.rotateConfirm':
     '¿Generar un código de recuperación nuevo? Tu código actual dejará de funcionar de inmediato y tendrás que guardar el nuevo.',

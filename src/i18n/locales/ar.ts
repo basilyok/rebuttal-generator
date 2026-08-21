@@ -97,7 +97,7 @@ const ar = {
   'recovery.promptAction': 'إعداد الاسترداد',
   'recovery.promptDismiss': 'ليس الآن',
   'recovery.statusNone': 'إعداد الاسترداد',
-  'recovery.statusFinishing': 'جارٍ إكمال إعداد الاسترداد…',
+  'recovery.statusFinishing': 'إعداد الاسترداد غير مكتمل · أكمِله',
   'recovery.statusReady': 'الاسترداد جاهز · رمز جديد',
   'recovery.statusUnknown': 'حالة الاسترداد غير مؤكدة · رمز جديد',
   'recovery.resetTitle': 'إعادة تعيين كلمة المرور',
@@ -109,6 +109,7 @@ const ar = {
   'recovery.resetBlocked':
     'لم يكتمل إعداد الاسترداد على هذا الحساب بعد. سجّل الدخول مرة واحدة بكلمة المرور لإكماله.',
   'recovery.forgot': 'هل نسيت كلمة المرور؟',
+  'recovery.leaveConfirm': 'رمز الاسترداد لا يزال على الشاشة ولن يُعرض مرة أخرى. هل تريد المغادرة دون حفظه؟',
   'recovery.replacesOld': 'هذا يحلّ محل أي رمز سابق — الرمز القديم يتوقف عن العمل من الآن.',
   'recovery.rotateConfirm':
     'هل تريد إنشاء رمز استرداد جديد؟ سيتوقف رمزك الحالي عن العمل فورًا، وسيلزمك حفظ الرمز الجديد.',

@@ -95,7 +95,7 @@ const ja = {
   'recovery.promptAction': '復旧を設定する',
   'recovery.promptDismiss': '今はしない',
   'recovery.statusNone': '復旧を設定する',
-  'recovery.statusFinishing': '復旧の設定を完了しています…',
+  'recovery.statusFinishing': '復旧の設定が未完了 · 完了する',
   'recovery.statusReady': '復旧の準備完了 · 新しいコード',
   'recovery.statusUnknown': '復旧の状態は未確認 · 新しいコード',
   'recovery.resetTitle': 'パスワードを再設定',
@@ -106,6 +106,7 @@ const ja = {
   'recovery.resetFailed': 'そのユーザー名と復旧コードは一致しません。',
   'recovery.resetBlocked': 'このアカウントは復旧の設定がまだ終わっていません。パスワードで一度サインインして完了させてください。',
   'recovery.forgot': 'パスワードをお忘れですか？',
+  'recovery.leaveConfirm': '復旧コードはまだ画面に表示されていて、二度と表示されません。保存せずに移動しますか？',
   'recovery.replacesOld': 'これは以前のコードを置き換えます。前のコードはこの時点で使えなくなります。',
   'recovery.rotateConfirm': '新しい復旧コードを作成しますか？いまのコードはすぐに使えなくなり、新しいコードを保存し直す必要があります。',
   'recovery.promptLostBody':

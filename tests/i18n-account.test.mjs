@@ -54,60 +54,79 @@ for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
   })
 }
 
-// The recovery strings, added with the setup UI. Same argument as above and
-// then some: the code is shown exactly once, and the two lines that carry the
-// weight — "you can generate a new one any time" and "lose both and it is gone
-// forever" — are the difference between a user who files the code away and one
-// who learns what it was for after the fact. An English-only warning is a
-// warning most of these users will not read.
+// --- the recovery strings ---------------------------------------------------
 //
-// This block loads each locale MODULE and reads the value a translator lookup
-// would return, rather than grepping the file for the key. Text matching would
-// pass on a key sitting in a comment, or on one whose value is the empty
-// string; neither renders anything. What a caller obtains is the string.
-const REQUIRED_RECOVERY = [
-  'recovery.title',
-  'recovery.blurb',
-  'recovery.regenerateHint',
-  'recovery.copy',
-  'recovery.copied',
-  'recovery.warning',
-  'recovery.confirm',
-  'recovery.done',
-  'recovery.working',
-  'recovery.setupFailed',
-  'recovery.promptBody',
-  'recovery.promptAction',
-  'recovery.promptDismiss',
-  'recovery.statusNone',
-  'recovery.statusFinishing',
-  'recovery.statusReady',
-  // Fourth status, and the one most easily forgotten: `unknown` means the check
-  // failed, NOT that recovery is unconfigured. Falling back to statusNone here
-  // would offer first-time setup to someone who already has a code.
-  'recovery.statusUnknown',
-  'recovery.resetTitle',
-  'recovery.resetIntro',
-  'recovery.codeLabel',
-  'recovery.newPassword',
-  'recovery.resetAction',
-  'recovery.resetFailed',
-  'recovery.resetBlocked',
-  'recovery.forgot',
-  'recovery.replacesOld',
-  'recovery.rotateConfirm',
-  'recovery.promptLostBody',
-  'recovery.promptLostAction',
-]
+// Deliberately NOT written the way the block above is. That one greps each
+// locale file for `'key'`, which is the cheapest thing that could work and is
+// also a check that cannot fail for the reasons that matter: it passes on a key
+// sitting in a comment, on a value that is the empty string, and on a value
+// that is still English. The contrast is the point — this block loads the
+// locale MODULE and reads the value a lookup returns, because what a caller
+// obtains is the string, not the presence of a line of source.
+//
+// The required list is DERIVED, not hand-written. A hand-written list drifts
+// the moment someone adds a `t('recovery.…')` call site, and the suite stays
+// green while the string ships untranslated. Two sources, unioned:
+//
+//   1. every `t('recovery.…')` call site in src/ — a grep over CALL SITES, not
+//      over locales, so it still measures what the app asks for;
+//   2. the keys recoveryLabelKey actually returns, obtained by calling it for
+//      all four statuses rather than by grepping for them. Those four reach `t`
+//      indirectly (`t(recoveryLabelKey(status))`) and no scan of call sites
+//      would ever see them.
+import { recoveryLabelKey } from '../src/recoveryUi.ts'
+
+const SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
+
+const sourceFiles = (dir) =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) return sourceFiles(full)
+    return /\.tsx?$/.test(entry.name) ? [full] : []
+  })
+
+const calledKeys = new Set()
+for (const file of sourceFiles(SRC_DIR)) {
+  const text = readFileSync(file, 'utf8')
+  for (const [, key] of text.matchAll(/t\(\s*'(recovery\.[A-Za-z0-9_.]+)'/g)) calledKeys.add(key)
+}
+for (const status of ['none', 'unknown', 'incomplete', 'ready']) calledKeys.add(recoveryLabelKey(status))
+
+const REQUIRED_RECOVERY = [...calledKeys].sort()
+
+test('the derived list found the recovery call sites at all', () => {
+  // A regex that silently matches nothing would make every test below vacuous.
+  assert.ok(REQUIRED_RECOVERY.length >= 15, `only found ${REQUIRED_RECOVERY.length} recovery call sites`)
+  for (const key of ['recovery.warning', 'recovery.confirm', 'recovery.statusUnknown']) {
+    assert.ok(REQUIRED_RECOVERY.includes(key), `expected the scan to find ${key}`)
+  }
+})
 
 const load = async (file) => (await import(pathToFileURL(join(LOCALES_DIR, file)).href)).default
 
 const english = await load('en.ts')
+// Every recovery key English defines, whether or not it has a call site yet:
+// the reset-flow strings land before their UI does, and a locale missing them
+// would only be discovered by the user who needs them most.
+const ENGLISH_RECOVERY_KEYS = Object.keys(english).filter((k) => k.startsWith('recovery.'))
+
+/**
+ * Three strings whose whole job is to say DIFFERENT things, and one pair added
+ * because confusing them is the exact harm: promptBody tells a user they have
+ * no recovery code, promptLostBody tells a user they have one nobody has seen.
+ * A locale that pasted one over the other passes every check above — the value
+ * is present, non-empty and not English — while telling somebody something
+ * false about whether their account can be recovered.
+ */
+const MUST_DIFFER = [
+  ['recovery.blurb', 'recovery.warning', 'recovery.regenerateHint'],
+  ['recovery.promptBody', 'recovery.promptLostBody'],
+]
 
 for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
   test(`${file} carries the recovery strings`, async () => {
     const strings = await load(file)
-    for (const key of REQUIRED_RECOVERY) {
+    for (const key of [...new Set([...REQUIRED_RECOVERY, ...ENGLISH_RECOVERY_KEYS])]) {
       const value = strings[key]
       assert.equal(typeof value, 'string', `${file} is missing ${key}`)
       assert.ok(value.trim().length > 0, `${file} has an empty ${key}`)
@@ -116,6 +135,18 @@ for (const file of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.ts'))) {
         // value here would render — and hide the omission. Fail instead.
         assert.notEqual(value, english[key], `${file} left ${key} in English`)
       }
+    }
+  })
+
+  test(`${file} keeps the load-bearing recovery strings distinct from each other`, async () => {
+    const strings = await load(file)
+    for (const group of MUST_DIFFER) {
+      const values = group.map((key) => strings[key].trim())
+      assert.equal(
+        new Set(values).size,
+        group.length,
+        `${file} reuses one string across ${group.join(' / ')}`,
+      )
     }
   })
 }

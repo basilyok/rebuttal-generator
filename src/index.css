@@ -1055,6 +1055,12 @@ h1 {
   cursor: pointer;
 }
 
+.recovery-copied {
+  margin-inline-start: 10px;
+  font-size: 13px;
+  color: #15803d;
+}
+
 .recovery-status {
   font-size: 13px;
   white-space: nowrap;

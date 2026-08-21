@@ -94,7 +94,7 @@ const ko = {
   'recovery.promptAction': '복구 설정하기',
   'recovery.promptDismiss': '나중에',
   'recovery.statusNone': '복구 설정하기',
-  'recovery.statusFinishing': '복구 설정을 마무리하는 중…',
+  'recovery.statusFinishing': '복구 설정 미완료 · 마무리하기',
   'recovery.statusReady': '복구 준비됨 · 새 코드',
   'recovery.statusUnknown': '복구 상태 확인 안 됨 · 새 코드',
   'recovery.resetTitle': '비밀번호 재설정',
@@ -105,6 +105,7 @@ const ko = {
   'recovery.resetFailed': '사용자 이름과 복구 코드가 맞지 않아요.',
   'recovery.resetBlocked': '이 계정은 복구 설정이 아직 끝나지 않았어요. 비밀번호로 한 번 로그인해서 마무리해 주세요.',
   'recovery.forgot': '비밀번호를 잊으셨나요?',
+  'recovery.leaveConfirm': '복구 코드가 아직 화면에 있고 다시 표시되지 않아요. 저장하지 않고 나갈까요?',
   'recovery.replacesOld': '이 코드가 이전 코드를 대체해요. 예전 코드는 지금부터 쓸 수 없어요.',
   'recovery.rotateConfirm': '새 복구 코드를 만들까요? 지금 쓰던 코드는 즉시 무효가 되고, 새 코드를 다시 저장해야 해요.',
   'recovery.promptLostBody':

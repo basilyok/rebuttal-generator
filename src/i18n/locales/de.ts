@@ -101,7 +101,7 @@ const de = {
   'recovery.promptAction': 'Wiederherstellung einrichten',
   'recovery.promptDismiss': 'Jetzt nicht',
   'recovery.statusNone': 'Wiederherstellung einrichten',
-  'recovery.statusFinishing': 'Einrichtung wird abgeschlossen…',
+  'recovery.statusFinishing': 'Wiederherstellung unfertig · abschließen',
   'recovery.statusReady': 'Wiederherstellung bereit · neuer Code',
   'recovery.statusUnknown': 'Wiederherstellung ungeprüft · neuer Code',
   'recovery.resetTitle': 'Passwort zurücksetzen',
@@ -113,6 +113,8 @@ const de = {
   'recovery.resetBlocked':
     'Die Einrichtung der Wiederherstellung ist bei diesem Konto noch nicht fertig. Melde dich einmal mit deinem Passwort an, um sie abzuschließen.',
   'recovery.forgot': 'Passwort vergessen?',
+  'recovery.leaveConfirm':
+    'Dein Wiederherstellungscode steht noch auf dem Bildschirm und wird nicht wieder angezeigt. Weggehen, ohne ihn zu speichern?',
   'recovery.replacesOld': 'Das ersetzt jeden früheren Code — der bisherige funktioniert ab jetzt nicht mehr.',
   'recovery.rotateConfirm':
     'Einen neuen Wiederherstellungscode erzeugen? Dein aktueller Code funktioniert sofort nicht mehr, und du musst den neuen aufbewahren.',

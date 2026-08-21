@@ -18,6 +18,7 @@ import { SUPPORTED } from './i18n'
 import { LANGUAGE_ENDONYMS } from './lang'
 import type { AuthState } from './auth'
 import type { RecoveryStatus } from './recovery'
+import { recoveryLabelKey } from './recoveryUi'
 
 interface BarProps {
   t: TFunction
@@ -35,6 +36,8 @@ interface BarProps {
    * a code. See the label below for what each one says.
    */
   recoveryStatus: RecoveryStatus
+  /** A setup run is in flight; it costs ~600k PBKDF2 rounds plus two writes. */
+  recoveryBusy: boolean
   onSetupRecovery: () => void
 }
 
@@ -50,6 +53,7 @@ export function AccountBar({
   onSignOut,
   onUnlockClick,
   recoveryStatus,
+  recoveryBusy,
   onSetupRecovery,
 }: BarProps) {
   const [showBenefits, setShowBenefits] = useState(false)
@@ -104,14 +108,15 @@ export function AccountBar({
                   way out. Password accounts only: Google accounts have no
                   password-derived key to wrap a DEK under. */}
               {auth.user.provider === 'local' && (
-                <button className="link-button recovery-status" onClick={onSetupRecovery}>
-                  {recoveryStatus === 'ready'
-                    ? t('recovery.statusReady')
-                    : recoveryStatus === 'incomplete'
-                      ? t('recovery.statusFinishing')
-                      : recoveryStatus === 'unknown'
-                        ? t('recovery.statusUnknown')
-                        : t('recovery.statusNone')}
+                <button
+                  className="link-button recovery-status"
+                  onClick={onSetupRecovery}
+                  // Setup is a second of PBKDF2 and two network writes. Without
+                  // this the control looks inert and invites the second click
+                  // the run guard then has to refuse.
+                  disabled={recoveryBusy}
+                >
+                  {recoveryBusy ? t('recovery.working') : t(recoveryLabelKey(recoveryStatus))}
                 </button>
               )}
               {auth.user.picture && <img className="account-avatar" src={auth.user.picture} alt="" />}

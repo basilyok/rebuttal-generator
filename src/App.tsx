@@ -332,6 +332,15 @@ export default function App() {
    * holding nothing, and nothing ever asks again.
    */
   const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false)
+  /**
+   * The real mutual exclusion for runRecoverySetup. `recoveryBusy` is a render
+   * signal and nothing more: reading it in the guard tested a value captured at
+   * the last render, so two clicks dispatched before React re-rendered both saw
+   * `false` and both ran. Two runs mint two codes, the second overwrites the
+   * first server-side, and the card the user is reading may be the dead one.
+   * A ref is set synchronously, in the same tick as the check.
+   */
+  const recoveryRunRef = useRef(false)
 
   // Always-current translator, for callbacks registered once (speech recognition)
   const tRef = useRef(t)
@@ -570,13 +579,21 @@ export default function App() {
   const runRecoverySetup = async (options: { username?: string; firstTime?: boolean } = {}) => {
     const name = options.username ?? (auth.user?.provider === 'local' ? auth.user.name : null)
     const masterKey = localKeyRef.current
-    if (!name || !masterKey) return
+    if (!name || !masterKey) {
+      // Reachable: a password account whose key was lost to a blocked
+      // IndexedDB plus a reload is signed in with no master key in hand. Say
+      // so — the alternative is a button that does nothing when clicked, which
+      // reads as a broken app rather than as an instruction.
+      setRecoveryError(t('recovery.setupFailed'))
+      return
+    }
     // One at a time. Two overlapping runs mint two codes and the second
     // overwrites the first server-side, so whichever card the user is reading
     // may be the dead one — and a code that looks fine but opens nothing is the
     // exact failure this feature exists to prevent. The same guard covers a
     // click arriving while a code is still on screen unacknowledged.
-    if (recoveryBusy || recoveryCode) return
+    if (recoveryRunRef.current || recoveryCode) return
+    recoveryRunRef.current = true
 
     /**
      * Is this creating a first code, or destroying an existing one?
@@ -594,7 +611,10 @@ export default function App() {
     // BEFORE they have seen its replacement. That must not be one stray click
     // on a 13px link two elements from Sign out. First-time setup destroys
     // nothing and stays a single click.
-    if (replacesOld && !window.confirm(t('recovery.rotateConfirm'))) return
+    if (replacesOld && !window.confirm(t('recovery.rotateConfirm'))) {
+      recoveryRunRef.current = false
+      return
+    }
 
     const isStale = () => localKeyRef.current !== masterKey
     setRecoveryBusy(true)
@@ -626,6 +646,7 @@ export default function App() {
       // and no run can be in flight to be misrepresented (the guard above
       // permits only one).
       setRecoveryBusy(false)
+      recoveryRunRef.current = false
     }
   }
 
@@ -672,6 +693,23 @@ export default function App() {
     const id = auth.user?.id
     setRecoveryAcknowledged(id ? hasAcknowledgedRecovery(id) : false)
   }, [auth.user?.id])
+
+  /**
+   * While a code is on screen it has been shown once and will not be shown
+   * again, so a reload, a back gesture or a closed tab loses it for good.
+   * Browsers ignore custom text here and show their own wording — the point is
+   * the interstitial, not the sentence. Registered only while a code is up, so
+   * it never interferes with an ordinary reload.
+   */
+  useEffect(() => {
+    if (!recoveryCode) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [recoveryCode])
 
   // Pull the encrypted vault once signed in, and open it silently if this device
   // already holds the derived key — the whole point is not asking again.
@@ -1644,13 +1682,21 @@ export default function App() {
           setAuthError('')
           setAuthDialog('signin')
         }}
-        onSignOut={handleSignOut}
+        // Sign out sits in the same bar as the button that opened the card, and
+        // it wipes this device — including the code still on screen. That is
+        // the likeliest way a first code is lost, so it asks first while one is
+        // displayed. Unguarded otherwise.
+        onSignOut={async () => {
+          if (recoveryCode && !window.confirm(t('recovery.leaveConfirm'))) return
+          await handleSignOut()
+        }}
         // A password user's "unlock" is re-entering their password — the same
         // secret — never a vault passphrase they were never given.
         onUnlockClick={() =>
           auth.user?.provider === 'local' ? setAuthDialog('signin') : setVaultPrompt('unlock')
         }
         recoveryStatus={recoveryStatus}
+        recoveryBusy={recoveryBusy}
         onSetupRecovery={() => void runRecoverySetup()}
       />
 
@@ -1677,6 +1723,9 @@ export default function App() {
             if (auth.user?.id) markRecoveryAcknowledged(auth.user.id)
             setRecoveryAcknowledged(true)
             setRecoveryCode(null)
+            // A message from an earlier failed attempt has been overtaken by
+            // this success; leaving it up contradicts the code just shown.
+            setRecoveryError('')
           }}
         />
       )}
@@ -1706,7 +1755,13 @@ export default function App() {
             </button>
             {/* Dismissible, and it costs nothing to dismiss: the account bar
                 keeps the same offer for as long as it is unanswered. */}
-            <button className="link-button" onClick={() => setRecoveryPromptDismissed(true)}>
+            <button
+              className="link-button"
+              onClick={() => {
+                setRecoveryPromptDismissed(true)
+                setRecoveryError('')
+              }}
+            >
               {t('recovery.promptDismiss')}
             </button>
           </div>

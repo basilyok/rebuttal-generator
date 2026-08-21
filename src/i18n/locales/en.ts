@@ -103,7 +103,7 @@ const en: Record<string, string> = {
   'recovery.promptAction': 'Set up recovery',
   'recovery.promptDismiss': 'Not now',
   'recovery.statusNone': 'Set up recovery',
-  'recovery.statusFinishing': 'Finishing recovery setup…',
+  'recovery.statusFinishing': 'Recovery setup unfinished · finish it',
   'recovery.statusReady': 'Recovery ready · new code',
   'recovery.statusUnknown': 'Recovery unchecked · new code',
   'recovery.resetTitle': 'Reset your password',
@@ -115,6 +115,8 @@ const en: Record<string, string> = {
   'recovery.resetBlocked':
     'Recovery setup has not finished on this account yet. Sign in with your password once to finish it.',
   'recovery.forgot': 'Forgot your password?',
+  'recovery.leaveConfirm':
+    'Your recovery code is still on screen and will not be shown again. Leave without saving it?',
   'recovery.replacesOld': 'This replaces any earlier code — the previous one stops working now.',
   'recovery.rotateConfirm':
     'Generate a new recovery code? Your current code stops working immediately, and you will need to save the new one.',

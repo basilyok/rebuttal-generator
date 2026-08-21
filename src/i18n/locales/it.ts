@@ -99,7 +99,7 @@ const it = {
   'recovery.promptAction': 'Configura il recupero',
   'recovery.promptDismiss': 'Non ora',
   'recovery.statusNone': 'Configura il recupero',
-  'recovery.statusFinishing': 'Sto completando la configurazione…',
+  'recovery.statusFinishing': 'Recupero incompleto · completalo',
   'recovery.statusReady': 'Recupero pronto · nuovo codice',
   'recovery.statusUnknown': 'Recupero non verificato · nuovo codice',
   'recovery.resetTitle': 'Reimposta la password',
@@ -111,6 +111,8 @@ const it = {
   'recovery.resetBlocked':
     'La configurazione del recupero non è ancora conclusa su questo account. Accedi una volta con la password per completarla.',
   'recovery.forgot': 'Password dimenticata?',
+  'recovery.leaveConfirm':
+    'Il tuo codice di recupero è ancora sullo schermo e non verrà mostrato di nuovo. Uscire senza salvarlo?',
   'recovery.replacesOld':
     'Questo sostituisce qualsiasi codice precedente: quello di prima smette di funzionare da adesso.',
   'recovery.rotateConfirm':
