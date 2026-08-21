@@ -239,11 +239,13 @@ export async function loginLocal(username: string, password: string): Promise<Au
  * The account is not in a state a reset can safely rewrite — some blob is still
  * sealed under the master key this reset is about to replace.
  *
- * Client-side only, and deliberately so: see the "not-fully-migrated guard"
- * note in the plan. Nothing on the server refuses a v1 account, so posting to
- * /api/auth/recover/complete directly bypasses this. The cost of bypassing it
- * is your own v1 blobs and nobody else's, and the endpoint is already
- * possession-gated by the recovery code.
+ * Raised from TWO places, and only one of them is load-bearing.
+ * recover/complete answers 409 `not-migrated` after the recovery code has
+ * verified and before its first write; that is the enforcement, it holds for
+ * anyone posting to the endpoint directly, and it is what the acceptance
+ * criterion rests on. runReset also checks locally, which saves a round trip in
+ * the rare case where a session exists — and which cannot see anything at all
+ * while signed out. See the guard comment there.
  */
 export class RecoveryBlockedError extends AccountError {
   constructor() {
@@ -309,6 +311,13 @@ export async function recoverComplete(args: {
   })
   if (response.ok) return
   if (response.status === 429) throw new RateLimitedError()
+  const data = await response.json().catch(() => null)
+  // The one refusal a user can act on differently: some blob is still v1, and
+  // signing in once with the old password — which still works, because this
+  // endpoint refused before its first write — is what finishes the migration
+  // and makes a reset safe. Told apart from a credential failure only because
+  // the server tells them apart, and it can only do that after verifying.
+  if (data?.code === 'not-migrated') throw new RecoveryBlockedError()
   // Anything else — including the 500 for a verified code against an account
   // with no user record — is "the reset did not happen". That is the only fact
   // the caller needs, and it is true of every non-2xx: the endpoint's writes

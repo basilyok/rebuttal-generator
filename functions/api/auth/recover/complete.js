@@ -54,6 +54,13 @@
 // user-record write can revert it. Nothing here may assume the bump is
 // immediately or permanently visible.
 //
+// Before any of the four, one refusal: an account with a blob still sealed
+// under the master key this reset would replace is turned away with 409
+// `not-migrated`, having written nothing. That check lives here rather than in
+// the browser because the browser cannot make it — every reset is signed-out,
+// and a signed-out client's blob reads are 401s it reads as absence. See
+// strandedByReset below.
+//
 // This endpoint re-verifies the recovery code rather than trusting anything
 // from begin.js. begin issues no token, so there is no state to trust — and
 // giving it one would create a bearer credential for a password reset, which
@@ -61,11 +68,13 @@
 import {
   credentialVersionOf,
   dekKey,
+  historyKey,
   jsonResponse,
   passwordKey,
   recoveryKey,
   requireAccounts,
   userKey,
+  vaultKey,
 } from '../../../_lib/session.js'
 import { dummyRecord, fromBase64, hashAuth, verifyAuth } from '../../../_lib/password.js'
 import { isSameOriginBrowserRequest } from '../../../_lib/gate.js'
@@ -102,6 +111,63 @@ function previousPair(raw) {
   if (!isWrapped(record?.byPassword) || !isWrapped(record?.byRecovery)) return null
   return { byPassword: cleanWrapped(record.byPassword), byRecovery: cleanWrapped(record.byRecovery) }
 }
+
+/**
+ * The era every blob must already be in before a reset may touch this account.
+ * Mirrors BLOB_VERSION_DEK in src/vault.ts; duplicated rather than imported
+ * because nothing crosses the functions/src boundary, and pinned as a literal
+ * because a v3 era would need its own decision here, not a silent inheritance.
+ */
+const DEK_ERA = 2
+
+/**
+ * Is this stored blob one a reset would strand?
+ *
+ * A reset replaces the master key and KEEPS the DEK, so a blob still sealed
+ * under the old master key is left with no key at all — permanently, and
+ * silently, since nothing fails until the day the user opens it.
+ *
+ * HOW A ZERO-KNOWLEDGE SERVER IS ALLOWED TO ASK. `version` is a plaintext field
+ * beside the ciphertext, written by vault.js and history.js from the client's
+ * own tag; it names which key era sealed the blob and reveals nothing about the
+ * content. Reading it here does not weaken the posture that this server cannot
+ * open anything it stores.
+ *
+ * Absent record: nothing to strand, so nothing to refuse. Present with any
+ * readable version other than DEK_ERA — including a record written before
+ * tagging, which vault.js stores as version 1 — is a refusal.
+ *
+ * A record that will not PARSE proceeds, and that direction is deliberate
+ * rather than lax. Those bytes are already openable by nobody, so a reset
+ * cannot make them worse; refusing instead would permanently lock the one
+ * caller who by definition cannot sign in to clear it out of the only escape
+ * this feature offers. Unknown falls on the not-migrated side everywhere it
+ * describes a blob we could still lose — this is the one place where it does
+ * not, because there is nothing left to lose.
+ */
+function strandedByReset(raw) {
+  if (!raw) return false
+  let record
+  try {
+    record = JSON.parse(raw)
+  } catch {
+    return false
+  }
+  return record?.version !== DEK_ERA
+}
+
+const notMigrated = () =>
+  // A distinct code, and safe to be distinct: it is reachable only AFTER the
+  // recovery code has verified, so it tells an unauthenticated guesser nothing
+  // about which accounts exist or which are mid-migration. Placed anywhere
+  // above verifyAuth it would be exactly that oracle.
+  jsonResponse(
+    {
+      error: 'Recovery setup has not finished on this account yet.',
+      code: 'not-migrated',
+    },
+    409
+  )
 
 const failure = () =>
   // Byte-identical to begin.js's, and for the same reason: this endpoint
@@ -195,6 +261,33 @@ export async function onRequestPost({ request, env }) {
       console.error('auth/recover/complete: verified code for an account with no user record')
       return jsonResponse({ error: 'Something went wrong. Please try again.', code: 'server-error' }, 500)
     }
+
+    // REFUSE A RESET THAT WOULD ORPHAN A BLOB. Two reads, before the first
+    // write, and the only place this invariant can actually live.
+    //
+    // The client has a matching check and it is inert on this path: every reset
+    // is signed-out, /api/vault and /api/history answer 401 to a signed-out
+    // caller, and both client transports fold 401 into null — which the
+    // predicate reads as "no blobs, therefore migrated". It returns true
+    // unconditionally for the exact caller it was written to stop. See the
+    // guard comment in runReset (src/recovery.ts).
+    //
+    // The state this catches is not hypothetical. setupRecovery writes the
+    // verifier BEFORE it migrates, so an interruption there leaves a user
+    // holding a code that works and a blob still at v1 — a working code is
+    // precisely what gets someone to this endpoint. Reset that account and the
+    // master key changes while the v1 blob keeps pointing at it: orphaned, with
+    // no second copy anywhere.
+    //
+    // Priced in the plan at "two extra KV reads on an operation that happens
+    // roughly once per account per lifetime", and it buys the only enforcement
+    // there is. Both reads are issued together — they are independent, and this
+    // is a latency path a user is already waiting on.
+    const [vaultRaw, historyRaw] = await Promise.all([
+      env.ACCOUNTS.get(vaultKey(userId)),
+      env.ACCOUNTS.get(historyKey(userId)),
+    ])
+    if (strandedByReset(vaultRaw) || strandedByReset(historyRaw)) return notMigrated()
 
     // The pair the caller's CURRENT credentials open. Read before any write,
     // because write 1 is what destroys it. Kept deliberately lenient: a record

@@ -685,25 +685,25 @@ export async function setupRecovery(username: string, masterKey: CryptoKey): Pro
  */
 export async function runReset(username: string, code: string, newPassword: string): Promise<string> {
   /**
-   * The client half of "refuse a reset while any blob is still v1". A reset
-   * replaces the master key and keeps the DEK, so a blob still sealed under the
-   * OLD master key would be left with no key at all.
+   * A FAST PATH, NOT THE GATE. Say so plainly, because the shape of this line
+   * invites the opposite reading and an earlier version of this comment gave it.
    *
-   * BE PRECISE ABOUT WHAT THIS CAN SEE, because the honest reading is weaker
-   * than it looks and a comment claiming otherwise is the failure this plan
-   * keeps producing. isFullyMigrated() reads /api/vault and /api/history, both
-   * of which answer 401 to a signed-out caller, and both transports turn 401
-   * into `null` — indistinguishable from "no blob stored". A signed-out reset,
-   * which is every reset this UI offers, therefore sees two nulls and gets
-   * `true` for free. This refuses when a session happens to exist and cannot
-   * refuse otherwise; there is no authenticated read available before the
-   * reset, so a signed-out client genuinely cannot observe blob versions at
-   * all. Reported alongside the plan's own note that the guard is client-side.
+   * What it cannot see: isFullyMigrated() reads /api/vault and /api/history,
+   * both of which answer 401 to a signed-out caller, and both transports fold
+   * 401 into `null` — indistinguishable from "no blob stored", which the
+   * predicate reads as migrated. Every reset this UI offers is signed-out, so
+   * on the path that matters this returns `true` unconditionally. There is no
+   * authenticated read available before a reset; a signed-out client cannot
+   * observe blob versions at all, and no amount of client code changes that.
    *
-   * It is kept, and kept FIRST, because the alternatives are worse: dropping it
-   * removes the refusal on the one path that can still make it, and it must
-   * precede the 600k-round derivation so a refusal is not paid for with a
-   * second of PBKDF2.
+   * The real refusal is recover/complete's, which reads the two records itself
+   * and answers 409 `not-migrated` after verifying the code and before its
+   * first write. That one holds for direct posters too, and RecoveryBlockedError
+   * reaches this caller from there either way.
+   *
+   * Kept, and kept first, for the case it CAN answer — a session that happens to
+   * still be live — where refusing here saves a round trip and a second of
+   * PBKDF2 that would only end in the same 409.
    */
   if (!(await isFullyMigrated())) throw new RecoveryBlockedError()
 

@@ -742,6 +742,119 @@ test('complete: a wrong code writes nothing', async () => {
   assert.deepEqual(spy.writes, [])
 })
 
+// --- the migration gate -----------------------------------------------------
+//
+// A reset replaces the master key and keeps the DEK, so a blob still sealed
+// under the old master key is orphaned by it — permanently, and with no error
+// anywhere until the user next opens it.
+//
+// This gate can only live here. The client has a matching check and it is inert
+// on the path that matters: every reset is signed-out, /api/vault and
+// /api/history answer 401 to a signed-out caller, and the client transports
+// fold 401 into null — which its predicate reads as "migrated". So these are
+// the tests that hold the invariant up, and the assertion that counts in each
+// is `spy.writes` — a refusal that had already written would be strictly worse
+// than no gate at all.
+
+/** A stored blob record, shaped the way vault.js and history.js write one. */
+const storedBlob = (version) =>
+  JSON.stringify({ salt: 'c2FsdA==', iv: 'AAAAAAAAAAAAAAAA', ciphertext: 'QkJCQg==', version, updatedAt: 1 })
+
+const seedVerifiable = async (extra = {}) =>
+  kvSpy({
+    'recovery:local:alice': JSON.stringify(await realRecoveryRecord()),
+    'user:local:alice': JSON.stringify({ id: 'local:alice', provider: 'local' }),
+    ...extra,
+  })
+
+const completeWith = async (spy) => {
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  return onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody()),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+}
+
+for (const [label, seed] of [
+  ['vault', { 'vault:local:alice': storedBlob(1) }],
+  ['history', { 'history:local:alice': storedBlob(1) }],
+  // One of each era: the gate must look at BOTH records, not stop at the first
+  // one that happens to be fine.
+  ['history behind a migrated vault', {
+    'vault:local:alice': storedBlob(2),
+    'history:local:alice': storedBlob(1),
+  }],
+]) {
+  test(`complete: a v1 ${label} refuses the reset and writes NOTHING`, async () => {
+    const spy = await seedVerifiable(seed)
+    const res = await completeWith(spy)
+    assert.equal(res.status, 409, label)
+    assert.equal((await res.json()).code, 'not-migrated', label)
+    // The whole point. The old password must still authenticate and the old
+    // code must still verify, which is true only if no write happened at all.
+    assert.deepEqual(spy.writes, [], `${label}: a refusal that writes is worse than no refusal`)
+    assert.equal(spy.store['dek:local:alice'], undefined)
+  })
+}
+
+test('complete: an account with no blobs at all proceeds — there is nothing to strand', async () => {
+  const spy = await seedVerifiable()
+  const res = await completeWith(spy)
+  assert.equal(res.status, 200)
+  assert.deepEqual(spy.writes, [
+    'dek:local:alice',
+    'recovery:local:alice',
+    'password:local:alice',
+    'user:local:alice',
+  ])
+})
+
+test('complete: a fully v2 account proceeds', async () => {
+  const spy = await seedVerifiable({
+    'vault:local:alice': storedBlob(2),
+    'history:local:alice': storedBlob(2),
+  })
+  const res = await completeWith(spy)
+  assert.equal(res.status, 200)
+  assert.ok(spy.store['dek:local:alice'], 'the reset ran')
+})
+
+test('complete: an era nobody here recognises is refused, not waved through', async () => {
+  // A blob written by a NEWER client. We could not open it to re-seal it and a
+  // reset would rewrap a DEK that does not open it either, so unknown falls on
+  // the refuse side — the same direction isFullyMigrated takes.
+  const spy = await seedVerifiable({ 'vault:local:alice': storedBlob(3) })
+  const res = await completeWith(spy)
+  assert.equal(res.status, 409)
+  assert.deepEqual(spy.writes, [])
+})
+
+test('complete: a blob record that will not parse does NOT block the reset', async () => {
+  // The one place unknown falls the other way, and deliberately. Those bytes
+  // open for nobody already, so a reset cannot make them worse — while refusing
+  // would permanently lock the one caller who by definition cannot sign in to
+  // clear them out of the only escape this feature has.
+  const spy = await seedVerifiable({ 'vault:local:alice': '{not json' })
+  const res = await completeWith(spy)
+  assert.equal(res.status, 200)
+  assert.ok(spy.store['dek:local:alice'])
+})
+
+test('complete: the migration gate sits AFTER verification, so it is not an oracle', async () => {
+  // A half-migrated account plus a wrong code must be indistinguishable from
+  // any other wrong code. Answering 409 here would tell an unauthenticated
+  // guesser both that the account exists and what state it is in.
+  const spy = await seedVerifiable({ 'vault:local:alice': storedBlob(1) })
+  const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
+  const res = await onRequestPost({
+    request: post(`${ORIGIN}/api/auth/recover/complete`, completeBody({ recoveryAuth: NEW_AUTH_HASH })),
+    env: { ACCOUNTS: spy.kv, AUTH_TEST_BYPASS_RATE_LIMIT: '1', ...openLimiter },
+  })
+  assert.equal(res.status, 401)
+  assert.equal((await res.json()).code, 'bad-credentials')
+  assert.deepEqual(spy.writes, [])
+})
+
 test('complete: an unknown username fails the same way, and writes nothing', async () => {
   const { onRequestPost } = await import('../functions/api/auth/recover/complete.js')
   const spy = kvSpy()
