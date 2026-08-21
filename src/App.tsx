@@ -60,6 +60,7 @@ import {
 } from './i18n'
 import { detectLanguage, isRtl, displayLanguageName } from './lang'
 import { fetchAuthState, signIn, signOut, saveLanguagePreference, authErrorMessage, SIGNED_OUT, type AuthState } from './auth'
+import { shownVersion } from './replyView'
 import { generateInstant, InstantQuotaError, InstantTurnstileError } from './instant'
 import { getTurnstileToken } from './turnstile'
 import {
@@ -393,17 +394,12 @@ export default function App() {
   }
 
   /**
-   * The text the user is actually looking at, and therefore the text the copy button
-   * must put on the clipboard. Deriving both from this one expression is the whole
-   * defence against the bug where someone copies what they believe is the short
-   * version and pastes the long one. Falls back to the full message whenever the
-   * short one is not ready — while it is still generating, or after it failed.
+   * Which version is on screen. One call, one answer: the rendered body, the copy
+   * button and the claim badge all read `shown`, so the app cannot disagree with
+   * itself about which of the two messages the user is looking at. The decision
+   * itself lives in src/replyView.ts, where it can be asked what it would do.
    */
-  const shownMessage = reply ? (showShorter && reply.shorter ? reply.shorter : reply.message) : ''
-
-  /** The invented-URL count for whichever version is on screen, for the same reason. */
-  const shownStrippedUrls =
-    reply && showShorter && reply.shorter ? reply.shorterStrippedUrls ?? [] : reply?.strippedUrls ?? []
+  const shown = shownVersion(reply, showShorter)
 
   // --- history: local-first, encrypted-sync second (see src/history.ts) ---
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([])
@@ -1445,9 +1441,9 @@ export default function App() {
     if (!reply) return
     try {
       // Only the message — never the strategy line, weak-link note, or briefing —
-      // and specifically the version currently on screen. `shownMessage` is the one
-      // place that choice is made, so what is copied cannot drift from what is read.
-      await navigator.clipboard.writeText(shownMessage)
+      // and specifically the version currently on screen. `shown` is the one place
+      // that choice is made, so what is copied cannot drift from what is read.
+      await navigator.clipboard.writeText(shown.text)
       setMessageCopied(true)
       setTimeout(() => setMessageCopied(false), 2500)
     } catch {
@@ -2587,7 +2583,7 @@ export default function App() {
               </button>
             </div>
             <div className="message-body">
-              <RichText text={shownMessage} />
+              <RichText text={shown.text} />
             </div>
 
             {/* Instant replies have no key paying for a second call, so this control is
@@ -2601,13 +2597,13 @@ export default function App() {
                   aria-pressed={showShorter}
                   disabled={shorterLoading}
                 >
-                  {showShorter && reply.shorter ? t('reply.showFull') : t('reply.shorter')}
+                  {shown.isShorter ? t('reply.showFull') : t('reply.shorter')}
                   {shorterLoading && <span className="spinner shorter-spinner"></span>}
                 </button>
                 {shorterLoading && <span className="shorter-note">{t('reply.shorterBuilding')}</span>}
                 {/* Says which version is on screen, because the copy button copies THAT
                     one and the two are very different messages to send. */}
-                {!shorterLoading && showShorter && reply.shorter && (
+                {!shorterLoading && shown.isShorter && (
                   <span className="shorter-note">{t('reply.shorterShowing')}</span>
                 )}
                 {shorterError && (
@@ -2620,7 +2616,7 @@ export default function App() {
 
             <button
               type="button"
-              className={`claim-badge ${shownStrippedUrls.length ? 'claim-badge-warn' : ''}`}
+              className={`claim-badge ${shown.strippedUrls.length ? 'claim-badge-warn' : ''}`}
               onClick={() => setShowClaims(!showClaims)}
               aria-expanded={showClaims}
               aria-controls="claim-panel"
@@ -2630,8 +2626,8 @@ export default function App() {
                 : reply.citations.length === 1
                   ? t('reply.sourcesCitedOne')
                   : t('reply.sourcesCited', { count: reply.citations.length })}
-              {shownStrippedUrls.length === 1 && t('reply.linksRemovedOne')}
-              {shownStrippedUrls.length > 1 && t('reply.linksRemoved', { count: shownStrippedUrls.length })}
+              {shown.strippedUrls.length === 1 && t('reply.linksRemovedOne')}
+              {shown.strippedUrls.length > 1 && t('reply.linksRemoved', { count: shown.strippedUrls.length })}
               {reply.toVerify?.length ? t('reply.toCheck', { count: reply.toVerify.length }) : ''}
             </button>
 
@@ -2639,11 +2635,11 @@ export default function App() {
               <div className="collapsible-clip">
                 <div className="claim-panel-body">
                   {reply.citations.length > 0 && <SourceList citations={reply.citations} title={t('reply.sourcesTitle')} />}
-                  {shownStrippedUrls.length > 0 && (
+                  {shown.strippedUrls.length > 0 && (
                     <p className="claim-warn">
-                      {shownStrippedUrls.length === 1
+                      {shown.strippedUrls.length === 1
                         ? t('reply.claimWarnOne')
-                        : t('reply.claimWarn', { count: shownStrippedUrls.length })}
+                        : t('reply.claimWarn', { count: shown.strippedUrls.length })}
                     </p>
                   )}
                   {reply.toVerify?.length ? (
