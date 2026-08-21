@@ -1969,3 +1969,11 @@ Tasks 1, 2 and 4 are independent of each other. Task 5 needs 1, 2 and 4; Task 7 
 
 
 
+
+---
+
+## Carried into Task 8's walkthrough — from Task 6
+
+**The `replace` prompt is per-device, so it nags across devices.** Acknowledgement is stored in localStorage keyed by account id, so a user who set up recovery on their laptop is prompted once on their phone. It is dismissible and its copy offers a *replacement* rather than claiming they have nothing — but it is a real nag traded against a real silence (Task 6's C3: without any acknowledgement record, a first code lost to a reload is never re-prompted, ever).
+
+The alternative is a server-side flag, which costs a KV write against the shared 1000/day budget and an endpoint change. Not obviously wrong, just a different trade. Sanity-check the phone case during the walkthrough and decide then, with the real thing in front of you, rather than in the abstract now.
