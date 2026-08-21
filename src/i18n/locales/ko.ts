@@ -232,6 +232,7 @@ const ko = {
   'reply.showFull': '전체 메시지',
   'reply.shorterBuilding': '줄이는 중…',
   'reply.shorterShowing': '복사하면 이 짧은 버전이 복사돼요',
+  'reply.showingFull': '전체 메시지를 보여주고 있어요',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ 보내기 전에 — 내 주장에서 가장 약한 곳',

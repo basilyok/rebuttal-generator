@@ -241,6 +241,7 @@ const es = {
   'reply.showFull': 'Mensaje completo',
   'reply.shorterBuilding': 'Acortando…',
   'reply.shorterShowing': 'Copiar usará esta versión más corta',
+  'reply.showingFull': 'Mostrando el mensaje completo',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Antes de enviar: el punto débil de tu postura',

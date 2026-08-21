@@ -244,6 +244,7 @@ const en: Record<string, string> = {
   'reply.showFull': 'Full message',
   'reply.shorterBuilding': 'Shortening…',
   'reply.shorterShowing': 'Copy will send this shorter version',
+  'reply.showingFull': 'Showing the full message',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Before you send — the weak point in your position',

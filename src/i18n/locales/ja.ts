@@ -233,6 +233,7 @@ const ja = {
   'reply.showFull': '全文',
   'reply.shorterBuilding': '短くしています…',
   'reply.shorterShowing': 'コピーするとこの短い版になります',
+  'reply.showingFull': '全文を表示しています',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ 送る前に — あなたの主張の弱いところ',

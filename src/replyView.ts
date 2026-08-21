@@ -11,6 +11,8 @@
 // The "Shorter version" toggle puts two different messages behind one Copy button,
 // and the app must never disagree with itself about which one is current.
 
+import type { Citation } from './providers'
+
 /**
  * The shape this decision needs from a reply. Deliberately narrower than App's
  * `Reply` — the choice depends on four fields and nothing else, and stating that
@@ -24,48 +26,83 @@ export interface VersionedReply {
    */
   id: number
   message: string
+  /** Sources the full message actually cites */
+  citations: Citation[]
   /** URLs the model invented in the full message, stripped before display */
   strippedUrls: string[]
   /** The condensed version, absent until the toggle has fetched it */
   shorter?: string
+  /**
+   * Sources the CONDENSED message cites — a subset, and usually a smaller one:
+   * shortening legitimately drops links along with the claims they supported.
+   */
+  shorterCitations?: Citation[]
   /** URLs the model invented while condensing, stripped before display */
   shorterStrippedUrls?: string[]
 }
 
 export interface ShownVersion {
   /** What is rendered, and therefore what Copy must put on the clipboard */
-  text: string
+  readonly text: string
+  /** The sources THAT text cites, so the badge count and the panel list match it */
+  readonly citations: readonly Citation[]
   /** The invented-URL count for THAT text, so the claim badge describes what is read */
-  strippedUrls: string[]
+  readonly strippedUrls: readonly string[]
   /** True only when the short version is genuinely the one on screen */
-  isShorter: boolean
+  readonly isShorter: boolean
+  /**
+   * Whether a short version exists at all — a different question from `isShorter`,
+   * which is false whenever the toggle is off even with one cached. Answered here
+   * so the render never has to reach past `shown` to ask it.
+   */
+  readonly hasShorter: boolean
 }
 
 /**
  * Resolve the current version.
  *
  * `showShorter` is intent, not fact: it is true from the moment the user clicks,
- * while the shortening call is still in flight and again if that call failed. Only
- * `reply.shorter` being present makes the short version real, so the toggle state
- * alone never decides this — which is why the full message is the fallback in every
- * case where it is missing.
+ * while the shortening call is still in flight. Only `reply.shorter` being present
+ * makes the short version real, so the toggle state alone never decides this.
  *
- * The stripped-URL set travels with the text it belongs to. Returning them together
- * is the point of the function: a claim badge describing the version that is NOT on
- * screen is a quieter version of the same bug, and separate expressions in the
- * render could drift apart.
+ * App's failure path happens to clear the toggle as well, so today the two agree.
+ * The fallback here does not depend on that: it holds for any caller that sets the
+ * toggle without content behind it, which is a state a caller CAN create — not one
+ * this app is currently observed to reach.
+ *
+ * The citation set and the stripped-URL set travel WITH the text they belong to.
+ * Returning all three together is the point of the function: a badge reading "3
+ * sources cited" over a message containing one, or a source panel listing two links
+ * that are not on screen, is the same bug in a quieter register — and separate
+ * expressions in the render drift apart exactly the way these did.
+ *
+ * The options object is not ceremony. A bare second boolean accepts
+ * `shownVersion(reply, shorterLoading)` without complaint, and that call type-checks
+ * into showing the short version during a window where there is none.
  */
-export function shownVersion(reply: VersionedReply | null, showShorter: boolean): ShownVersion {
+export function shownVersion(
+  reply: VersionedReply | null,
+  { showShorter }: { showShorter: boolean }
+): ShownVersion {
   if (reply && showShorter && reply.shorter) {
     return {
       text: reply.shorter,
-      // A shortening call that stripped nothing may not have written the field at
-      // all; "no reply yet" and "nothing stripped" are both an empty list here.
+      // A shortening call that dropped or stripped nothing may not have written
+      // these at all; absent means "none", never "fall back to the long
+      // message's" — that fallback is precisely the crossed wire.
+      citations: reply.shorterCitations ?? [],
       strippedUrls: reply.shorterStrippedUrls ?? [],
       isShorter: true,
+      hasShorter: true,
     }
   }
-  return { text: reply?.message ?? '', strippedUrls: reply?.strippedUrls ?? [], isShorter: false }
+  return {
+    text: reply?.message ?? '',
+    citations: reply?.citations ?? [],
+    strippedUrls: reply?.strippedUrls ?? [],
+    isShorter: false,
+    hasShorter: Boolean(reply?.shorter),
+  }
 }
 
 /**
@@ -87,10 +124,15 @@ export function shownVersion(reply: VersionedReply | null, showShorter: boolean)
 export function applyShorterResult<T extends VersionedReply>(
   prev: T | null,
   forId: number,
-  result: { text: string; strippedUrls: string[] }
+  result: { text: string; citations: Citation[]; strippedUrls: string[] }
 ): T | null {
   // Not the reply this call was made for. Drop the result on the floor: it
   // describes a message that is no longer on screen.
   if (!prev || prev.id !== forId) return prev
-  return { ...prev, shorter: result.text, shorterStrippedUrls: result.strippedUrls }
+  return {
+    ...prev,
+    shorter: result.text,
+    shorterCitations: result.citations,
+    shorterStrippedUrls: result.strippedUrls,
+  }
 }

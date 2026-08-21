@@ -238,6 +238,7 @@ const pt_BR = {
   'reply.showFull': 'Mensagem completa',
   'reply.shorterBuilding': 'Encurtando…',
   'reply.shorterShowing': 'Copiar vai usar esta versão mais curta',
+  'reply.showingFull': 'Mostrando a mensagem completa',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Antes de enviar — o ponto fraco da sua posição',

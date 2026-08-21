@@ -235,6 +235,7 @@ const hi = {
   'reply.showFull': 'पूरा संदेश',
   'reply.shorterBuilding': 'छोटा किया जा रहा है…',
   'reply.shorterShowing': 'कॉपी करने पर यही छोटा रूप जाएगा',
+  'reply.showingFull': 'पूरा संदेश दिखाया जा रहा है',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ भेजने से पहले — आपकी अपनी बात का कमज़ोर हिस्सा',

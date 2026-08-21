@@ -244,6 +244,7 @@ const de = {
   'reply.showFull': 'Vollständige Nachricht',
   'reply.shorterBuilding': 'Wird gekürzt…',
   'reply.shorterShowing': 'Kopieren übernimmt diese kürzere Fassung',
+  'reply.showingFull': 'Vollständige Nachricht wird angezeigt',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Bevor du sendest — die schwache Stelle in deiner Position',

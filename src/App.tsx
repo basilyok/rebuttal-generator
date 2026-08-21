@@ -425,7 +425,7 @@ export default function App() {
    * itself about which of the two messages the user is looking at. The decision
    * itself lives in src/replyView.ts, where it can be asked what it would do.
    */
-  const shown = shownVersion(reply, showShorter)
+  const shown = shownVersion(reply, { showShorter })
 
   // --- history: local-first, encrypted-sync second (see src/history.ts) ---
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([])
@@ -1010,6 +1010,12 @@ export default function App() {
         // In URL mode the "argument" is the whole extracted article; publish the
         // reference instead of dumping the publisher's full text into our store
         argument: article ? `${article.title} — ${article.url}` : transcript.trim(),
+        // Deliberately the FULL message and its full citation set, whatever the
+        // toggle is showing — unlike Copy, which sends whatever is on screen. A
+        // share link is a permanent public artifact of this reply, read by people
+        // with no way to ask for the other version, and the long one is the one
+        // that carries its own evidence. The short version exists for a private
+        // message to one person, which is the case Copy serves.
         message: reply.message,
         strategy: reply.strategy,
         citations: reply.citations,
@@ -1073,6 +1079,7 @@ export default function App() {
     finalTranscriptRef.current = ''
     setTranscript('')
     setReply(null)
+    resetShorter()
     setError('')
     setLastRun(null)
     setArticle(null)
@@ -1113,6 +1120,7 @@ export default function App() {
     setError('')
     setArticle(null)
     setReply(null)
+    resetShorter()
     setLastRun(null)
     try {
       const result = await fetchArticle(articleUrl, setArticleStatus)
@@ -1420,6 +1428,9 @@ export default function App() {
     if (reply?.instant) return
     const showing = !showShorter
     setShowShorter(showing)
+    // Before any early return: an error about the shortened version has nothing to
+    // say beside the full text the user just switched back to.
+    setShorterError('')
     const context = lastRequestRef.current
     if (!showing || !context || !model || !reply || reply.shorter || shorterLoading) return
 
@@ -1430,7 +1441,6 @@ export default function App() {
     const forId = reply.id
     shorterRunRef.current = forId
     setShorterLoading(true)
-    setShorterError('')
     try {
       const result = await generateText({
         provider,
@@ -1439,17 +1449,30 @@ export default function App() {
         // Condense the message we already produced, never the original argument: that
         // is what keeps the citation set fixed and lets the check below be meaningful.
         system: shorterPrompt(context.promptContext, reply.message),
-        userContent: context.userContent,
+        // The message, NOT the original argument. Passing `context.userContent`
+        // here — as the briefing does, because it needs it — put the untrusted
+        // original in the most salient position in the conversation while the
+        // system prompt said not to use anything but the message. stripUnverifiedUrls
+        // catches a URL lifted from it; nothing catches a FACT. Sending only the
+        // message makes condense-don't-rewrite structural instead of a promise.
+        userContent: reply.message,
         length: 'detailed',
         onStatus: setProviderStatus,
       })
       const parsed = parseMessage(result.text)
-      // Same gate as the full message, against the same allowed set — a shortening
-      // call is still a model call, and a URL it invents must not reach the clipboard.
+      // The same gate the full message went through, against the sources that
+      // message actually cites — a shortening call is still a model call, and a URL
+      // it invents must not reach the clipboard. `verified.used` is narrower again:
+      // shortening drops links along with the claims they supported, and the badge
+      // must count the ones that survived, not the ones that started.
       const verified = stripUnverifiedUrls(parsed.message, reply.citations)
       if (!verified.text.trim()) throw new Error(t('error.shorter'))
       setReply((prev) =>
-        applyShorterResult(prev, forId, { text: verified.text, strippedUrls: verified.strippedUrls })
+        applyShorterResult(prev, forId, {
+          text: verified.text,
+          citations: verified.used,
+          strippedUrls: verified.strippedUrls,
+        })
       )
       addUsage(result.usage)
     } catch (err) {
@@ -2637,7 +2660,7 @@ export default function App() {
                   type="button"
                   className="shorter-toggle"
                   onClick={toggleShorter}
-                  aria-pressed={showShorter}
+                  aria-pressed={shown.isShorter}
                   disabled={shorterLoading}
                 >
                   {shown.isShorter ? t('reply.showFull') : t('reply.shorter')}
@@ -2649,6 +2672,12 @@ export default function App() {
                 {!shorterLoading && shown.isShorter && (
                   <span className="shorter-note">{t('reply.shorterShowing')}</span>
                 )}
+                {/* The message body swaps under the reader without moving focus, so
+                    say which version is now there. Empty until one has been
+                    generated, so nothing is announced on first render. */}
+                <span className="visually-hidden" role="status">
+                  {shown.hasShorter ? (shown.isShorter ? t('reply.shorterShowing') : t('reply.showingFull')) : ''}
+                </span>
                 {shorterError && (
                   <span className="shorter-note shorter-error" role="alert">
                     ⚠️ {shorterError}
@@ -2664,11 +2693,11 @@ export default function App() {
               aria-expanded={showClaims}
               aria-controls="claim-panel"
             >
-              {reply.citations.length === 0
+              {shown.citations.length === 0
                 ? t('reply.noSources')
-                : reply.citations.length === 1
+                : shown.citations.length === 1
                   ? t('reply.sourcesCitedOne')
-                  : t('reply.sourcesCited', { count: reply.citations.length })}
+                  : t('reply.sourcesCited', { count: shown.citations.length })}
               {shown.strippedUrls.length === 1 && t('reply.linksRemovedOne')}
               {shown.strippedUrls.length > 1 && t('reply.linksRemoved', { count: shown.strippedUrls.length })}
               {reply.toVerify?.length ? t('reply.toCheck', { count: reply.toVerify.length }) : ''}
@@ -2677,7 +2706,9 @@ export default function App() {
             <div id="claim-panel" className={`collapsible ${showClaims ? '' : 'collapsed'}`} aria-hidden={!showClaims}>
               <div className="collapsible-clip">
                 <div className="claim-panel-body">
-                  {reply.citations.length > 0 && <SourceList citations={reply.citations} title={t('reply.sourcesTitle')} />}
+                  {shown.citations.length > 0 && (
+                    <SourceList citations={[...shown.citations]} title={t('reply.sourcesTitle')} />
+                  )}
                   {shown.strippedUrls.length > 0 && (
                     <p className="claim-warn">
                       {shown.strippedUrls.length === 1
@@ -2695,7 +2726,7 @@ export default function App() {
                       </ul>
                     </>
                   ) : null}
-                  {!reply.citations.length && !reply.toVerify?.length && (
+                  {!shown.citations.length && !reply.toVerify?.length && (
                     <p className="token-detail">{t('reply.noSourcesRetrieved')}</p>
                   )}
                 </div>

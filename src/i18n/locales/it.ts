@@ -243,6 +243,7 @@ const it = {
   'reply.showFull': 'Messaggio completo',
   'reply.shorterBuilding': 'Sto accorciando…',
   'reply.shorterShowing': 'Copia userà questa versione più breve',
+  'reply.showingFull': 'Mostro il messaggio completo',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ Prima di inviare — il punto debole della tua posizione',

@@ -231,6 +231,7 @@ const zh_Hans = {
   'reply.showFull': '完整消息',
   'reply.shorterBuilding': '正在缩短…',
   'reply.shorterShowing': '复制的就是这个更短的版本',
+  'reply.showingFull': '正在显示完整消息',
 
   // --- weak link + briefing --------------------------------------------------
   'weakLink.title': '⚠️ 发出去之前——你这一方最弱的地方',
